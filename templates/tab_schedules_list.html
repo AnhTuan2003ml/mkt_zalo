@@ -1,0 +1,31 @@
+<!-- Tab: Danh sách lịch -->
+<div class="tab-content" id="tab-schedules-list">
+    <section class="sched-panel sched-results-panel">
+        <div class="sched-list-toolbar">
+            <div>
+                <h3>📅 Danh sách lịch gửi</h3>
+                <p>Theo dõi, sửa, chạy ngay, hủy hoặc xóa lịch đã tạo.</p>
+            </div>
+            <button class="btn btn-primary" onclick="schedLoadSchedulesForDisplay()">🔄 Tải lại</button>
+        </div>
+
+        <div class="schedule-filter-bar">
+            <input type="text" id="schedListSearch" placeholder="Tìm theo tiêu đề, nội dung..." oninput="schedFilterSchedulesList()">
+            <select id="schedListStatusFilter" onchange="schedFilterSchedulesList()">
+                <option value="">Tất cả trạng thái</option>
+                <option value="pending">Chờ</option>
+                <option value="running">Đang chạy</option>
+                <option value="done">Hoàn thành</option>
+                <option value="partial">Một phần</option>
+                <option value="failed">Thất bại</option>
+                <option value="cancelled">Đã hủy</option>
+            </select>
+            <span id="schedListCount">0 lịch</span>
+        </div>
+
+        <div id="schedulesListContainer" class="schedules-list-grid">
+            <div class="sched-loading"><div class="spinner"></div><p>Đang tải...</p></div>
+        </div>
+    </section>
+</div>
+

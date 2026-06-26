@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Thiết Bị - ZMKT</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            color: #999;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        thead {
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status.active {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .status.active .status-dot {
+            background: #28a745;
+        }
+        
+        .status.inactive .status-dot {
+            background: #dc3545;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .timestamp {
+            color: #999;
+            font-size: 12px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #e7f3ff;
+            color: #0066cc;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            table {
+                font-size: 12px;
+            }
+            
+            th, td {
+                padding: 10px;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📱 Quản Lý Thiết Bị ZMKT</h1>
+            <p>Theo dõi tất cả thiết bị đang chạy ứng dụng</p>
+        </header>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Tổng Thiết Bị</div>
+                <div class="stat-number" id="total-devices">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Đang Hoạt Động</div>
+                <div class="stat-number" id="active-devices">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Không Hoạt Động</div>
+                <div class="stat-number" id="inactive-devices">0</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-primary" onclick="loadDevices()">
+                🔄 Tải Lại
+            </button>
+        </div>
+        
+        <div class="table-container">
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                Đang tải dữ liệu...
+            </div>
+            
+            <div id="content" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên Máy</th>
+                            <th>User</th>
+                            <th>Địa Chỉ MAC</th>
+                            <th>Vị Trí</th>
+                            <th>IP</th>
+                            <th>OS</th>
+                            <th>Lần Cuối Online</th>
+                            <th>Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-tbody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="empty" class="empty-state" style="display: none;">
+                <p>📭 Chưa có thiết bị nào đăng ký</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function loadDevices() {
+            const loading = document.getElementById('loading');
+            const content = document.getElementById('content');
+            const empty = document.getElementById('empty');
+            
+            loading.style.display = 'block';
+            content.style.display = 'none';
+            empty.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/devices/list');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayDevices(data.devices);
+                    updateStats(data.devices);
+                    
+                    if (data.devices.length === 0) {
+                        empty.style.display = 'block';
+                    } else {
+                        content.style.display = 'block';
+                    }
+                } else {
+                    throw new Error(data.error || 'Lỗi tải dữ liệu');
+                }
+            } catch (error) {
+                console.error('Lỗi:', error);
+                document.getElementById('empty').textContent = '❌ Lỗi tải dữ liệu: ' + error.message;
+                empty.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        function displayDevices(devices) {
+            const tbody = document.getElementById('devices-tbody');
+            tbody.innerHTML = '';
+            
+            devices.forEach(device => {
+                const lastSeen = new Date(device.last_seen);
+                const isActive = device.active && (Date.now() - lastSeen.getTime()) < 3600000; // 1 giờ
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${device.device_name}</strong></td>
+                    <td>${device.username}</td>
+                    <td><code style="background: #f5f5f5; padding: 2px 5px; border-radius: 3px; font-size: 12px;">${device.mac_address || 'N/A'}</code></td>
+                    <td>${device.location || 'Unknown'}</td>
+                    <td>${device.ip_address || 'N/A'}</td>
+                    <td>${device.os || 'N/A'}</td>
+                    <td>
+                        <span class="timestamp">${formatTime(lastSeen)}</span>
+                    </td>
+                    <td>
+                        <span class="status ${isActive ? 'active' : 'inactive'}">
+                            <div class="status-dot"></div>
+                            ${isActive ? '🟢 Hoạt Động' : '🔴 Offline'}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function updateStats(devices) {
+            const now = Date.now();
+            const activeCount = devices.filter(d => 
+                d.active && (now - new Date(d.last_seen).getTime()) < 3600000
+            ).length;
+            const inactiveCount = devices.length - activeCount;
+            
+            document.getElementById('total-devices').textContent = devices.length;
+            document.getElementById('active-devices').textContent = activeCount;
+            document.getElementById('inactive-devices').textContent = inactiveCount;
+        }
+        
+        function formatTime(date) {
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            if (diffMins < 1) return '👁️ Vừa xong';
+            if (diffMins < 60) return `${diffMins}m trước`;
+            if (diffHours < 24) return `${diffHours}h trước`;
+            if (diffDays < 7) return `${diffDays}d trước`;
+            
+            return date.toLocaleDateString('vi-VN');
+        }
+        
+        // Tải dữ liệu khi trang load
+        window.addEventListener('load', loadDevices);
+        
+        // Cập nhật mỗi 30 giây
+        setInterval(loadDevices, 30000);
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,111 @@
+<!-- Tab: Từ số điện thoại -->
+<div class="tab-content" id="tab-phone">
+    <div class="sched-compose-grid">
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3>☎️ Danh sách số điện thoại</h3>
+                    <p>Mỗi số điện thoại một dòng, sau đó tra thông tin.</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Chọn tài khoản gửi</label>
+                <div id="schedPhoneAccountDropdown" class="account-dropdown"></div>
+                <input type="hidden" id="schedPhoneAccountId">
+            </div>
+
+            <div class="form-group">
+                <label>Danh sách số điện thoại</label>
+                <textarea id="phoneInput" placeholder="Nhập số điện thoại, mỗi số một dòng"></textarea>
+            </div>
+
+            <button id="lookupPhonesBtn" class="btn btn-primary sched-full-btn" onclick="schedLookupPhones()">🔎 Tra thông tin</button>
+            <div id="phoneLookupStatus" class="sched-inline-status"></div>
+        </section>
+
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3>⚙️ Cấu hình lịch</h3>
+                    <p>Nội dung, thời gian và tốc độ gửi.</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="schedToggleAdvanced('phone')">Cài đặt nâng cao</button>
+            </div>
+
+            <div class="form-group">
+                <label>Tiêu đề *</label>
+                <input type="text" id="schedPhoneTitle" placeholder="VD: Khuyến mãi tháng 5">
+            </div>
+
+            <div class="form-group">
+                <label>Nội dung *</label>
+                <textarea id="schedPhoneMessage" placeholder="Nhập nội dung..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Thời gian gửi *</label>
+                <input type="datetime-local" id="schedPhoneDateTime">
+            </div>
+
+            <div id="phoneAdvancedSettings" class="sched-advanced" style="display:none">
+                <div class="sched-mini-grid">
+                    <div class="form-group">
+                        <label>Min Delay (s)</label>
+                        <input type="number" id="schedPhoneMinDelay" value="3" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Delay (s)</label>
+                        <input type="number" id="schedPhoneMaxDelay" value="5" min="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Errors</label>
+                        <input type="number" id="schedPhoneMaxErrors" value="5" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="schedPhoneBatchSize" value="10" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Delay (s)</label>
+                        <input type="number" id="schedPhoneBatchDelay" value="30" min="1">
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section id="phoneResultsSection" class="sched-panel sched-results-panel" style="display:none">
+        <div class="sched-list-toolbar">
+            <div>
+                <h3>Chọn người nhận từ tra cứu</h3>
+                <p>Đã chọn <strong id="phoneSelectedCount">0</strong>/<strong id="phoneTotalCount">0</strong> người</p>
+            </div>
+            <div class="sched-toolbar-actions">
+                <button id="btnSaveSchedulePhone" class="btn btn-success" onclick="schedSaveSchedule()">💾 Lưu lịch</button>
+                <label class="sched-check-pill">
+                    <input type="checkbox" id="phoneHeaderCheckbox" onchange="schedTogglePhoneSelectAll(this)">
+                    Chọn tất cả
+                </label>
+            </div>
+        </div>
+
+        <div class="table-scroll sched-table-wrap">
+            <table class="recipient-table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="phoneSelectAll" onchange="schedTogglePhoneSelectAll(this)"></th>
+                        <th>Avatar</th>
+                        <th>Tên</th>
+                        <th>Số ĐT</th>
+                        <th>ID</th>
+                        <th>Trạng thái</th>
+                    </tr>
+                </thead>
+                <tbody id="phoneResultsBody"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+

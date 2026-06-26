@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cài đặt - Zalo Marketing</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=marketing-ui-1">
+</head>
+<body>
+{% include '_nav.html' %}
+<div class="page marketing-page">
+    <div class="page-hero compact">
+        <div>
+            <div class="eyebrow">Hệ thống</div>
+            <h2>Cài đặt hệ thống</h2>
+            <p>Khu vực tổng hợp cấu hình local. Logic xử lý cũ vẫn được giữ nguyên.</p>
+        </div>
+    </div>
+    <div class="settings-grid">
+        <div class="card">
+            <div class="card-title">Thông tin giao diện</div>
+            <p class="muted">Tên phần mềm: <b>Zalo Marketing</b></p>
+            <p class="muted">Giao diện mặc định: <b>/guide</b></p>
+            <p class="muted">Cổng chạy local: <b>5000</b></p>
+        </div>
+        <div class="card">
+            <div class="card-title">Các trang chức năng</div>
+            <div class="module-list">
+                <a href="{{ url_for('accounts_page') }}">Tài khoản Zalo</a>
+                <a href="{{ url_for('members_page') }}">Lấy thành viên nhóm</a>
+                <a href="{{ url_for('marketing_group_page') }}">Marketing theo nhóm</a>
+                <a href="{{ url_for('marketing_phone_page') }}">Marketing theo SĐT</a>
+                <a href="{{ url_for('marketing_schedules_page') }}">Quản lý lịch chạy</a>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

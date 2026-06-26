@@ -1,0 +1,43 @@
+# Build output
+dist/
+build/
+*.spec.bak
+script/
+# Environment
+.env
+.env.*
+!.env.example
+
+# Runtime data / private data
+data/
+profiles/
+profile/
+logs/
+*.log
+
+# Zip / archives
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

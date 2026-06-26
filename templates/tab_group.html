@@ -1,0 +1,118 @@
+<!-- Tab: Từ nhóm -->
+<div class="tab-content active" id="tab-group">
+    <div class="sched-compose-grid">
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3>👥 Nguồn nhóm</h3>
+                    <p>Chọn tài khoản và lấy danh sách thành viên từ nhóm Zalo.</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Chọn tài khoản gửi</label>
+                <div id="schedGroupAccountDropdown" class="account-dropdown"></div>
+                <input type="hidden" id="schedGroupAccountId">
+            </div>
+
+            <div class="form-group">
+                <label>Link nhóm hoặc Group ID</label>
+                <input type="text" id="schedGroupInput" placeholder="https://zalo.me/g/abc123 hoặc group_id">
+            </div>
+
+            <button class="btn btn-primary sched-full-btn" id="btnGetGroupMembers" onclick="schedGetGroupMembers()">👥 Lấy thành viên</button>
+        </section>
+
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3>⚙️ Cấu hình lịch</h3>
+                    <p>Nội dung, thời gian và tốc độ gửi.</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="schedToggleAdvanced('group')">Cài đặt nâng cao</button>
+            </div>
+
+            <div class="form-group">
+                <label>Tiêu đề *</label>
+                <input type="text" id="schedGroupTitle" placeholder="VD: Khuyến mãi tháng 5">
+            </div>
+
+            <div class="form-group">
+                <label>Nội dung *</label>
+                <textarea id="schedGroupMessage" placeholder="Nhập nội dung..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Thời gian gửi *</label>
+                <input type="datetime-local" id="schedGroupDateTime">
+            </div>
+
+            <div id="groupAdvancedSettings" class="sched-advanced" style="display:none">
+                <div class="sched-mini-grid">
+                    <div class="form-group">
+                        <label>Min Delay (s)</label>
+                        <input type="number" id="schedGroupMinDelay" value="3" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Delay (s)</label>
+                        <input type="number" id="schedGroupMaxDelay" value="5" min="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Errors</label>
+                        <input type="number" id="schedGroupMaxErrors" value="5" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="schedGroupBatchSize" value="10" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Delay (s)</label>
+                        <input type="number" id="schedGroupBatchDelay" value="30" min="1">
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section id="schedMembersSection" class="sched-panel sched-results-panel" style="display:none">
+        <div class="sched-list-toolbar">
+            <div>
+                <h3>Chọn người nhận từ nhóm</h3>
+                <p>Đã chọn <strong id="schedSelectedCount">0</strong>/<strong id="schedTotalCount">0</strong> người</p>
+            </div>
+            <div class="sched-toolbar-actions">
+                <button id="btnSaveScheduleGroup" class="btn btn-success" onclick="schedSaveSchedule()">💾 Lưu lịch</button>
+                <label class="sched-check-pill">
+                    <input type="checkbox" id="schedHeaderCheckbox" onchange="schedToggleSelectAll(this)">
+                    Chọn tất cả
+                </label>
+            </div>
+        </div>
+
+        <div class="search-box sched-search-wide">
+            <input type="text" id="schedSearchMembers" placeholder="Tìm theo tên..." onkeyup="schedFilterMembers()">
+        </div>
+
+        <div class="table-scroll sched-table-wrap">
+            <table class="recipient-table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="schedSelectAll" onchange="schedToggleSelectAll(this)"></th>
+                        <th>Avatar</th>
+                        <th>Tên</th>
+                        <th>ID</th>
+                        <th>Giới tính</th>
+                        <th>Ngày sinh</th>
+                        <th>Số điện thoại</th>
+                        <th>Trạng thái</th>
+                        <th>Kết bạn</th>
+                        <th>Xem</th>
+                    </tr>
+                </thead>
+                <tbody id="schedMembersBody"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+

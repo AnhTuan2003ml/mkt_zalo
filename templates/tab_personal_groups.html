@@ -1,0 +1,126 @@
+<!-- Tab: Nhóm cá nhân -->
+<div class="tab-content" id="tab-personal-groups">
+    <div class="sched-compose-grid">
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3>📱 Tài khoản & nhóm cá nhân</h3>
+                    <p>Chọn tài khoản để tải danh sách nhóm đang tham gia.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" id="btnRefreshPersonalGroups" onclick="schedRefreshPersonalGroups()">🔄 Làm mới</button>
+            </div>
+
+            <div class="form-group">
+                <label>Chọn tài khoản gửi</label>
+                <div id="schedPersonalGroupAccountDropdown" class="account-dropdown"></div>
+                <input type="hidden" id="schedPersonalGroupAccountId">
+            </div>
+        </section>
+
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3>⚙️ Cấu hình lịch</h3>
+                    <p>Nội dung, thời gian và tốc độ gửi nhóm.</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Tiêu đề *</label>
+                <input type="text" id="schedPersonalGroupTitle" placeholder="VD: Khuyến mãi tháng 5">
+            </div>
+
+            <div class="form-group">
+                <label>Nội dung *</label>
+                <textarea id="schedPersonalGroupMessage" placeholder="Nhập nội dung..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Thời gian gửi *</label>
+                <input type="datetime-local" id="schedPersonalGroupRunAt">
+            </div>
+
+            <details class="sched-details">
+                <summary>⚙️ Cài đặt nâng cao</summary>
+                <div class="sched-mini-grid">
+                    <div class="form-group">
+                        <label>Min Delay (s)</label>
+                        <input type="number" id="schedPersonalGroupMinDelay" value="3" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Delay (s)</label>
+                        <input type="number" id="schedPersonalGroupMaxDelay" value="5" min="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Errors</label>
+                        <input type="number" id="schedPersonalGroupMaxErrors" value="5" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="schedPersonalGroupBatchSize" value="10" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Delay (s)</label>
+                        <input type="number" id="schedPersonalGroupBatchDelay" value="30" min="1">
+                    </div>
+                </div>
+            </details>
+        </section>
+    </div>
+
+    <section class="sched-panel sched-results-panel">
+        <div class="sched-list-toolbar">
+            <div>
+                <h3>📱 Danh sách nhóm</h3>
+                <p><strong id="schedPersonalGroupSelectedCount">0</strong> đã chọn</p>
+            </div>
+            <div id="personalGroupsHeader" class="sched-toolbar-actions" style="display:none">
+                <button class="btn btn-success" id="btnSaveSchedulePersonalGroup" onclick="schedSaveSchedule()">💾 Lưu lịch</button>
+                <label class="sched-check-pill">
+                    <input type="checkbox" id="schedPersonalGroupSelectAll" onchange="schedTogglePersonalGroupSelectAll(this)">
+                    Chọn tất cả
+                </label>
+            </div>
+        </div>
+
+        <div id="personalGroupsLoadingMsg" class="sched-loading" style="display:none">
+            <div class="spinner"></div><p>Đang tải danh sách nhóm...</p>
+        </div>
+
+        <div id="personalGroupsEmpty" class="sched-empty" style="display:none">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <p>Chưa có nhóm cá nhân nào</p>
+            <span>Nhấn “Làm mới” để tải danh sách nhóm</span>
+        </div>
+
+        <div id="schedPersonalGroupsTableWrap" class="table-scroll personal-groups-table-wrap" style="display:none;">
+    <table id="schedPersonalGroupsTable" class="personal-groups-table">
+        <colgroup>
+            <col style="width:48px;">
+            <col style="width:72px;">
+            <col>
+            <col style="width:260px;">
+            <col style="width:160px;">
+            <col style="width:110px;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th style="text-align:center;">
+                    <input type="checkbox" id="schedPersonalGroupHeaderCheckbox">
+                </th>
+                <th>Avatar</th>
+                <th>Tên nhóm</th>
+                <th>Group ID</th>
+                <th>Thành viên</th>
+                <th style="text-align:center;">Thao tác</th>
+            </tr>
+        </thead>
+        <tbody id="schedPersonalGroupsBody"></tbody>
+    </table>
+</div>
+    </section>
+</div>
+
+

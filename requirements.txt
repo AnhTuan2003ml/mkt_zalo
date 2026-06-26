@@ -1,0 +1,10 @@
+Flask>=3.0.0
+requests>=2.31.0
+websocket-client>=1.7.0
+pycryptodome>=3.20.0
+cryptography>=42.0.0
+python-dotenv>=1.0.0
+appdirs>=1.4.4
+wmi>=1.5.1; platform_system == "Windows"
+pywin32>=306; platform_system == "Windows"
+pyinstaller>=6.0.0

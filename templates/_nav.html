@@ -1,0 +1,23 @@
+<div class="header app-sidebar">
+    <div class="header-content">
+        <div class="brand">
+            <div class="brand-logo">ZM</div>
+            <div>
+                <h1>ZMKT</h1>
+                <div class="brand-subtitle">Zalo marketing toolkit</div>
+            </div>
+        </div>
+    </div>
+    <nav class="header-nav">
+        <a href="{{ url_for('activation_page') }}" class="{% if active_page == 'activation' %}active{% endif %}">🔐 <span>Kích hoạt</span></a>
+        <a href="{{ url_for('guide_page') }}" class="{% if active_page == 'guide' %}active{% endif %}">📘 <span>Hướng dẫn sử dụng</span></a>
+        <a href="{{ url_for('accounts_page') }}" class="{% if active_page == 'accounts' %}active{% endif %}">👤 <span>Tài khoản Zalo</span></a>
+        <a href="{{ url_for('members_page') }}" class="{% if active_page == 'members' %}active{% endif %}">👥 <span>Lấy thành viên nhóm</span></a>
+        <div class="nav-section-label">Marketing</div>
+        <a href="{{ url_for('marketing_group_page') }}" class="{% if active_page == 'marketing_group' %}active{% endif %}">📣 <span>Theo nhóm</span></a>
+        <a href="{{ url_for('marketing_phone_page') }}" class="{% if active_page == 'marketing_phone' %}active{% endif %}">☎️ <span>Theo SĐT</span></a>
+        <a href="{{ url_for('marketing_personal_groups_page') }}" class="{% if active_page == 'personal_groups' %}active{% endif %}">💬 <span>Nhóm cá nhân</span></a>
+        <a href="{{ url_for('marketing_schedules_page') }}" class="{% if active_page == 'schedules' %}active{% endif %}">📅 <span>Quản lý lịch chạy</span></a>
+    </nav>
+    <div class="sidebar-footer">Sản phẩm phát triển bởi <b>ATH</b></div>
+</div>

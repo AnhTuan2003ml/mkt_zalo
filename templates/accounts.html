@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tài khoản Zalo - ZMKT</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=9999">
+</head>
+<body>
+
+{% set active_page = 'accounts' %}
+{% include '_nav.html' %}
+
+<div class="page">
+    <div class="card">
+        <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            Danh sách tài khoản
+        </div>
+
+        <div class="btn-row">
+            <button class="btn btn-primary" id="btnAddAccount" onclick="addAccount()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Thêm tài khoản
+            </button>
+        </div>
+
+        <div id="accountsEmpty" class="accounts-empty">
+            <p>Chưa có tài khoản nào.</p>
+            <p class="hint">Nhấn «Thêm tài khoản» để tạo profile Chrome mới và mở Zalo Web.</p>
+        </div>
+
+        <div id="accountsList" class="accounts-list"></div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}?v=9999"></script>
+<script src="{{ url_for('static', filename='js/accounts.js') }}?v=proxy1"></script>
+</body>
+</html>
+

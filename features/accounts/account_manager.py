@@ -1,0 +1,715 @@
+"""
+Quản lý tài khoản Zalo — mỗi tài khoản một Chrome user-data-dir riêng.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import uuid
+import winreg
+
+
+def find_chrome_executable():
+    """Tìm Chrome từ các vị trí phổ biến trên Windows"""
+    chrome_paths = [
+        os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+    ]
+    
+    # Kiểm tra các vị trí phổ biến
+    for path in chrome_paths:
+        if os.path.isfile(path):
+            return path
+    
+    # Tìm từ Registry (Windows)
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Google\Chrome\Binaries") as key:
+            path, _ = winreg.QueryValueEx(key, "InstallDir")
+            chrome_exe = os.path.join(path, "chrome.exe")
+            if os.path.isfile(chrome_exe):
+                return chrome_exe
+    except Exception:
+        pass
+    
+    # Thử HKEY_CURRENT_USER
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\Binaries") as key:
+            path, _ = winreg.QueryValueEx(key, "InstallDir")
+            chrome_exe = os.path.join(path, "chrome.exe")
+            if os.path.isfile(chrome_exe):
+                return chrome_exe
+    except Exception:
+        pass
+    
+    raise FileNotFoundError("Không tìm thấy Chrome trên máy. Vui lòng cài đặt Google Chrome.")
+
+
+CHROME_EXE = find_chrome_executable()
+ZALO_URL = "https://chat.zalo.me/index.html"
+DEBUG_PORT_START = 9333
+
+_running_chrome = {}
+_used_ports = set()
+
+
+def _base_dir():
+    if getattr(sys, "frozen", False):
+        # PyInstaller --onedir: exe ở cùng folder với data/ và profiles/
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+BASE_DIR = _base_dir()
+DATA_DIR = os.path.join(BASE_DIR, "data")
+PROFILES_DIR = os.path.join(BASE_DIR, "profiles")
+ACCOUNTS_FILE = os.path.join(DATA_DIR, "accounts.json")
+
+
+def _ensure_dirs():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(PROFILES_DIR, exist_ok=True)
+
+
+def _profile_path(account_id: str) -> str:
+    return os.path.join(PROFILES_DIR, account_id)
+
+
+def normalize_account(acc: dict, default_name: str = None) -> dict:
+    """Chuẩn hóa field tài khoản (tương thích account cũ)."""
+    created = acc.get("createdAt") or int(time.time() * 1000)
+    name = (acc.get("name") or default_name or "Tài khoản").strip()
+
+    normalized = {
+        "accountId": acc.get("accountId", ""),
+        "name": name,
+        "avatarUrl": acc.get("avatarUrl", "") or "",
+        "profilePath": acc.get("profilePath", "") or "",
+        "remoteDebugPort": acc.get("remoteDebugPort"),
+        "zpwEnk": acc.get("zpwEnk", "") or "",
+        "imei": acc.get("imei", "") or "",
+        "cookies": acc.get("cookies", "") or "",
+        "proxy": acc.get("proxy", "") or "",
+        "loginCaptured": bool(acc.get("loginCaptured", False)),
+        "userinfoCaptured": bool(acc.get("userinfoCaptured", False)),
+        "createdAt": created,
+        "updatedAt": acc.get("updatedAt") or created,
+        "personalGroups": acc.get("personalGroups") or [],  # Danh sách nhóm cá nhân
+    }
+
+    if acc.get("uid"):
+        normalized["uid"] = str(acc["uid"])
+    if acc.get("phoneNumber"):
+        normalized["phoneNumber"] = str(acc["phoneNumber"])
+
+    return normalized
+
+
+def load_accounts():
+    """Đọc danh sách tài khoản từ data/accounts.json."""
+    _ensure_dirs()
+    if not os.path.isfile(ACCOUNTS_FILE):
+        save_accounts([])
+        return []
+
+    try:
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        raw = data.get("accounts", [])
+        if not isinstance(raw, list):
+            return []
+
+        accounts = []
+        global _used_ports
+        _used_ports = set()
+        for acc in raw:
+            if not acc.get("accountId"):
+                continue
+            norm = normalize_account(acc)
+            accounts.append(norm)
+            port = norm.get("remoteDebugPort")
+            if port:
+                _used_ports.add(int(port))
+        return accounts
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def save_accounts(accounts):
+    """Lưu danh sách tài khoản vào data/accounts.json."""
+    _ensure_dirs()
+    normalized = [normalize_account(a) for a in accounts]
+    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"accounts": normalized}, f, ensure_ascii=False, indent=2)
+
+
+def _find_account(accounts, account_id):
+    for acc in accounts:
+        if acc.get("accountId") == account_id:
+            return acc
+    return None
+
+
+def get_account(account_id: str):
+    return _find_account(load_accounts(), account_id)
+
+
+def update_account(account_id: str, **fields):
+    """Cập nhật một phần thông tin tài khoản."""
+    accounts = load_accounts()
+    for i, acc in enumerate(accounts):
+        if acc.get("accountId") != account_id:
+            continue
+        acc.update(fields)
+        acc["updatedAt"] = int(time.time() * 1000)
+        accounts[i] = normalize_account(acc)
+        save_accounts(accounts)
+        return accounts[i]
+    return None
+
+
+def account_capture_complete(account_id: str) -> bool:
+    """
+    Monitor dừng khi TẤT CẢ các điều kiện được thỏa:
+    - Đã capture login (loginCaptured = True, zpwEnk có giá trị)
+    - Đã capture userinfo (userinfoCaptured = True, name/avatar/etc)
+    - Đã lấy được danh sách nhóm cá nhân (personalGroups không rỗng)
+    - Đã có cookies đầy đủ (độ dài > 300 ký tự)
+    
+    Nếu chưa đủ, monitor tiếp tục chạy để lấy thêm dữ liệu.
+    """
+    acc = get_account(account_id)
+    if not acc:
+        return False
+    
+    # Kiểm tra login capture (zpwEnk là dấu hiệu)
+    zpw_enk = (acc.get("zpwEnk") or "").strip()
+    if not zpw_enk:
+        print(f"[account_capture_complete] Missing zpwEnk for {account_id[:8]}...")
+        return False
+    
+    login_captured = acc.get("loginCaptured", False)
+    if not login_captured:
+        print(f"[account_capture_complete] loginCaptured=False for {account_id[:8]}...")
+        return False
+    
+    # Kiểm tra userinfo capture
+    userinfo_captured = acc.get("userinfoCaptured", False)
+    if not userinfo_captured:
+        print(f"[account_capture_complete] userinfoCaptured=False for {account_id[:8]}...")
+        return False
+    
+    # Kiểm tra personalGroups
+    personal_groups = acc.get("personalGroups", [])
+    has_groups = False
+    
+    if isinstance(personal_groups, list):
+        has_groups = len(personal_groups) > 0
+    elif isinstance(personal_groups, dict):
+        has_groups = len(personal_groups) > 0
+    
+    if not has_groups:
+        print(f"[account_capture_complete] No personalGroups for {account_id[:8]}...")
+        return False
+    
+    # Kiểm tra cookies - phải đủ dài (thường 400+ ký tự)
+    cookies = acc.get("cookies", "")
+    has_sufficient_cookies = len(cookies) > 300
+    
+    if not has_sufficient_cookies:
+        print(f"[account_capture_complete] Insufficient cookies ({len(cookies)} chars) for {account_id[:8]}...")
+        return False
+    
+    # TẤT CẢ điều kiện thỏa - dữ liệu đủ
+    return True
+
+def account_capture_basic(account_id: str) -> bool:
+    """Check if basic account info is captured (without group list)."""
+    acc = get_account(account_id)
+    if not acc:
+        return False
+    return bool(
+        acc.get("zpwEnk")
+        and acc.get("cookies")
+        and acc.get("name")
+        and acc.get("avatarUrl")
+        and acc.get("loginCaptured")
+        and acc.get("userinfoCaptured")
+    )
+
+
+def get_system_imei() -> str:
+    """
+    Lấy IMEI của hệ thống (Windows: serial number ổ cứng).
+    """
+    try:
+        import wmi
+        c = wmi.WMI()
+        disks = c.Win32_PhysicalMedia()
+        if disks:
+            return str(disks[0].SerialNumber).strip()
+    except Exception as e:
+        pass
+    
+    return "N/A"
+
+
+def auto_capture_account_imei(account_id: str):
+    """
+    Không tự tạo IMEI và không lấy serial máy.
+    IMEI đúng phải được bắt từ request Zalo Web:
+    /api/login/getServerInfo?imei=...
+    """
+    acc = get_account(account_id)
+    current_imei = ""
+    if acc:
+        current_imei = str(acc.get("imei") or "").strip()
+
+    if current_imei:
+        print(f"[auto_capture_account_imei] IMEI đã có từ Zalo Web, giữ nguyên: {current_imei}")
+    else:
+        print(f"[auto_capture_account_imei] Chưa có IMEI. Chờ bắt từ getServerInfo?imei=...")
+
+    return None
+
+
+def reset_account_session(account_id: str):
+    """Reset cờ capture để lần Mở tiếp theo trích xuất lại cookies và phiên."""
+    update_account(
+        account_id,
+        loginCaptured=False,
+        userinfoCaptured=False,
+        cookies="",
+    )
+
+
+def rename_account(account_id: str, name: str):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Tên không được để trống.")
+    return update_account(account_id, name=name)
+
+
+def _next_account_name(accounts):
+    used = {a.get("name", "") for a in accounts}
+    n = len(accounts) + 1
+    while True:
+        label = f"Tài khoản {n}"
+        if label not in used:
+            return label
+        n += 1
+
+
+def _allocate_debug_port(accounts) -> int:
+    used = {int(a["remoteDebugPort"]) for a in accounts if a.get("remoteDebugPort")}
+    used |= _used_ports
+    port = DEBUG_PORT_START
+    while port in used:
+        port += 1
+    _used_ports.add(port)
+    return port
+
+
+def _is_profile_in_use(profile_path: str, account_id: str = None) -> bool:
+    if account_id and account_id in _running_chrome:
+        proc = _running_chrome[account_id]
+        if proc is not None and proc.poll() is None:
+            return True
+
+    if not os.path.isdir(profile_path):
+        return False
+
+    for lock_name in ("SingletonLock", "lockfile", "SingletonSocket"):
+        if os.path.exists(os.path.join(profile_path, lock_name)):
+            return True
+    return False
+
+def _parse_proxy(proxy_string: str):
+    """
+    Parse proxy string thành dict.
+
+    Hỗ trợ:
+    - ip:port
+    - ip:port:user:pass
+    - http://ip:port
+    - http://user:pass@ip:port
+    - https://user:pass@ip:port
+    """
+    proxy_string = (proxy_string or "").strip()
+    if not proxy_string:
+        return None
+
+    if proxy_string.startswith("http://"):
+        proxy_string = proxy_string[len("http://"):]
+    elif proxy_string.startswith("https://"):
+        proxy_string = proxy_string[len("https://"):]
+
+    username = ""
+    password = ""
+    host_port = proxy_string
+
+    # user:pass@host:port
+    if "@" in proxy_string:
+        auth, host_port = proxy_string.split("@", 1)
+        if ":" in auth:
+            username, password = auth.split(":", 1)
+        else:
+            username = auth
+
+    parts = host_port.split(":")
+
+    # host:port
+    if len(parts) == 2:
+        host, port = parts
+
+    # host:port:user:pass
+    elif len(parts) == 4:
+        host, port, username, password = parts
+
+    else:
+        raise ValueError("Proxy khong dung dinh dang. Dung ip:port hoac ip:port:user:pass")
+
+    host = host.strip()
+    port = int(str(port).strip())
+    username = username.strip()
+    password = password.strip()
+
+    if not host:
+        raise ValueError("Proxy host rong")
+
+    if not port:
+        raise ValueError("Proxy port rong")
+
+    return {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+    }
+
+
+def _create_proxy_auth_extension(profile_path: str, proxy_info: dict) -> str:
+    """
+    Tạo Chrome extension chỉ để xử lý proxy authentication.
+
+    Lưu ý:
+    - Proxy route được set bằng --proxy-server trong _launch_chrome()
+    - Extension này chỉ trả username/password khi Chrome hỏi proxy auth
+    """
+    ext_dir = os.path.join(profile_path, "proxy_auth_extension")
+    os.makedirs(ext_dir, exist_ok=True)
+
+    username = proxy_info.get("username", "") or ""
+    password = proxy_info.get("password", "") or ""
+
+    manifest = {
+        "version": "1.0.0",
+        "manifest_version": 2,
+        "name": "Zalo Tool Proxy Auth",
+        "permissions": [
+            "<all_urls>",
+            "webRequest",
+            "webRequestBlocking"
+        ],
+        "background": {
+            "scripts": ["background.js"]
+        },
+        "minimum_chrome_version": "22.0.0"
+    }
+
+    # Dùng json.dumps để tránh lỗi nếu user/pass có ký tự đặc biệt
+    username_js = json.dumps(username)
+    password_js = json.dumps(password)
+
+    background_js = f"""
+console.log("Zalo Tool Proxy Auth extension loaded");
+
+chrome.webRequest.onAuthRequired.addListener(
+    function(details) {{
+        console.log("Proxy auth required:", details.url);
+
+        return {{
+            authCredentials: {{
+                username: {username_js},
+                password: {password_js}
+            }}
+        }};
+    }},
+    {{ urls: ["<all_urls>"] }},
+    ["blocking"]
+);
+"""
+
+    manifest_path = os.path.join(ext_dir, "manifest.json")
+    background_path = os.path.join(ext_dir, "background.js")
+
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    with open(background_path, "w", encoding="utf-8") as f:
+        f.write(background_js)
+
+    print(f"[account_manager] Created proxy auth extension: {ext_dir}")
+    print(f"[account_manager] Proxy auth username exists: {bool(username)}")
+
+    return ext_dir
+
+
+def _launch_chrome(profile_path: str, account_id: str, debug_port: int, proxy: str = ""):
+    if not os.path.isfile(CHROME_EXE):
+        raise FileNotFoundError(f"Không tìm thấy Chrome tại: {CHROME_EXE}")
+
+    profile_path = os.path.abspath(profile_path)
+    os.makedirs(profile_path, exist_ok=True)
+
+    args = [
+        CHROME_EXE,
+        f"--user-data-dir={profile_path}",
+        f"--remote-debugging-port={int(debug_port)}",
+        "--remote-allow-origins=*",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ]
+
+    proxy = (proxy or "").strip()
+
+    if proxy:
+        try:
+            print(f"[account_manager] Parsing proxy for account {account_id}: {proxy}")
+
+            proxy_info = _parse_proxy(proxy)
+
+            print(
+                f"[account_manager] Parsed proxy: "
+                f"host={proxy_info['host']}, "
+                f"port={proxy_info['port']}, "
+                f"has_auth={bool(proxy_info.get('username'))}"
+            )
+
+            proxy_server = f"http://{proxy_info['host']}:{int(proxy_info['port'])}"
+
+            args.extend([
+                f"--proxy-server={proxy_server}",
+                "--proxy-bypass-list=<-loopback>",
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+            ])
+
+            # Nếu proxy có username/password thì load extension auth
+            if proxy_info.get("username") or proxy_info.get("password"):
+                proxy_ext_dir = _create_proxy_auth_extension(profile_path, proxy_info)
+
+                args.extend([
+                    f"--load-extension={proxy_ext_dir}",
+                    f"--disable-extensions-except={proxy_ext_dir}",
+                ])
+
+                print(f"[account_manager] Chrome will load proxy auth extension: {proxy_ext_dir}")
+
+            print(f"[account_manager] Proxy server: {proxy_server}")
+
+        except Exception as e:
+            print(f"[account_manager] ERROR setting up proxy: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # Mở trang trắng trước để monitor attach Network.enable trước,
+    # sau đó monitor sẽ tự điều hướng sang Zalo.
+    args.append("about:blank")
+
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = (
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+
+    print("[account_manager] Launching Chrome with args:", " ".join(args))
+
+    proc = subprocess.Popen(
+        args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+        close_fds=True,
+    )
+
+    _running_chrome[account_id] = proc
+    print(f"[account_manager] Chrome process started (PID: {proc.pid}) for account {account_id}")
+    return proc
+
+def _start_network_monitor(account_id: str, debug_port: int):
+    def _delayed():
+        # Chỉ chờ rất ngắn để Chrome mở cổng remote-debugging
+        time.sleep(0.2)
+        try:
+            try:
+                from .account_network_monitor import start_account_network_monitor
+            except ImportError:
+                from account_network_monitor import start_account_network_monitor
+            start_account_network_monitor(account_id, debug_port)
+        except Exception as e:
+            print(f"[account_manager] Không start monitor: {e}")
+
+    threading.Thread(target=_delayed, daemon=True).start()
+
+
+def _open_chrome_for_account(account: dict, resync: bool = True):
+    account_id = account["accountId"]
+    if resync:
+        reset_account_session(account_id)
+        account = get_account(account_id) or account
+
+    accounts = load_accounts()
+    profile_path = account.get("profilePath") or _profile_path(account_id)
+
+    port = account.get("remoteDebugPort")
+    if not port:
+        port = _allocate_debug_port(accounts)
+        account["remoteDebugPort"] = port
+        for i, a in enumerate(accounts):
+            if a["accountId"] == account_id:
+                accounts[i] = normalize_account({**a, **account})
+                break
+        save_accounts(accounts)
+
+    _launch_chrome(profile_path, account_id, int(port), account.get("proxy", ""))
+    _start_network_monitor(account_id, int(port))
+    return get_account(account_id) or normalize_account(account)
+
+
+def create_account():
+    """Tạo tài khoản mới: accountId, profile, lưu JSON, mở Chrome + monitor."""
+    _ensure_dirs()
+    accounts = load_accounts()
+
+    account_id = uuid.uuid4().hex
+    profile_path = _profile_path(account_id)
+    os.makedirs(profile_path, exist_ok=True)
+
+    port = _allocate_debug_port(accounts)
+    now = int(time.time() * 1000)
+
+    # Generate IMEI: UUID-based format
+    imei = f"{uuid.uuid4().hex[:8]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:12]}"
+
+    account = normalize_account(
+        {
+            "accountId": account_id,
+            "name": _next_account_name(accounts),
+            "profilePath": os.path.abspath(profile_path),
+            "remoteDebugPort": port,
+            "imei": imei,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+    )
+
+    accounts.append(account)
+    save_accounts(accounts)
+
+    _launch_chrome(profile_path, account_id, port, account.get("proxy", ""))
+    _start_network_monitor(account_id, port)
+    return get_account(account_id) or account
+
+
+def open_account(account_id: str):
+    """Mở Chrome với profile của tài khoản + bật monitor."""
+    accounts = load_accounts()
+    account = _find_account(accounts, account_id)
+    if not account:
+        raise ValueError("Không tìm thấy tài khoản.")
+
+    profile_path = account.get("profilePath") or _profile_path(account_id)
+    if not os.path.isdir(profile_path):
+        os.makedirs(profile_path, exist_ok=True)
+        update_account(account_id, profilePath=os.path.abspath(profile_path))
+        account = get_account(account_id)
+
+    return _open_chrome_for_account(account)
+
+
+def close_account(account_id: str):
+    """Đóng Chrome profile của tài khoản và dừng monitor."""
+    try:
+        try:
+            from .account_network_monitor import stop_account_network_monitor
+        except ImportError:
+            from account_network_monitor import stop_account_network_monitor
+        stop_account_network_monitor(account_id)
+    except Exception:
+        pass
+
+    # Kill Chrome process if running
+    if account_id in _running_chrome:
+        try:
+            proc = _running_chrome[account_id]
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        except Exception as e:
+            print(f"[account_manager] Lỗi kill Chrome: {e}")
+        finally:
+            del _running_chrome[account_id]
+
+    # Clear remoteDebugPort
+    accounts = load_accounts()
+    account = _find_account(accounts, account_id)
+    if account:
+        port = account.get("remoteDebugPort")
+        if port:
+            _used_ports.discard(int(port))
+            account.pop("remoteDebugPort", None)
+        save_accounts(accounts)
+
+
+def delete_account(account_id: str):
+    """Xóa tài khoản, dừng monitor, xóa profile."""
+    try:
+        try:
+            from .account_network_monitor import stop_account_network_monitor
+        except ImportError:
+            from account_network_monitor import stop_account_network_monitor
+        stop_account_network_monitor(account_id)
+    except Exception:
+        pass
+
+    accounts = load_accounts()
+    account = _find_account(accounts, account_id)
+    if not account:
+        raise ValueError("Không tìm thấy tài khoản.")
+
+    profile_path = account.get("profilePath") or _profile_path(account_id)
+
+    if _is_profile_in_use(profile_path, account_id):
+        raise RuntimeError(
+            "Profile đang được Chrome sử dụng. "
+            "Vui lòng đóng cửa sổ Chrome của tài khoản này rồi thử lại."
+        )
+
+    port = account.get("remoteDebugPort")
+    if port:
+        _used_ports.discard(int(port))
+
+    accounts = [a for a in accounts if a.get("accountId") != account_id]
+    save_accounts(accounts)
+
+    if account_id in _running_chrome:
+        del _running_chrome[account_id]
+
+    if os.path.isdir(profile_path):
+        try:
+            shutil.rmtree(profile_path)
+        except PermissionError as e:
+            raise RuntimeError(
+                "Không thể xóa thư mục profile (có thể Chrome vẫn đang mở). "
+                "Đóng Chrome và thử lại."
+            ) from e
+        except OSError as e:
+            raise RuntimeError(f"Không thể xóa thư mục profile: {e}") from e
+
+    return True

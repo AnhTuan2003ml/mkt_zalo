@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kích hoạt phần mềm - ZMKT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .activation-wrap { max-width: 1080px; margin: 0 auto; }
+        .activation-hero {
+            border: 1px solid var(--border);
+            background: linear-gradient(135deg, rgba(88,166,255,.16), rgba(63,185,80,.08)), var(--surface);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 20px;
+        }
+        .activation-hero h2 { font-size: 24px; margin-bottom: 10px; }
+        .activation-hero p { color: var(--text-muted); line-height: 1.6; }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            border: 1px solid var(--border); border-radius: 999px;
+            padding: 8px 12px; margin-bottom: 14px; font-size: 13px;
+            background: rgba(255,255,255,.03);
+        }
+        .status-badge.ok { color: var(--green); border-color: rgba(63,185,80,.45); }
+        .status-badge.warn { color: var(--yellow); border-color: rgba(210,153,34,.5); }
+        .activation-grid { display:grid; grid-template-columns: 320px minmax(0,1fr); gap: 18px; margin-top: 16px; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+        .card h3 { margin: 0 0 12px; font-size: 18px; }
+        .muted { color: var(--text-muted); }
+        .plan-list { list-style:none; margin:0; padding:0; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+        .plan-item { display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border); cursor:pointer; background:rgba(255,255,255,.02); transition:.18s ease; }
+        .plan-item:last-child { border-bottom:none; }
+        .plan-item:hover { background: rgba(88,166,255,.08); }
+        .plan-item.active { background: rgba(88,166,255,.14); outline: 1px solid rgba(88,166,255,.28); }
+        .plan-icon { width:24px; text-align:center; font-size:18px; }
+        .plan-item input { display:none; }
+        .plan-label { font-weight:600; }
+        .plan-sub { margin-left:auto; color: var(--text-muted); font-size: 12px; }
+        .activation-code-box {
+            width: 100%; background: #0b0f14; color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 16px; font-family: "Cascadia Code", "Consolas", monospace;
+            font-size: 24px; line-height: 1.2; outline: none;
+            letter-spacing: 3px; text-align: center; text-transform: uppercase;
+        }
+        .activation-code-box:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.14); }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+        .btn-primary, .btn-secondary {
+            border: 0; border-radius: 9px; padding: 11px 16px;
+            cursor: pointer; font-weight: 600; font-size: 14px;
+        }
+        .btn-primary { background: var(--accent); color: #06101f; }
+        .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+        .help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+        .help-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .help-item h3 { font-size: 14px; margin-bottom: 8px; }
+        .help-item p { color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+        #activationResult { margin-top: 12px; font-size: 13px; line-height: 1.5; }
+        #activationResult.ok { color: var(--green); }
+        #activationResult.err { color: var(--red); }
+        #selectedPlanLabel { font-weight: 700; }
+        .disclaimer { position: fixed; bottom: 12px; right: 12px; font-size: 11px; color: var(--text-muted); text-align: right; max-width: 280px; line-height: 1.4; pointer-events: none; }
+        @media (max-width: 860px) {
+            .activation-grid { grid-template-columns: 1fr; }
+            .help-grid { grid-template-columns: 1fr; }
+            .disclaimer { font-size: 10px; max-width: 200px; }
+        }
+    </style>
+</head>
+<body>
+    {% include '_nav.html' %}
+    <main class="page">
+        <div class="activation-wrap">
+            <section class="activation-hero">
+                <div class="status-badge {{ 'ok' if activated else 'warn' }}">
+                    {{ '✅ Đã kích hoạt' if activated else '🔐 Chưa kích hoạt' }}
+                </div>
+                <h2>Kích hoạt ZMKT trên thiết bị này</h2>
+                <p>{{ activation_message }}</p>
+                {% if activated %}
+                    <p>{% if days_remaining >= 99999 %}License <b>vĩnh viễn</b> hợp lệ. Bạn có thể sử dụng phần mềm bình thường.{% elif days_remaining == 0 %}License còn <b>dưới 1 ngày</b>. Bạn có thể sử dụng phần mềm bình thường.{% else %}License còn khoảng <b>{{ days_remaining }}</b> ngày. Bạn có thể sử dụng phần mềm bình thường.{% endif %}</p>
+                    <div class="actions">
+                        <button class="btn-primary" onclick="location.href='{{ url_for('guide_page') }}'; return false;">Vào phần mềm</button>
+                    </div>
+                {% else %}
+                    <p>Khi khởi động phần mềm sẽ kiểm tra kích hoạt trước. Nếu chưa có license hợp lệ, bạn cần <b>chọn thời gian kích hoạt</b>, gửi mã qua email rồi nhập mã <b>12 ký tự</b> để mở khóa phần mềm.</p>
+                {% endif %}
+            </section>
+
+            {% if not activated %}
+            <div class="activation-grid">
+                <section class="card">
+                    <h3>Chọn thời gian kích hoạt</h3>
+                    <p class="muted" style="margin-bottom: 12px;">Chọn gói thời gian tương tự như menu bạn yêu cầu. Sau đó bấm gửi mã để hệ thống gửi email.</p>
+                    <ul class="plan-list" id="activationPlanList">
+                        {% for item in activation_options %}
+                        <li>
+                            <label class="plan-item {{ 'active' if item.key == '1m' else '' }}" data-plan-key="{{ item.key }}">
+                                <input type="radio" name="activationPlan" value="{{ item.key }}" {{ 'checked' if item.key == '1m' else '' }}>
+                                <span class="plan-icon">{{ item.icon }}</span>
+                                <span class="plan-label">{{ item.label }}</span>
+                            </label>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </section>
+
+                <section class="card">
+                    <h3>Nhập mã kích hoạt</h3>
+                    <p class="muted" style="margin-bottom: 12px;">Gói đang chọn: <span id="selectedPlanLabel">1 Tháng</span>. Mã kích hoạt sẽ được gửi tới email admin đã cấu hình trong <code>.env</code>.</p>
+                    <div class="actions" style="margin-top:0; margin-bottom:12px;">
+                        <button id="requestActivationBtn" class="btn-primary">Gửi mã theo thời gian đã chọn</button>
+                        <button id="resendActivationBtn" class="btn-secondary">Gửi lại mã</button>
+                        <button class="btn-secondary" onclick="checkStatus();">Kiểm tra trạng thái</button>
+                    </div>
+                    <input id="activationCode" class="activation-code-box" maxlength="12" autocomplete="one-time-code" spellcheck="false" placeholder="NHẬP 12 KÝ TỰ" />
+                    <div class="actions">
+                        <button id="saveActivationBtn" class="btn-primary">Lưu & kích hoạt</button>
+                    </div>
+                    <div id="activationResult"></div>
+                </section>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='js/activation.js') }}"></script>
+    <div class="disclaimer">Hệ thống chỉ phục vụ marketing.<br>Nhà phát triển xin miễn trừ mọi trách nhiệm.</div>
+</body>
+</html>

@@ -1,0 +1,288 @@
+function getCurrentSelectedAccountIdForMessage() {
+    var ids = [
+        'memberAccountId',
+        'schedGroupAccountId',
+        'schedPhoneAccountId',
+        'schedPersonalGroupAccountId'
+    ];
+
+    for (var i = 0; i < ids.length; i++) {
+        var el = document.getElementById(ids[i]);
+        if (el && el.value && el.value.trim()) {
+            return el.value.trim();
+        }
+    }
+
+    return '';
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gửi tin nhắn</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=9999">
+    <style>
+        .profile-info-section {
+            background: var(--bg-hover);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .profile-field {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+        .profile-field:last-child {
+            border-bottom: none;
+        }
+        .profile-label {
+            font-weight: 500;
+            color: var(--text-muted);
+            min-width: 120px;
+            margin-right: 12px;
+        }
+        .profile-value {
+            flex: 1;
+            word-break: break-word;
+            color: var(--text-primary);
+        }
+        .profile-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .profile-badge.friend {
+            background: #4caf50;
+            color: white;
+        }
+        .profile-badge.not-friend {
+            background: #999;
+            color: white;
+        }
+        .profile-loading {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 8px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="overlay-backdrop" id="overlayBackdrop">
+    <div class="overlay-card">
+        <div class="overlay-header">
+            <div class="overlay-user">
+                <img id="overlayAvatar" class="overlay-avatar" src="" alt="Avatar" style="display:none">
+                <div class="overlay-user-info">
+                    <span class="overlay-name" id="overlayName">-</span>
+                    <span class="overlay-uid" id="overlayUid">-</span>
+                </div>
+            </div>
+            <button class="overlay-close" onclick="window._overlayClose()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Profile Information Section -->
+        <div class="overlay-body" id="profileInfoContainer" style="display:none">
+            <label class="overlay-label">Thông tin chi tiết</label>
+            <div class="profile-info-section" id="profileFields">
+                <div class="profile-loading">Đang tải...</div>
+            </div>
+        </div>
+
+        <!-- Message Section -->
+        <div class="overlay-body">
+            <label class="overlay-label">Nội dung tin nhắn</label>
+            <textarea id="overlayMsg" class="overlay-textarea" placeholder="Nhập nội dung tin nhắn..."></textarea>
+        </div>
+
+        <div class="overlay-footer">
+            <div class="overlay-status" id="overlayStatus"></div>
+            <button class="btn btn-primary" id="overlaySendBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+                Gửi tin nhắn
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function escOverlayHtml(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+function genderLabel(g) {
+    if (g === 0) return 'Nam';
+    if (g === 1) return 'Nữ';
+    return 'Không xác định';
+}
+
+function friendLabel(isFr) {
+    if (isFr === 1) return 'Bạn bè';
+    if (isFr === 0) return 'Không phải bạn bè';
+    return 'Không xác định';
+}
+
+function buildProfileFieldsOverlay(data) {
+    var html = '';
+    
+    // Tên Zalo
+    if (data.zaloName || data.displayName || data.name) {
+        html += '<div class="profile-field">' +
+            '<span class="profile-label">Tên Zalo:</span>' +
+            '<span class="profile-value">' + escOverlayHtml(data.zaloName || data.displayName || data.name || '-') + '</span>' +
+            '</div>';
+    }
+    
+    // Tên hiển thị (displayName) - luôn hiển thị
+    html += '<div class="profile-field">' +
+        '<span class="profile-label">Tên hiển thị:</span>' +
+        '<span class="profile-value">' + escOverlayHtml(data.displayName || '-') + '</span>' +
+        '</div>';
+    
+    // Username - luôn hiển thị
+    html += '<div class="profile-field">' +
+        '<span class="profile-label">Username:</span>' +
+        '<span class="profile-value mono">' + escOverlayHtml(data.username || '-') + '</span>' +
+        '</div>';
+    
+    // Số điện thoại - luôn hiển thị
+    var phoneDisplay = '-';
+    if (data.phoneNumber) {
+        phoneDisplay = escOverlayHtml(data.phoneNumber);
+    } else if (data.phoneNumber === '' || data.phoneNumber === null || data.phoneNumber === undefined) {
+        phoneDisplay = 'Ẩn / không có';
+    }
+    html += '<div class="profile-field">' +
+        '<span class="profile-label">Số điện thoại:</span>' +
+        '<span class="profile-value mono">' + phoneDisplay + '</span>' +
+        '</div>';
+    
+    // Trạng thái - luôn hiển thị
+    html += '<div class="profile-field">' +
+        '<span class="profile-label">Trạng thái:</span>' +
+        '<span class="profile-value">' + escOverlayHtml(data.status || '-') + '</span>' +
+        '</div>';
+    
+    // Ngày sinh - nếu có
+    if (data.sdob) {
+        html += '<div class="profile-field">' +
+            '<span class="profile-label">Ngày sinh:</span>' +
+            '<span class="profile-value">' + escOverlayHtml(data.sdob) + '</span>' +
+            '</div>';
+    }
+    
+    // Giới tính - nếu có
+    if (data.gender !== undefined && data.gender !== null) {
+        html += '<div class="profile-field">' +
+            '<span class="profile-label">Giới tính:</span>' +
+            '<span class="profile-value">' + escOverlayHtml(genderLabel(data.gender)) + '</span>' +
+            '</div>';
+    }
+    
+    // Quan hệ - nếu có
+    if (data.isFr !== undefined && data.isFr !== null) {
+        var friendClass = data.isFr === 1 ? 'friend' : 'not-friend';
+        html += '<div class="profile-field">' +
+            '<span class="profile-label">Quan hệ:</span>' +
+            '<span class="profile-value"><span class="profile-badge ' + friendClass + '">' + escOverlayHtml(friendLabel(data.isFr)) + '</span></span>' +
+            '</div>';
+    }
+    
+    // Loại tài khoản - nếu có
+    if (data.type !== undefined && data.type !== null) {
+        var typeLabel = { 0: 'Cá nhân', 1: 'Official Account', 2: 'Bot' }[data.type] || 'Không xác định';
+        html += '<div class="profile-field">' +
+            '<span class="profile-label">Loại tài khoản:</span>' +
+            '<span class="profile-value">' + escOverlayHtml(typeLabel) + '</span>' +
+            '</div>';
+    }
+    
+    // Trạng thái tài khoản - nếu có
+    if (data.accountStatus !== undefined && data.accountStatus !== null) {
+        html += '<div class="profile-field">' +
+            '<span class="profile-label">Trạng thái tài khoản:</span>' +
+            '<span class="profile-value">' + escOverlayHtml(String(data.accountStatus)) + '</span>' +
+            '</div>';
+    }
+    
+    return html;
+}
+
+function _overlayOpen(uid, name, avatar) {
+    document.getElementById('overlayAvatar').src = avatar;
+    document.getElementById('overlayAvatar').style.display = avatar ? 'block' : 'none';
+    document.getElementById('overlayAvatar').onerror = function() { this.style.display = 'none'; };
+    document.getElementById('overlayName').textContent = name || '-';
+    document.getElementById('overlayUid').textContent  = uid  || '-';
+    document.getElementById('overlayMsg').value  = '';
+    document.getElementById('overlayStatus').textContent = '';
+    document.getElementById('overlaySendBtn').disabled = false;
+    document.getElementById('overlaySendBtn').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Gửi tin nhắn';
+    document.getElementById('overlayBackdrop').style.display = 'flex';
+    
+    // Fetch and display profile information
+    fetchAndDisplayProfile(uid);
+}
+
+function fetchAndDisplayProfile(uid) {
+    var fieldsContainer = document.getElementById('profileFields');
+    var infoContainer = document.getElementById('profileInfoContainer');
+    
+    fieldsContainer.innerHTML = '<div class="profile-loading">Đang tải thông tin...</div>';
+    infoContainer.style.display = 'block';
+    
+    fetch('/api/single-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: uid, account_id: getCurrentSelectedAccountIdForMessage(), accountId: getCurrentSelectedAccountIdForMessage() })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(result) {
+        if (result.error || !result.success || !result.profile) {
+            fieldsContainer.innerHTML = '<div class="profile-loading" style="color:var(--text-muted)">Không thể tải thông tin</div>';
+            return;
+        }
+        
+        var profile = result.profile;
+        fieldsContainer.innerHTML = buildProfileFieldsOverlay(profile);
+    })
+    .catch(function(err) {
+        fieldsContainer.innerHTML = '<div class="profile-loading" style="color:var(--text-muted)">Lỗi: ' + escOverlayHtml(err.message) + '</div>';
+    });
+}
+
+function _overlayClose() {
+    document.getElementById('overlayBackdrop').style.display = 'none';
+}
+
+window._overlayOpen  = _overlayOpen;
+window._overlayClose = _overlayClose;
+
+document.getElementById('overlayBackdrop').addEventListener('click', function(e) {
+    if (e.target === this) _overlayClose();
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') _overlayClose();
+});
+</script>
+</body>
+</html>
+
+

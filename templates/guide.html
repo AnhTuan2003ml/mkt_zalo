@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hướng dẫn sử dụng - ZMKT</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=marketing-ui-1">
+</head>
+<body>
+{% include '_nav.html' %}
+<div class="page marketing-page">
+    <div class="page-hero">
+        <div>
+            <div class="eyebrow">ZMKT</div>
+            <h2>Hướng dẫn sử dụng hệ thống</h2>
+            <p>Quản lý tài khoản, lấy dữ liệu nhóm, gửi chiến dịch theo nhóm hoặc số điện thoại và theo dõi lịch chạy trong một giao diện chuyên biệt.</p>
+        </div>
+        <div class="hero-kpi">
+            <span>Sản phẩm</span>
+            <strong>Phát triển bởi ATH</strong>
+        </div>
+    </div>
+
+    <div class="guide-grid">
+        <section class="guide-card">
+            <div class="guide-step">01</div>
+            <h3>Thêm tài khoản Zalo</h3>
+            <p>Vào <b>Tài khoản Zalo</b>, bấm <b>Thêm tài khoản</b>. Hệ thống mở profile Chrome riêng để bạn đăng nhập Zalo Web. Mỗi tài khoản lưu cookie/imei riêng.</p>
+        </section>
+        <section class="guide-card">
+            <div class="guide-step">02</div>
+            <h3>Lấy thành viên nhóm</h3>
+            <p>Vào <b>Lấy thành viên nhóm</b>, chọn tài khoản, nhập link hoặc ID nhóm rồi bấm lấy danh sách. Nếu nhóm khóa xem thành viên, hệ thống chỉ hiển thị thông tin nhóm.</p>
+        </section>
+        <section class="guide-card">
+            <div class="guide-step">03</div>
+            <h3>Marketing theo nhóm</h3>
+            <p>Vào <b>Theo nhóm</b>, lấy người nhận từ nhóm, chọn người cần gửi, nhập nội dung và lưu lịch hoặc chạy theo cấu hình có sẵn.</p>
+        </section>
+        <section class="guide-card">
+            <div class="guide-step">04</div>
+            <h3>Marketing theo SĐT</h3>
+            <p>Vào <b>Theo SĐT</b>, dán danh sách số điện thoại để tra cứu UID/profile, sau đó chọn người nhận và tạo lịch gửi tin.</p>
+        </section>
+        <section class="guide-card">
+            <div class="guide-step">05</div>
+            <h3>Nhóm cá nhân</h3>
+            <p>Vào <b>Nhóm cá nhân</b> để tải nhóm của tài khoản đang chọn. Có thể chọn nhóm và dùng cho tác vụ marketing hoặc kiểm tra thông tin nhóm.</p>
+        </section>
+        <section class="guide-card">
+            <div class="guide-step">06</div>
+            <h3>Quản lý lịch chạy</h3>
+            <p>Vào <b>Quản lý lịch chạy</b> để xem trạng thái, chạy ngay, hủy hoặc xóa lịch. Các trạng thái gồm chờ chạy, đang chạy, hoàn thành, lỗi hoặc đã hủy.</p>
+        </section>
+    </div>
+
+    <div class="card guide-warning">
+        <div class="card-title">Lưu ý lỗi thường gặp</div>
+        <p><b>Chỉ lấy được vài UID dù nhóm có nhiều thành viên:</b> thường do nhóm bật khóa xem danh sách thành viên hoặc tài khoản không có quyền xem.</p>
+        <p><b>Không gửi được tin:</b> kiểm tra tài khoản đã đăng nhập, cookie còn sống, UID hợp lệ và không bị Zalo giới hạn request.</p>
+        <p><b>Đổi tài khoản nhưng dữ liệu không đúng:</b> chọn lại tài khoản trong dropdown của đúng trang tính năng, sau đó tải lại dữ liệu.</p>
+    </div>
+
+    <div class="card product-credit-card">
+        <div class="card-title">Thông tin sản phẩm</div>
+        <p><b>ZMKT</b> là phần mềm hỗ trợ quản lý tài khoản, dữ liệu nhóm và chiến dịch Zalo. Sản phẩm phát triển bởi <b>ATH</b>.</p>
+    </div>
+
+</div>
+</body>
+</html>

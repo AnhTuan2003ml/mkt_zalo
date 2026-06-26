@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZMKT</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=9999">
+    <style>
+        :root {
+            --surface: #161b22;
+            --surface2: #1c2128;
+            --border: #30363d;
+            --accent: #58a6ff;
+            --accent-hover: #79b8ff;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ─── Header ─── */
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        header svg { color: var(--accent); }
+        header h1 { font-size: 16px; font-weight: 600; color: var(--text); }
+        .header-tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            background: #388bfd26;
+            color: var(--accent);
+            border-radius: 20px;
+            border: 1px solid #388bfd40;
+        }
+
+        /* ─── Main layout ─── */
+        .layout { display: flex; flex: 1; overflow: hidden; }
+
+        /* ─── Sidebar / Tabs ─── */
+        .sidebar {
+            width: 220px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 16px 8px;
+            flex-shrink: 0;
+        }
+        .sidebar-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            padding: 0 12px;
+            margin-bottom: 8px;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-muted);
+            transition: all 0.15s;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        .nav-item:hover { background: var(--surface2); color: var(--text); }
+        .nav-item.active { background: #388bfd20; color: var(--accent); }
+        .nav-item .badge-count {
+            margin-left: auto;
+            font-size: 11px;
+            background: var(--surface2);
+            padding: 1px 7px;
+            border-radius: 10px;
+            color: var(--text-muted);
+        }
+
+        /* ─── Content ─── */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* ─── Card ─── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title svg { color: var(--accent); }
+
+        /* ─── Form ─── */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            padding: 9px 12px;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: "Segoe UI", sans-serif;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: var(--accent);
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 72px;
+            font-family: "Cascadia Code", "Fira Code", monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .form-group .hint {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .btn {
+            padding: 9px 18px;
+            border-radius: 7px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #0d1117;
+        }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-ghost {
+            background: var(--surface2);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover { background: var(--border); color: var(--text); }
+
+        /* ─── Status ─── */
+        .status-bar {
+            display: none;
+            margin-top: 14px;
+            padding: 10px 14px;
+            border-radius: 7px;
+            font-size: 13px;
+            border: 1px solid;
+        }
+        .status-bar.loading { background: #58a6ff15; color: var(--accent); border-color: #58a6ff40; }
+        .status-bar.error { background: #f8514915; color: var(--red); border-color: #f8514940; }
+        .status-bar.success { background: #3fb95015; color: var(--green); border-color: #3fb95040; }
+        .status-bar .spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── Config saved ─── */
+        .config-status {
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--green);
+            margin-top: 12px;
+        }
+        .config-status .dot {
+            width: 7px; height: 7px;
+            background: var(--green);
+            border-radius: 50%;
+        }
+
+        /* ─── Member panel ─── */
+        .member-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .member-bar h3 { font-size: 15px; font-weight: 600; }
+        .member-bar .stats {
+            display: flex;
+            gap: 16px;
+        }
+        .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .stat .num { font-size: 20px; font-weight: 700; color: var(--accent); }
+        .stat .lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* ─── Table ─── */
+        .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead th {
+            background: var(--surface2);
+            padding: 11px 14px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        tbody tr { transition: background 0.1s; }
+        tbody tr:hover { background: #ffffff07; }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        .av {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--border);
+            display: block;
+        }
+        .av-placeholder {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: var(--surface2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+        .name-cell { font-weight: 500; }
+        .mono { font-family: "Cascadia Code", "Fira Code", monospace; font-size: 12px; color: var(--text-muted); }
+        .global-id {
+            font-family: "Cascadia Code", "Fira Code", monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--surface2);
+            padding: 2px 7px;
+            border-radius: 4px;
+        }
+        .row-actions { text-align: right; }
+        .action-btn {
+            padding: 5px 10px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* ─── Empty state ─── */
+        .empty-state {
+            text-align: center;
+            padding: 64px 24px;
+            color: var(--text-muted);
+        }
+        .empty-state svg { margin-bottom: 16px; opacity: 0.4; }
+        .empty-state p { font-size: 14px; }
+        .empty-state .hint { font-size: 12px; margin-top: 6px; opacity: 0.7; }
+
+        /* ─── Scrollbar ─── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <h1>ZMKT</h1>
+        <span class="header-tag">v1.0</span>
+    </header>
+
+    <div class="layout">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-label">Navigate</div>
+            <button class="nav-item active" onclick="switchTab('members')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Lấy thành viên
+            </button>
+        </nav>
+
+        <!-- Content -->
+        <main class="content">
+
+            <!-- ── Members panel ── -->
+            <div class="panel active" id="panel-members">
+                <div class="card">
+                    <div class="card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        Nhập Group ID để lấy thành viên
+                    </div>
+                    <div class="form-group">
+                        <label>Group ID</label>
+                        <input type="text" id="groupIdInput" placeholder="Ví dụ: 7418372753930442350">
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn btn-primary" id="runBtn" onclick="runFetch()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            Lấy danh sách thành viên
+                        </button>
+                    </div>
+                    <div class="status-bar" id="statusBar"></div>
+                </div>
+
+                <!-- Results -->
+                <div id="resultsSection" style="display:none;">
+                    <div class="member-bar">
+                        <h3>Kết quả</h3>
+                        <div class="stats">
+                            <div class="stat"><span class="num" id="totalCount">0</span><span class="lbl">Thành viên</span></div>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:48px">Avatar</th>
+                                    <th>Tên</th>
+                                    <th>User ID</th>
+                                    <th>Global ID</th>
+                                    <th style="width:80px"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="emptyState" class="empty-state" style="display:none;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p>Chưa có dữ liệu</p>
+                    <p class="hint">Nhập Group ID và nhấn "Lấy danh sách thành viên"</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function setStatus(msg, type) {
+            const el = document.getElementById('statusBar');
+            el.innerHTML = (type === 'loading' ? '<span class="spinner"></span>' : '') + msg;
+            el.className = 'status-bar ' + type;
+            el.style.display = 'block';
+        }
+
+        function renderResults(data) {
+            document.getElementById('totalCount').textContent = data.length;
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            data.forEach(item => {
+                const avatar = item.avatar
+                    ? `<img class="av" src="${item.avatar}" alt="avatar" onerror="this.outerHTML='<div class=av-placeholder>?</div>'">`
+                    : `<div class="av-placeholder">?</div>`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${avatar}</td>
+                    <td class="name-cell">${escHtml(item.zaloName || '-')}</td>
+                    <td class="mono">${escHtml(item.userId || '-')}</td>
+                    <td>${item.globalId ? `<span class="global-id">${escHtml(item.globalId)}</span>` : '-'}</td>
+                    <td class="row-actions">
+                        <button class="action-btn" onclick="openOverlay('${item.userId || ''}', '${escHtml(item.zaloName || '-').replace(/'/g, "\\'")}', '${item.avatar || ''}')">Nhắn tin</button>
+                        <button class="action-btn" onclick="copyToClipboard('${item.userId || ''}')">Copy ID</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+        }
+
+        function escHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function openOverlay(uid, name, avatar) {
+            // Remove existing overlay if any
+            var old = document.getElementById('zalo-msg-overlay');
+            if (old) old.remove();
+
+            // Create overlay
+            var overlay = document.createElement('div');
+            overlay.id = 'zalo-msg-overlay';
+            overlay.style.cssText =
+                'position:fixed;inset:0;background:rgba(0,0,0,0.8);' +
+                'backdrop-filter:blur(8px);z-index:9999;' +
+                'display:flex;align-items:center;justify-content:center;' +
+                'font-family:"Segoe UI",sans-serif;';
+
+            var card = document.createElement('div');
+            card.style.cssText =
+                'background:#161b22;border:1px solid #30363d;' +
+                'border-radius:14px;width:100%;max-width:480px;' +
+                'margin:20px;overflow:hidden;' +
+                'box-shadow:0 32px 80px rgba(0,0,0,0.7);';
+
+            // Header
+            var header = document.createElement('div');
+            header.style.cssText =
+                'display:flex;align-items:center;justify-content:space-between;' +
+                'padding:18px 24px;border-bottom:1px solid #30363d;background:#1c2128;';
+
+            var userDiv = document.createElement('div');
+            userDiv.style.cssText = 'display:flex;align-items:center;gap:14px;';
+
+            var img = document.createElement('img');
+            img.src = avatar;
+            img.style.cssText =
+                'width:48px;height:48px;border-radius:50%;' +
+                'object-fit:cover;border:2px solid #30363d;';
+
+            var nameEl = document.createElement('span');
+            nameEl.textContent = name || '-';
+            nameEl.style.cssText = 'font-size:15px;font-weight:600;color:#c9d1d9;';
+
+            userDiv.appendChild(img);
+            userDiv.appendChild(nameEl);
+
+            var closeBtn = document.createElement('button');
+            closeBtn.innerHTML = '&times;';
+            closeBtn.style.cssText =
+                'background:none;border:none;color:#8b949e;font-size:22px;' +
+                'cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;';
+            closeBtn.onclick = function() { overlay.remove(); };
+
+            header.appendChild(userDiv);
+            header.appendChild(closeBtn);
+
+            // Body
+            var body = document.createElement('div');
+            body.style.cssText = 'padding:24px;';
+
+            var label = document.createElement('div');
+            label.textContent = 'NỘI DUNG TIN NHẮN';
+            label.style.cssText =
+                'font-size:11px;font-weight:600;color:#8b949e;' +
+                'text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;';
+
+            var textarea = document.createElement('textarea');
+            textarea.id = 'zalo-overlay-msg';
+            textarea.placeholder = 'Nhập nội dung tin nhắn...';
+            textarea.style.cssText =
+                'width:100%;background:#0f1117;border:1px solid #30363d;' +
+                'border-radius:8px;padding:12px 14px;font-size:14px;' +
+                'color:#c9d1d9;resize:vertical;min-height:120px;' +
+                'outline:none;font-family:inherit;line-height:1.5;';
+            textarea.style.setProperty('border-color', '#30363d');
+            textarea.onfocus = function() { this.style.borderColor = '#58a6ff'; };
+            textarea.onblur = function() { this.style.borderColor = '#30363d'; };
+
+            body.appendChild(label);
+            body.appendChild(textarea);
+
+            // Footer
+            var footer = document.createElement('div');
+            footer.style.cssText =
+                'display:flex;align-items:center;justify-content:flex-end;' +
+                'padding:16px 24px;border-top:1px solid #30363d;' +
+                'background:#1c2128;gap:12px;';
+
+            var sendBtn = document.createElement('button');
+            sendBtn.textContent = 'Gửi tin nhắn';
+            sendBtn.style.cssText =
+                'padding:9px 20px;background:#58a6ff;color:#0d1117;' +
+                'border:none;border-radius:7px;font-size:13px;font-weight:500;' +
+                'cursor:pointer;display:flex;align-items:center;gap:6px;';
+            sendBtn.onclick = function() {
+                var msg = textarea.value.trim();
+                if (!msg) { textarea.style.borderColor = '#f85149'; return; }
+                sendBtn.disabled = true;
+                sendBtn.textContent = 'Đang gửi...';
+                // TODO: gọi API gửi tin nhắn ở đây
+                setTimeout(function() {
+                    sendBtn.textContent = 'Đã gửi!';
+                    sendBtn.style.background = '#3fb950';
+                    setTimeout(function() { overlay.remove(); }, 800);
+                }, 500);
+            };
+
+            footer.appendChild(sendBtn);
+
+            card.appendChild(header);
+            card.appendChild(body);
+            card.appendChild(footer);
+            overlay.appendChild(card);
+
+            // Click outside to close
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) overlay.remove();
+            });
+
+            // ESC to close
+            var escHandler = function(e) {
+                if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); }
+            };
+            document.addEventListener('keydown', escHandler);
+
+            document.body.appendChild(overlay);
+            textarea.focus();
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+            });
+        }
+
+        // Init
+        loadConfig();
+    </script>
+</body>
+</html>
+
