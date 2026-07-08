@@ -176,7 +176,7 @@ function buildOverlayProfileFields(data) {
     }
     
     if (data.gender !== undefined && data.gender !== null) {
-        var genderText = data.gender === 0 ? 'Nam' : data.gender === 1 ? 'Nữ' : 'Không xác định';
+        var genderText = genderLabel(data.gender);
         html += '<div style="display: flex; padding: 8px 0; border-bottom: 1px solid var(--border-color); font-size: 13px;">' +
             '<span style="font-weight: 500; color: var(--text-muted); min-width: 120px; margin-right: 12px;">Giới tính:</span>' +
             '<span style="flex: 1; color: var(--text-primary);">' + escHtml(genderText) + '</span>' +
@@ -393,8 +393,11 @@ function buildBasicFields(data) {
 }
 
 function genderLabel(g) {
-    if (g === 0) return 'Nam';
-    if (g === 1) return 'Nữ';
+    if (g === undefined || g === null || g === '' || g === '-') return '-';
+    var n = Number(g);
+    if (Number.isNaN(n)) return String(g);
+    if (n === 0) return 'Nam';
+    if (n === 1 || n === 2) return 'Nữ';
     return 'Không xác định';
 }
 

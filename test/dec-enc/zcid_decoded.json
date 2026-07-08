@@ -1,0 +1,1643 @@
+{
+  "error_code": 0,
+  "error_message": "Successful.",
+  "data": {
+    "my_document_new_icon": 1,
+    "haspcclient": 1,
+    "public_ip": "59.153.220.82",
+    "language": "vi",
+    "zpw_ws": [
+      "wss://ws1-msg.chat.zalo.me",
+      "wss://ws2-msg.chat.zalo.me",
+      "wss://ws5-msg.chat.zalo.me",
+      "wss://ws3-msg.chat.zalo.me",
+      "wss://ws8-msg.chat.zalo.me",
+      "wss://ws4-msg.chat.zalo.me"
+    ],
+    "zpw_chts_new": [
+      "https://lp3-msg.chat.zalo.me",
+      "https://lp5-msg.chat.zalo.me",
+      "https://lp4-msg.chat.zalo.me",
+      "https://lp8-msg.chat.zalo.me",
+      "https://lp6-msg.chat.zalo.me",
+      "https://lp9-msg.chat.zalo.me"
+    ],
+    "qos_url": "https://qos.talk.zing.vn/api/qos/uploadpc",
+    "zfamily": {
+      "enk": "ftioOf1w31R42lrwm5yNXlv2Zojvrt5hbm2CVvZUYEQ=",
+      "viewer_key": "c2eeff1356a221fd78b2.246594988.85e7e6cf613e0a80bb312a2919a86625.UhEbaup+ol80GUEckC/7ItHL18SmffjO2lqwFjViVhEYICB70J/1M6Pg2SvY5sBRsawGPtjPbd5WBIiPp58Y+7AZ0jspke2GBHZrDAMtm67DZkJmd5ARxnKQiAdAx9CRjtqv7Q15EpJVew0MzlZHfw=="
+    },
+    "support_page": "3500587909418903305",
+    "uid": "2136884049160436026",
+    "qos_setting": {
+      "log_type": 1,
+      "apiUrl": "https://qos.talk.zing.vn/api/qos/uploadpc",
+      "data_version": 1,
+      "enable": 1,
+      "maxRecordSubmit": 200,
+      "numberLogSubmit": 100,
+      "qos_interval": 3600,
+      "dataExpiredTime": 43200,
+      "minTimeSubmit": 3600,
+      "logInterval": 900
+    },
+    "auth_ext_info": {
+      "enk": "nSGFSOoY4F2uk1j4zUVVdw==",
+      "viewer_key": "1.cTFWR3NWSk1GY3hIM09Vb1l4dTNTbGFJdUJsTWFibTVlTEZudC1obUdZVkFFQmtQdUZMVTlDeXRsdnhieDN6S2dZa3dlZUVkOHNkN094a29Zd0NaVVY0WmhRQWplcFRmdlkyd2lQLXFGNU5nNGUtQ2VSNERRRXUtYlJFWF9HbmhuNTZ1aXVsSjhiN1lLZ1ZqY3p5Szlpbndla292dG5TcWFMMlBtU1JXNldsa1V1MzNYQnkxOWxLd1d2Z2tmSkxsLUhFbWplRk4wZHQ4TzhvUGtrNHdOa2JRWmdrdnJXcU15Y1l2cVFkUEZvSlZMUmQ2aWpDdjNaMHo="
+    },
+    "dkey": "c38e9e18e1c158f60b3ad3979c652570",
+    "zpw_service_map": {
+      "chat_sticker": "https://api-wpa.chat.zalo.me",
+      "voicecall_api": "https://voicecall-wpa.chat.zalo.me",
+      "file": "https://tt-files-wpa.chat.zalo.me",
+      "chat_text": "https://api-wpa.chat.zalo.me",
+      "chat_lp": "https://p1.msg.chat.zalo.me",
+      "profile": "https://api-wpa.chat.zalo.me",
+      "friend": "https://api-wpa.chat.zalo.me",
+      "chat_photo": "https://api-wpa.chat.zalo.me"
+    },
+    "cslper": 0,
+    "need_update_account": 0,
+    "send2me_id": "4579769553826411027",
+    "qos_interval": 3600,
+    "zpw_service_map_v3": {
+      "other_contact": [
+        "https://vbcontact-wpa.chat.zalo.me"
+      ],
+      "chat_e2e": [
+        "https://tt-e2e-chat.chat.zalo.me"
+      ],
+      "workspace": [
+        "https://workspace.chat.zalo.me"
+      ],
+      "catalog": [
+        "https://catalog.chat.zalo.me"
+      ],
+      "boards": [
+        "https://board-wpa.chat.zalo.me"
+      ],
+      "downloadStickerUrl": [
+        "https://api.chat.zalo.me/api/emoticon/sticker/webpc"
+      ],
+      "sp_contact": [
+        "https://spcontact-wpa.chat.zalo.me"
+      ],
+      "zcloud_up_file": [
+        "https://tt-zcfiles-wpa.chat.zalo.me"
+      ],
+      "media_store_send2me": [
+        "https://mediasend2me-wpa.chat.zalo.me"
+      ],
+      "push_act": [
+        "https://push-act-wpa.chat.zalo.me"
+      ],
+      "aext": [
+        "https://aextra-wpa.chat.zalo.me"
+      ],
+      "zfamily": [
+        "https://zfml.chat.zalo.me"
+      ],
+      "group_poll": [
+        "https://tt-group-wpa.chat.zalo.me"
+      ],
+      "group_cloud_message": [
+        "https://tt-group-cm.chat.zalo.me"
+      ],
+      "media_store": [
+        "https://media-wpa.chat.zalo.me"
+      ],
+      "file": [
+        "https://tt-files-wpa.chat.zalo.me"
+      ],
+      "auto_reply": [
+        "https://auto-rep-msg.chat.zalo.me"
+      ],
+      "sync_action": [
+        "https://action-sync-wpa.chat.zalo.me"
+      ],
+      "friendLan": [
+        "https://friendlan-wpa.chat.zalo.me"
+      ],
+      "friend": [
+        "https://tt-friend-wpa.chat.zalo.me"
+      ],
+      "alias": [
+        "https://tt-alias-wpa.chat.zalo.me"
+      ],
+      "zimsg": [
+        "https://zimsg.chat.zalo.me"
+      ],
+      "group_board": [
+        "https://groupboard-wpa.chat.zalo.me"
+      ],
+      "conversation": [
+        "https://tt-convers-wpa.chat.zalo.me"
+      ],
+      "group": [
+        "https://tt-group-wpa.chat.zalo.me"
+      ],
+      "fallback_LP": [
+        "https://hws.chat.zalo.me"
+      ],
+      "friend_board": [
+        "https://friendboard-wpa.chat.zalo.me"
+      ],
+      "up_file": [
+        "https://tt-nfiles-wpa.chat.zalo.me"
+      ],
+      "zavi": [
+        "https://wpa.zaloapp.com"
+      ],
+      "reaction": [
+        "https://reaction.chat.zalo.me"
+      ],
+      "voice_call": [
+        "https://voicecall-wpa.chat.zalo.me"
+      ],
+      "profile": [
+        "https://tt-profile-wpa.chat.zalo.me"
+      ],
+      "sticker": [
+        "https://tt-sticker-wpa.chat.zalo.me"
+      ],
+      "label": [
+        "https://label-wpa.chat.zalo.me"
+      ],
+      "consent": [
+        "https://consent.zalo.me"
+      ],
+      "zcloud": [
+        "https://zcld.chat.zalo.me"
+      ],
+      "chat": [
+        "https://tt-chat1-wpa.chat.zalo.me",
+        "https://tt-chat2-wpa.chat.zalo.me",
+        "https://tt-chat3-wpa.chat.zalo.me",
+        "https://tt-chat4-wpa.chat.zalo.me"
+      ],
+      "todoUrl": [
+        "https://task.chat.zalo.me"
+      ],
+      "recent_search": [
+        "https://recentsearch.chat.zalo.me"
+      ],
+      "group_e2e": [
+        "https://tt-e2e-group.chat.zalo.me"
+      ],
+      "backuppcmobile": [
+        "https://bkpc2mb.zaloapp.com"
+      ],
+      "quick_message": [
+        "https://quickmessage.chat.zalo.me"
+      ]
+    },
+    "viewerkey": "1290689983433017616.1782227657401.b52b740166f503ac14851967e2f3e5c6",
+    "current_time": 1782227657,
+    "zalo_tracking": {
+      "api_url": "https://trk-pcweb.api.zaloapp.com/tracking",
+      "max_record_submit": 100,
+      "data_expired_time": 3600,
+      "min_time_submit": 3600
+    },
+    "send2me_legacyName": {
+      "EN": "My Cloud",
+      "VI": "Cloud của tôi",
+      "MY": "My Cloud"
+    },
+    "zpw_conf": {
+      "lp_timeout": 60,
+      "idle_time": 180,
+      "lp_login_timeout": 1,
+      "lp_msg_timeout": 70,
+      "lp_ctl_timeout": 70,
+      "http_timeout": 15,
+      "http_retry": 10,
+      "interval_update_profile": 180,
+      "interval_update_all": 3600,
+      "interval_update_list_status": 300,
+      "min_interval_update_status": 60
+    },
+    "settings": {
+      "gif": {
+        "max_width": 640,
+        "enable_warning_gif": 1,
+        "max_gif_size": 3072,
+        "enable_gif": 1,
+        "max_height": 480,
+        "google_key": "AIzaSyBMGsv2FSangHMEtG3P4YYDqzR1IdvvKpc"
+      },
+      "invitation": {
+        "text_buttuon_csc": "Mời ngay",
+        "text_show_csc": "Mời bạn dùng Zalo máy tính để trả lời tin nhắn nhanh hơn, hỗ trợ chụp màn hình và gửi tập tin"
+      },
+      "keepalive": {
+        "keepalive_duration": 120,
+        "alway_keepalive": 1,
+        "time_deactive": 300
+      },
+      "sharefile": {
+        "chunk_size_file": 256000,
+        "max_size_share_file_v3": 1024,
+        "max_size_resize_photo": 10,
+        "max_size_share_file_v2": 300,
+        "next_file_time": 1000,
+        "restricted_ext": ".exe,.bat,.cmd,.com",
+        "max_size_share_file": 100,
+        "max_size_original_photo": 100,
+        "max_file": 50,
+        "max_size_photo": 10,
+        "max_size_gif": 10
+      },
+      "dynamic_layout_photo": {
+        "special_threshold": 0.5,
+        "min_height": 0.35,
+        "threshold": 0.7,
+        "special_height": 0.4,
+        "special_condition": [
+          5,
+          7,
+          9
+        ],
+        "total_limit": 10,
+        "setting": 1,
+        "height": 0.333,
+        "min_width": 0.25
+      },
+      "sticker": {
+        "avt_group_template": [
+          {
+            "title_en": "Family",
+            "title_vn": "Gia đình",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/1_family.jpg",
+              "https://res.zaloapp.com/pc/avt_group/2_family.jpg",
+              "https://res.zaloapp.com/pc/avt_group/3_family.jpg"
+            ]
+          },
+          {
+            "title_en": "Work",
+            "title_vn": "Công việc",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/4_work.jpg",
+              "https://res.zaloapp.com/pc/avt_group/5_work.jpg",
+              "https://res.zaloapp.com/pc/avt_group/6_work.jpg"
+            ]
+          },
+          {
+            "title_en": "Friends",
+            "title_vn": "Bạn bè",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/7_friends.jpg",
+              "https://res.zaloapp.com/pc/avt_group/8_friends.jpg",
+              "https://res.zaloapp.com/pc/avt_group/9_friends.jpg"
+            ]
+          },
+          {
+            "title_en": "School",
+            "title_vn": "Học tập",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/10_school.jpg",
+              "https://res.zaloapp.com/pc/avt_group/11_school.jpg",
+              "https://res.zaloapp.com/pc/avt_group/12_school.jpg"
+            ]
+          }
+        ],
+        "max_member": 100,
+        "enable_media_store": 1,
+        "force_rename_group": 1,
+        "topic_emojies": [
+          "📢",
+          "🚩",
+          "❗️",
+          "❓",
+          "❤️",
+          "🎉",
+          "🍺",
+          "⚽️",
+          "🎮",
+          "🎧",
+          "📚",
+          "☕️",
+          "🎂",
+          "🎥",
+          "💸",
+          "⛺️",
+          "⏰",
+          "🌟",
+          "💼",
+          "🍴"
+        ],
+        "max_groups_per_user": 500,
+        "max_invited_users": 50,
+        "topic_colors": [
+          -14540254,
+          -4100568,
+          -972898,
+          -7266310,
+          -11659808,
+          -16731700,
+          -13406847,
+          -14375355,
+          -11424881
+        ]
+      },
+      "my_settings": {
+        "add_friend_via_contact": 1,
+        "display_on_recommend_friend": 1,
+        "add_friend_via_group": 1,
+        "add_friend_via_qr": 1,
+        "quick_message_status": 1,
+        "show_online_status": false,
+        "accept_stranger_call": 4,
+        "archived_chat_status": 0,
+        "receive_message": 1,
+        "add_friend_via_phone": 1,
+        "setting_show_stranger_msg_directly": 1,
+        "display_seen_status": 0,
+        "view_birthday": 1,
+        "setting_2FA_status": 0
+      },
+      "enable_get_last_seen": 1,
+      "group_poll": {
+        "enable": 1,
+        "min_options": 2,
+        "max_options": 20
+      },
+      "features": {
+        "voice": {
+          "voiceUrl": "https://cache-voice-talk.zdn.vn"
+        },
+        "image": {
+          "enable_gen_thumb": 0,
+          "enable_download": 0
+        },
+        "zalo_cloud": {
+          "promo": {
+            "enable_promo_popover": true,
+            "enable_promo_tooltip": true,
+            "enable_promo_bagde_new": false,
+            "popover": {
+              "description": {
+                "en": "Discover how zCloud safely stores your photos, videos, and important files while freeing up space on your device.",
+                "vi": "Khám phá ngay tiện ích lưu trữ an toàn ảnh, video, và tệp quan trọng trên zCloud, đồng thời giải phóng dung lượng máy."
+              },
+              "cta": {
+                "link": "https://cloud.zbox.vn/pc-paywall?utm_source=pc_entry&utm_medium=leftsidebar",
+                "en": "Explore zCloud now",
+                "vi": "Tìm hiểu zCloud ngay"
+              },
+              "contentUrl": "",
+              "title": {
+                "en": "Secure your Zalo data with zCloud storage",
+                "vi": "Bảo toàn dữ liệu Zalo với zCloud"
+              },
+              "imageUrl": ""
+            }
+          },
+          "z_cloud": {
+            "enable": true,
+            "plan": -1
+          }
+        },
+        "e2ee": {
+          "debug": {
+            "enable": false,
+            "persist": {
+              "enable": 0
+            }
+          },
+          "check_subdevice_stale": false,
+          "learn_more": {
+            "what_is_it": "https://help.zalo.me/huong-dan/chuyen-muc/nhan-tin-va-goi/ma-hoa-dau-cuoi-bao-mat-toi-uu-cho-tro-chuyen",
+            "how_to_upgrade": "https://help.zalo.me/huong-dan/chuyen-muc/nhan-tin-va-goi/cach-nang-cap-ma-hoa-dau-cuoi-cho-tro-chuyen",
+            "troubleshoot_upgrade": "https://help.zalo.me/huong-dan/chuyen-muc/nhan-tin-va-goi/huong-dan-xu-ly-loi-khi-nang-cap-ma-hoa-dau-cuoi",
+            "troubleshoot_usage": "https://help.zalo.me/huong-dan/chuyen-muc/nhan-tin-va-goi/xu-ly-cac-loi-trong-tro-chuyen-da-nang-cap-ma-hoa-dau-cuoi"
+          },
+          "max_retry_reinit": 3,
+          "respone_fail_init_new_device": true,
+          "hide_icon_convitem": true,
+          "allow_stranger_chat": false,
+          "enable": true,
+          "force_reset": false,
+          "sticker_suggestion": 1,
+          "max_retry_resend": 0,
+          "bundle_err_stop_retry": [
+            -2,
+            -3,
+            -5,
+            -7,
+            -9.1,
+            -9.2,
+            -9.3,
+            -9.4,
+            -9.5,
+            -9.6
+          ],
+          "group": {
+            "ack_group_sessions_stale": false,
+            "ack_deliver_fail_over_2000_msg": false,
+            "enable_grlist_sync_check": false
+          }
+        },
+        "retry_upload_file_configs": {
+          "enable_predownload_file": 1
+        },
+        "cloud_setting": {
+          "debug": {
+            "show_msg_src": false
+          },
+          "auto_download": {
+            "enable": 0
+          }
+        },
+        "notify_missing_messages": {
+          "data_content": {
+            "version": 5,
+            "content": {
+              "bubble_csc": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Zalo chỉ có thể hiển thị tin nhắn từ sau lần đăng nhập đầu tiên trên trình duyệt này ($3$:$4$ ngày $0$/$1$/$2$)."
+                    },
+                    {
+                      "text": "Zalo can only display messages from your first login on this browser ($3$:$4$ on $0$/$1$/$2$)."
+                    }
+                  ],
+                  "pc": [
+                    {
+                      "text": "Zalo chỉ có thể hiển thị tin nhắn từ sau lần đăng nhập đầu tiên trên thiết bị này ($3$:$4$ ngày $0$/$1$/$2$)."
+                    },
+                    {
+                      "text": "Zalo can only display messages from your first login on this device ($3$:$4$ on $0$/$1$/$2$)."
+                    }
+                  ]
+                },
+                "suggestion": {
+                  "web": [
+                    {
+                      "text": "Vui lòng sử dụng Zalo PC hoặc Zalo trên điện thoại để xem đầy đủ lịch sử trò chuyện."
+                    },
+                    {
+                      "text": "Please download Zalo PC or use the Zalo app on your phone to view the full chat history."
+                    }
+                  ],
+                  "pc": [
+                    {
+                      "text": "Vui lòng đồng bộ từ điện thoại để có đầy đủ lịch sử trò chuyện."
+                    },
+                    {
+                      "text": "Please sync with your phone to have the full chat history."
+                    }
+                  ]
+                }
+              },
+              "conversation_lost_msg": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo PC để tìm tin nhắn trước ngày $0$/$1$/$2$"
+                    },
+                    {
+                      "text": "Use the Zalo app on PC to find messages before $0$/$1$/$2$"
+                    }
+                  ]
+                }
+              },
+              "bubble_lost_msg_csc": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": ""
+                    },
+                    {
+                      "text": "Zalo on the browser only displays messages within the last $0$ days."
+                    }
+                  ]
+                },
+                "suggestion": {
+                  "web": [
+                    {
+                      "text": "Sử dụng Zalo PC để tìm tin nhắn trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Use Zalo PC to view all messages prior to $0$/$1$/$2$."
+                    }
+                  ]
+                }
+              },
+              "global_search": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo trên điện thoại để tìm tin nhắn trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Use the Zalo app on your phone to find messages before $0$/$1$/$2$."
+                    }
+                  ],
+                  "pc": [
+                    {
+                      "text": "Đồng bộ từ điện thoại để tìm tin nhắn trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Sync with your phone to find messages before $0$/$1$/$2$."
+                    }
+                  ]
+                }
+              },
+              "search_in_conversation": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo trên điện thoại để tìm tin nhắn trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Use the Zalo app on your phone to find messages before $0$/$1$/$2$."
+                    }
+                  ],
+                  "pc": [
+                    {
+                      "text": "Đồng bộ từ điện thoại để tìm tin nhắn trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Sync with your phone to find messages before $0$/$1$/$2$."
+                    }
+                  ]
+                }
+              },
+              "media_list": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo trên điện thoại để xem nội dung trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Use the Zalo app on your phone to find $5$ shared before $0$/$1$/$2$."
+                    }
+                  ],
+                  "pc": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo trên điện thoại để xem nội dung trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Use the Zalo app on your phone to find $5$ shared before $0$/$1$/$2$."
+                    }
+                  ]
+                }
+              },
+              "transfer_modal": {
+                "title": {
+                  "pc": [
+                    {
+                      "text": "Đồng bộ tin nhắn từ điện thoại"
+                    },
+                    {
+                      "text": "Sync message with your phone"
+                    }
+                  ]
+                },
+                "desc": {
+                  "pc": [
+                    {
+                      "text": "Để đảm bảo tính bảo mật, Zalo chỉ hiển thị tin nhắn từ sau lần đăng nhập đầu tiên trên thiết bị này."
+                    },
+                    {
+                      "text": "For your security, Zalo only display messages from the first login on this device."
+                    }
+                  ]
+                },
+                "suggestion": {
+                  "pc": [
+                    {
+                      "text": "Vui lòng đồng bộ từ điện thoại để xem đầy đủ nội dung trò chuyện."
+                    },
+                    {
+                      "text": "Please sync with your phone to view all conversations."
+                    }
+                  ]
+                }
+              },
+              "media_list_lost_msg": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo PC để xem $3$ trước ngày $0$/$1$/$2$"
+                    },
+                    {
+                      "text": "Use the Zalo app on PC to view $3$ before $0$/$1$/$2$"
+                    }
+                  ]
+                }
+              },
+              "download_banner": {
+                "suggestion": {
+                  "web": [
+                    {
+                      "text": "Sử dụng Zalo PC để lưu trữ dài hạn và dễ dàng tìm kiếm đầy đủ dữ liệu trò chuyện của bạn."
+                    },
+                    {
+                      "text": "Use Zalo PC to have larger storage for your messages and find the messages you need with ease."
+                    }
+                  ]
+                }
+              },
+              "global_search_lost_msg": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo PC để tìm tin nhắn trước ngày $0$/$1$/$2$"
+                    },
+                    {
+                      "text": "Use the Zalo app on PC to find messages before $0$/$1$/$2$"
+                    }
+                  ]
+                }
+              },
+              "search_in_conversation_lost_msg": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Sử dụng ứng dụng Zalo PC để tìm tin nhắn trước ngày $0$/$1$/$2$"
+                    },
+                    {
+                      "text": "Use the Zalo app on PC to find messages before $0$/$1$/$2$"
+                    }
+                  ]
+                }
+              },
+              "conversation": {
+                "desc": {
+                  "web": [
+                    {
+                      "text": "Zalo chỉ hiển thị tin nhắn từ sau lần đăng nhập đầu tiên trên trình duyệt này ($3$:$4$ ngày $0$/$1$/$2$)."
+                    },
+                    {
+                      "text": "Zalo only display messages from the first login on this browser ($3$:$4$ on $0$/$1$/$2$)."
+                    }
+                  ],
+                  "pc": [
+                    {
+                      "text": "Đồng bộ từ điện thoại để xem tin nhắn trước ngày $0$/$1$/$2$."
+                    },
+                    {
+                      "text": "Sync with your phone to view messages before $0$/$1$/$2$."
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "enabled": 1
+        },
+        "conv_ux_ver": 3,
+        "cross_setting": {
+          "useTheme": "v2",
+          "enable": false,
+          "enableOverQueue": true,
+          "cfTimeout": 180,
+          "enableResume": true,
+          "enableFirstTimeUse": true,
+          "isMobileSupport": true
+        },
+        "enable_get_last_seen": 1,
+        "media_settings": {
+          "delete_gap": 10,
+          "chunk_size": 500,
+          "dfe_media_group": 1,
+          "media_cloud": 0
+        },
+        "ba_config": {
+          "extra": {
+            "link_learn_more_limit_chat": "https://help.zalo.me/huong-dan/chuyen-muc/zalo-cong-viec/xu-ly-khi-khong-tra-loi-duoc-tin-nhan-zalo-cua-nguoi-la",
+            "enable_bt_upgrade_ba": 1,
+            "link_entry_regist_trial": "https://business.zalo.me/pricing",
+            "pos_label_config": {
+              "pkg_0": [],
+              "pkg_1": [],
+              "pkg_2": [],
+              "pkg_3": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ],
+              "pkg_4": [],
+              "pkg_5": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ],
+              "pkg_6": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            "link_learn_more_limit_friend": "https://business.zalo.me",
+            "cate_shop": [
+              {
+                "id": 0,
+                "vi": "Dịch vụ khác (Không hiển thị)",
+                "en": "Other services (Don't display)"
+              },
+              {
+                "id": 1,
+                "vi": "Bất động sản",
+                "en": "Real estate"
+              },
+              {
+                "id": 2,
+                "vi": "Công nghệ & Thiết bị",
+                "en": "Technology & Equipment"
+              },
+              {
+                "id": 3,
+                "vi": "Du lịch & Lưu trú",
+                "en": "Travel & Accommodation"
+              },
+              {
+                "id": 4,
+                "vi": "Giáo dục & Đào tạo",
+                "en": "Education & Training"
+              },
+              {
+                "id": 5,
+                "vi": "Mua sắm & Bán lẻ",
+                "en": "Shopping & Retail"
+              },
+              {
+                "id": 6,
+                "vi": "Mỹ phẩm & Làm đẹp",
+                "en": "Cosmetic"
+              },
+              {
+                "id": 7,
+                "vi": "Nhà hàng & Quán",
+                "en": "Restaurants & Bar"
+              },
+              {
+                "id": 8,
+                "vi": "Ô tô & Xe máy",
+                "en": "Cars & Motorcycles"
+              },
+              {
+                "id": 10,
+                "vi": "Thời trang & May mặc",
+                "en": "Fashion & Apparel"
+              },
+              {
+                "id": 11,
+                "vi": "Thực phẩm & Đồ uống",
+                "en": "Food & Beverages"
+              },
+              {
+                "id": 12,
+                "vi": "Truyền thông & Giải trí",
+                "en": "Media & Entertainment"
+              },
+              {
+                "id": 13,
+                "vi": "Truyền thông nội bộ",
+                "en": "Internal communication"
+              },
+              {
+                "id": 14,
+                "vi": "Vận tải",
+                "en": "Transportation"
+              },
+              {
+                "id": 15,
+                "vi": "Viễn thông",
+                "en": "Telecommunication"
+              }
+            ],
+            "show_biz_info_profile": {
+              "pkg_0": 0,
+              "pkg_1": 1,
+              "pkg_2": 1,
+              "pkg_3": 1,
+              "pkg_4": 1,
+              "pkg_5": 1,
+              "pkg_6": 1
+            },
+            "biz_info": {
+              "start_page": [
+                3,
+                5
+              ]
+            },
+            "link_learn_more_limit_phone": "https://help.zalo.me/huong-dan/chuyen-muc/zalo-cong-viec/khac-phuc-khi-nguoi-khac-nhap-dung-so-dien-thoai-nhung-khong-tim-duoc-tai-khoan-zalo",
+            "expired_time_ev_update_pkg": 86400000,
+            "link_acc_upgrade": "https://business.zbox.vn/nang-cap-business-lite?utm_source=pc_entry&utm_medium=upgrade_profile"
+          },
+          "ba_pkg_config": {
+            "ar": {
+              "fea_id": 4,
+              "config": {
+                "limit_template_create": {
+                  "0": 0,
+                  "1": 1,
+                  "2": 5,
+                  "3": 20,
+                  "4": 1,
+                  "5": 40,
+                  "6": 5
+                },
+                "limit_template_active": {
+                  "0": 0,
+                  "1": 1,
+                  "2": 5,
+                  "3": 20,
+                  "4": 1,
+                  "5": 40,
+                  "6": 2
+                }
+              },
+              "enable": {
+                "0": 0,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "search": {
+              "fea_id": 9,
+              "config": {
+                "limit_search_friend_by_phone_per_hour": {
+                  "0": 30,
+                  "1": 30,
+                  "2": 30,
+                  "3": 30,
+                  "4": 30,
+                  "5": 30,
+                  "6": 30
+                },
+                "limit_search_me_by_phone_per_month": {
+                  "0": 40,
+                  "1": 60,
+                  "2": 120,
+                  "3": 2000,
+                  "4": 60,
+                  "5": 4000,
+                  "6": 120
+                }
+              },
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "catalog": {
+              "fea_id": 2,
+              "config": {
+                "limit_total_product_create": {
+                  "0": 0,
+                  "1": 2,
+                  "2": 10,
+                  "3": 100,
+                  "4": 2,
+                  "5": 200,
+                  "6": 100
+                },
+                "limit_photo_per_product": {
+                  "0": 0,
+                  "1": 5,
+                  "2": 5,
+                  "3": 5,
+                  "4": 5,
+                  "5": 5,
+                  "6": 5
+                },
+                "limit_total_catalog_create": {
+                  "0": 0,
+                  "1": 2,
+                  "2": 10,
+                  "3": 10,
+                  "4": 2,
+                  "5": 20,
+                  "6": 10
+                }
+              },
+              "enable": {
+                "0": 0,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "chat": {
+              "fea_id": 8,
+              "config": {
+                "unbox_stranger_thread": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 1,
+                  "3": 1,
+                  "4": 0,
+                  "5": 1,
+                  "6": 1
+                }
+              },
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "profile": {
+              "fea_id": 1,
+              "config": {
+                "limit_search_friend_by_phone_monthly": {
+                  "0": 30,
+                  "1": 50,
+                  "2": 120,
+                  "3": 2000,
+                  "4": 50,
+                  "5": 4000,
+                  "6": 120
+                }
+              },
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "contact": {
+              "fea_id": 7,
+              "config": {
+                "limit_num_friend": {
+                  "0": 3000,
+                  "1": 3000,
+                  "2": 5000,
+                  "3": 10000,
+                  "4": 2500,
+                  "5": 10000,
+                  "6": 3000
+                }
+              },
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "multi_window": {
+              "enable": {
+                "0": 0,
+                "1": 0,
+                "2": 1,
+                "3": 1,
+                "4": 0,
+                "5": 1,
+                "6": 1
+              },
+              "fea_id": 10,
+              "config": {
+                "num_max_child_window": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 5,
+                  "3": 5,
+                  "4": 0,
+                  "5": 5,
+                  "6": 5
+                }
+              }
+            },
+            "broadcast_msg": {
+              "fea_id": 6,
+              "config": {
+                "enable_broadcast_msg_save_list": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 1,
+                  "3": 1,
+                  "4": 0,
+                  "5": 1,
+                  "6": 1
+                },
+                "limit_conversations": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 30,
+                  "3": 50,
+                  "4": 0,
+                  "5": 50,
+                  "6": 50
+                },
+                "enable_broadcast_msg_file_photo": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 1,
+                  "3": 1,
+                  "4": 0,
+                  "5": 1,
+                  "6": 1
+                }
+              },
+              "enable": {
+                "0": 0,
+                "1": 0,
+                "2": 1,
+                "3": 1,
+                "4": 0,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "label": {
+              "fea_id": 5,
+              "config": {},
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "qm": {
+              "fea_id": 3,
+              "config": {
+                "file_limits": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 1,
+                  "3": 1,
+                  "4": 0,
+                  "5": 1,
+                  "6": 1
+                },
+                "limit_template_create": {
+                  "0": 1,
+                  "1": 3,
+                  "2": 10,
+                  "3": 50,
+                  "4": 3,
+                  "5": 100,
+                  "6": 20
+                },
+                "enable_rtf": {
+                  "0": 0,
+                  "1": 0,
+                  "2": 1,
+                  "3": 1,
+                  "4": 0,
+                  "5": 1,
+                  "6": 1
+                }
+              },
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              }
+            },
+            "group": {
+              "enable": {
+                "0": 1,
+                "1": 1,
+                "2": 1,
+                "3": 1,
+                "4": 1,
+                "5": 1,
+                "6": 1
+              },
+              "fea_id": 11,
+              "config": {
+                "limit_group_joined": {
+                  "0": 1000,
+                  "1": 1000,
+                  "2": 3000,
+                  "3": 5000,
+                  "4": 1000,
+                  "5": 4000,
+                  "6": 1000
+                },
+                "quota_community_owner": {
+                  "0": 0,
+                  "1": 1,
+                  "2": 5,
+                  "3": 10,
+                  "4": 1,
+                  "5": 20,
+                  "6": 0
+                }
+              }
+            }
+          }
+        },
+        "config_fetch_fr_list": {
+          "time_interval_fetch_fr_list": 0
+        },
+        "message_status": {
+          "delay_show_sending": 5000
+        },
+        "download_old_media": {
+          "dispose": true
+        },
+        "metric": {
+          "config": {
+            "query_resolution_time": true
+          },
+          "custom": {
+            "measure_localstorage_size": true
+          }
+        },
+        "quick_message": {
+          "enable": 1,
+          "expiration_time": 259200
+        },
+        "socket": {
+          "rotate_error_codes": [
+            5011,
+            5012,
+            4001,
+            5008
+          ],
+          "retries": {
+            "internal": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5011": {
+              "max": 5,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5001": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5012": {
+              "max": 5,
+              "times": 3000
+            },
+            "swap_endpoint": {
+              "times": 1000
+            },
+            "4001": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5013": {
+              "max": 5,
+              "times": 1000
+            },
+            "4002": {
+              "times": 1000
+            },
+            "5014": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5015": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "3002": {
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "system_resume": {
+              "times": 3000
+            },
+            "3000": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "manual": {
+              "times": 1000
+            },
+            "cannot_reach_server": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "3003": {
+              "max": 13,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5017": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5007": {
+              "max": 8,
+              "times": [
+                2000,
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "5008": {
+              "max": 5,
+              "times": [
+                2000,
+                10000,
+                30000,
+                60000,
+                120000
+              ]
+            },
+            "no_network": {
+              "times": [
+                3000,
+                5000,
+                8000
+              ]
+            },
+            "interval_check": {
+              "times": 1000
+            }
+          },
+          "debug": {
+            "enable": false
+          },
+          "ping_interval": 180000,
+          "reset_endpoint": 600000,
+          "queue_ctrl_actionid_map": {
+            "603_1": "19",
+            "604_0": "20",
+            "603_0": "4",
+            "611_1": "17",
+            "611_0": "12",
+            "610_1": "18",
+            "610_0": "5"
+          },
+          "close_and_retry_codes": [
+            5008,
+            5007,
+            3003,
+            3000,
+            5014,
+            4002,
+            5015,
+            5017
+          ],
+          "max_msg_size": 4096,
+          "enable_ctrl_socket": true,
+          "reconnect_after_fallback": true,
+          "enable_chat_socket": true,
+          "submit_wss_log": false,
+          "disable_lp": true
+        },
+        "syncActionMedia": {
+          "enable": 1,
+          "msgType": 14,
+          "minGroupSize": {
+            "photo": 100,
+            "video": 50,
+            "file": 100
+          },
+          "minMsgSize": {
+            "video": 100,
+            "file": 10
+          },
+          "maxMsgSize": {
+            "file": 100,
+            "video": 100
+          },
+          "validDays": 14,
+          "submitActionThrottle": 5000,
+          "maxRerun": -1,
+          "enableRerun": 1,
+          "rerunFirstTime": 3600000,
+          "intervalRerunDownload": 86400000,
+          "intervalCleanAction": 300000,
+          "deleteRange": {
+            "from": [
+              0,
+              0
+            ],
+            "to": [
+              9999999999999,
+              2
+            ]
+          }
+        },
+        "product_catalog": {
+          "limit_size_photo": 10485760,
+          "link_tutorial_catalog": "https://help.zalo.me/huong-dan/zalo-cho-to-chuc-doanh-nghiep-giao-duc/tu-van-khach-hang-hieu-qua-hon-voi-tinh-nang-danh-muc-san-pham/",
+          "enable_feature": 1,
+          "limit_price_num": 12,
+          "limit_length_name_prod": 120,
+          "limit_length_des": 3000,
+          "list_keyword_suggest": [
+            "gia",
+            "trieu",
+            "tr",
+            "ty",
+            "ti",
+            "dong",
+            "VND",
+            "k"
+          ],
+          "link_regist_catalog": "https://help.zalo.me/article/phien-ban-chua-ho-tro-tinh-nang-danh-muc-san-pham",
+          "limit_length_name_catalog": 36,
+          "enable_suggest_create_product_1_1": 0,
+          "enable_mining_sale_shop": 1,
+          "enable_suggest_create_product_group": 0,
+          "limit_num_product_per_catalog": 100
+        },
+        "conv_ux_switcher": 0,
+        "pin_topic_one_on_one": {
+          "enabled": 1,
+          "enabled_pin_entry_point": 1
+        }
+      },
+      "common": {
+        "enable_new_cap": 1,
+        "enable_show_notify_local": 0,
+        "limit_pin_messages": 5,
+        "enable_sync_cloud_first_login": 1,
+        "enable_scan_apps": 1,
+        "auto_pin_send2me": 0,
+        "first_time_login_device": 1777866615648,
+        "is_stg": 0
+      },
+      "chat": {
+        "enable_send2me": 1,
+        "enable_warning_gif": 1,
+        "enable_call": 1,
+        "time_undomsg": 86400,
+        "enable_video_call": 1
+      },
+      "friend": {
+        "enable_block_friend": 0,
+        "enable_vbcontact": 0,
+        "enable_request_friend": 1,
+        "enable_connect_google": 0,
+        "enable_connect_facebook": 1,
+        "suggestion_show_interval": 43200,
+        "enable_friend_suggestion": false,
+        "enable_add_close_friend": 0,
+        "enable_remove_friend": 1,
+        "suggestion_position": 4,
+        "enable_spcontact": 0,
+        "suggestion_number_in_msgtab": 3
+      },
+      "group": {
+        "avt_group_template": [
+          {
+            "title_en": "Family",
+            "title_vn": "Gia đình",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/1_family.jpg",
+              "https://res.zaloapp.com/pc/avt_group/2_family.jpg",
+              "https://res.zaloapp.com/pc/avt_group/3_family.jpg"
+            ]
+          },
+          {
+            "title_en": "Work",
+            "title_vn": "Công việc",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/4_work.jpg",
+              "https://res.zaloapp.com/pc/avt_group/5_work.jpg",
+              "https://res.zaloapp.com/pc/avt_group/6_work.jpg"
+            ]
+          },
+          {
+            "title_en": "Friends",
+            "title_vn": "Bạn bè",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/7_friends.jpg",
+              "https://res.zaloapp.com/pc/avt_group/8_friends.jpg",
+              "https://res.zaloapp.com/pc/avt_group/9_friends.jpg"
+            ]
+          },
+          {
+            "title_en": "School",
+            "title_vn": "Học tập",
+            "avt_template": [
+              "https://res.zaloapp.com/pc/avt_group/10_school.jpg",
+              "https://res.zaloapp.com/pc/avt_group/11_school.jpg",
+              "https://res.zaloapp.com/pc/avt_group/12_school.jpg"
+            ]
+          }
+        ],
+        "max_member": 100,
+        "enable_media_store": 1,
+        "force_rename_group": 1,
+        "topic_emojies": [
+          "📢",
+          "🚩",
+          "❗️",
+          "❓",
+          "❤️",
+          "🎉",
+          "🍺",
+          "⚽️",
+          "🎮",
+          "🎧",
+          "📚",
+          "☕️",
+          "🎂",
+          "🎥",
+          "💸",
+          "⛺️",
+          "⏰",
+          "🌟",
+          "💼",
+          "🍴"
+        ],
+        "max_groups_per_user": 500,
+        "max_invited_users": 50,
+        "topic_colors": [
+          -14540254,
+          -4100568,
+          -972898,
+          -7266310,
+          -11659808,
+          -16731700,
+          -13406847,
+          -14375355,
+          -11424881
+        ]
+      },
+      "actionlog": {
+        "action_log_interval": "86400"
+      }
+    },
+    "zpw_chts": [
+      "https://lp3-msg.chat.zalo.me",
+      "https://lp5-msg.chat.zalo.me",
+      "https://lp4-msg.chat.zalo.me",
+      "https://lp8-msg.chat.zalo.me",
+      "https://lp6-msg.chat.zalo.me",
+      "https://lp9-msg.chat.zalo.me"
+    ],
+    "zpw_cht": "https://lp3-msg.chat.zalo.me",
+    "zpw_ctrs_new": [
+      "https://ws1-ctl.chat.zalo.me",
+      "https://ws2-ctl.chat.zalo.me",
+      "https://ws5-ctl.chat.zalo.me",
+      "https://ws3-ctl.chat.zalo.me",
+      "https://ws4-ctl.chat.zalo.me"
+    ],
+    "support_pages": {
+      "3500587909418903305": 1
+    },
+    "zalo_cloud": {
+      "z_cloud": {}
+    },
+    "zpw_wpsk": "BKUy1iXpdwbDlU6PgfEvd_iMoFXt9oxA7qu-sCIOZ6ml2-uBRuQpZuDHta6ry43ot7Z2PEUTYYqYP1paBfN7kfE",
+    "zpw_service_map_new": {
+      "other_contact": "https://vbcontact-wpa.chat.zalo.me",
+      "voice_call": "https://voicecall-wpa.chat.zalo.me",
+      "profile": "https://tt-profile-wpa.chat.zalo.me",
+      "sticker": "https://tt-sticker-wpa.chat.zalo.me",
+      "label": "https://label-wpa.chat.zalo.me",
+      "sp_contact": "https://spcontact-wpa.chat.zalo.me",
+      "media_store_send2me": "https://mediasend2me-wpa.chat.zalo.me",
+      "group_poll": "https://tt-group-wpa.chat.zalo.me",
+      "media_store": "https://media-wpa.chat.zalo.me",
+      "group_cloud_message": "https://tt-group-cm.chat.zalo.me",
+      "file": "https://tt-files-wpa.chat.zalo.me",
+      "friendLan": "https://friendlan-wpa.chat.zalo.me",
+      "chat": "https://tt-chat2-wpa.chat.zalo.me",
+      "friend": "https://tt-friend-wpa.chat.zalo.me",
+      "alias": "https://tt-alias-wpa.chat.zalo.me",
+      "group_board": "https://groupboard-wpa.chat.zalo.me",
+      "conversation": "https://tt-convers-wpa.chat.zalo.me",
+      "group": "https://tt-group-wpa.chat.zalo.me"
+    },
+    "config_pages": {
+      "zalo_page": "1389000478104655579",
+      "popup_pages": [
+        "3500587909418903305",
+        "1389000478104655579",
+        "7457639750595631843"
+      ]
+    },
+    "user_mode": 0,
+    "zcloud": {
+      "enk": "jkEjpzue43MFQ9gbgUsza+deDRksomLT9L3m9F4K33g=",
+      "viewer_key": "645c50a1f9108e4fd700.246594988.5e4efcaab0074cb3995f73e0066f1a51.mDhK5eqhAiGXYCulLzpaiA8SKp5qL9ulvBAMmBrOrWrJyVulOjcCkSPF3wCY1+Zr75Jl0lVeiYJ4uzqMfMJzB/atH34fH/Bgk16ToS4gzHSSRjkiU0RwCVUquAA5IwDKPyvXC6nLfT19lmQQbArDLQ=="
+    },
+    "zpw_ctrs": [
+      "https://ws1-ctl.chat.zalo.me",
+      "https://ws2-ctl.chat.zalo.me",
+      "https://ws5-ctl.chat.zalo.me",
+      "https://ws3-ctl.chat.zalo.me",
+      "https://ws4-ctl.chat.zalo.me"
+    ],
+    "zpw_ctr": "https://ws1-ctl.chat.zalo.me",
+    "send2me_name": {
+      "VI": "My Documents",
+      "EN": "My Documents",
+      "MY": "My Documents"
+    },
+    "zpw_enk": "EPe7D/wgReydBNJsUYSCow==",
+    "default_covers": [
+      "https://stc.zalo.zdn.vn/cover/cover_31.jpg",
+      "https://stc.zalo.zdn.vn/cover/cover_32.jpg",
+      "https://stc.zalo.zdn.vn/cover/cover_33.jpg"
+    ],
+    "gmap_url": "https://maps.google.com/?q",
+    "phone_number": "84399020331",
+    "extra_ver": {
+      "ver_sticker_giphy_suggest": 1495,
+      "ver_giphy_cate": 0,
+      "friend": "1781078132783",
+      "alias": "1724256610862097",
+      "ver_sticker_cate_list": 6370,
+      "phonebook": 1772284009
+    }
+  }
+}

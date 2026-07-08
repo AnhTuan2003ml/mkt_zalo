@@ -219,7 +219,12 @@ def fetch_and_update_group_details_parallel(account_id: str, group_ids: list, zp
                     "fetchStatus": "error",
                     "error": "Thiếu cookies hoặc zpwEnk nên chưa lấy được chi tiết nhóm. Hãy mở lại tài khoản Zalo để monitor bắt lại session."
                 })
-            update_account(account_id, personalGroups=marked)
+            update_account(
+                account_id,
+                personalGroups=marked,
+                groupsSyncedAt=int(time.time() * 1000),
+                groupsSyncStatus="detail_error",
+            )
         except Exception as e:
             print(f"[group_manager] Mark error failed: {e}", flush=True)
         return False
@@ -283,7 +288,12 @@ def fetch_and_update_group_details_parallel(account_id: str, group_ids: list, zp
                 "fetchStatus": new.get("fetchStatus") or old.get("fetchStatus") or "done",
             })
 
-        update_account(account_id, personalGroups=merged)
+        update_account(
+            account_id,
+            personalGroups=merged,
+            groupsSyncedAt=int(time.time() * 1000),
+            groupsSyncStatus="details_done",
+        )
         print(f"[group_manager] ✅ Updated {len(merged)} detailed personalGroups in {time.time() - started:.1f}s", flush=True)
         return True
     finally:
@@ -324,7 +334,12 @@ def save_account_groups(account_id: str, group_ids: list, zpw_enk: str = "", coo
 
     # 1) Lưu placeholder trước để UI/monitor thấy có personalGroups ngay.
     placeholder_groups = _merge_old_group_info(account_id, clean_ids)
-    update_account(account_id, personalGroups=placeholder_groups)
+    update_account(
+        account_id,
+        personalGroups=placeholder_groups,
+        groupsSyncedAt=int(time.time() * 1000),
+        groupsSyncStatus="ids_captured",
+    )
     print(f"[group_manager] ✅ Saved {len(placeholder_groups)} personalGroups placeholders immediately", flush=True)
 
     # 2) Sau đó lấy chi tiết name/avatar/memberCount song song, không block monitor.

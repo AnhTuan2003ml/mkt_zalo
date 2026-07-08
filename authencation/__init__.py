@@ -1,1 +1,1 @@
-"""Authentication/license helpers for ZMKT."""
+"""Authentication/license helpers for Nexus."""

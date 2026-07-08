@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý nhóm - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-ui-1">
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+<div class="page groups-page">
+    <div class="groups-page-header">
+        <div>
+            <h2>Quản lý nhóm</h2>
+            <p>Chọn tài khoản, xem danh sách nhóm và kiểm tra thành viên trong từng nhóm.</p>
+        </div>
+        <div class="groups-header-actions">
+            <button class="btn btn-ghost" type="button" onclick="groupsReloadAccounts()">Làm mới tài khoản</button>
+            <a class="btn btn-primary" href="{{ url_for('members_page') }}">Lấy thành viên từ link</a>
+        </div>
+    </div>
+
+    <div class="groups-manager-layout">
+        <aside class="groups-sidebar-card">
+            <div class="groups-control-block">
+                <label>Tài khoản quản lý</label>
+                <select id="groupsAccountSelect" onchange="groupsOnAccountChange()">
+                    <option value="">Đang tải tài khoản...</option>
+                </select>
+            </div>
+            <div class="groups-control-block">
+                <label>Tìm nhóm</label>
+                <input id="groupsSearchInput" type="text" placeholder="Nhập tên nhóm..." oninput="groupsRenderList()">
+            </div>
+            <div class="groups-list-toolbar">
+                <div>
+                    <b>Danh sách nhóm</b>
+                    <span id="groupsTotalText">0 nhóm</span>
+                </div>
+                <button id="groupsRefreshBtn" class="btn btn-sm btn-ghost" type="button" onclick="groupsOpenAccountAndRefreshGroups()">Làm mới</button>
+            </div>
+            <div id="groupsStatus" class="groups-inline-status" style="display:none"></div>
+            <div id="groupsList" class="groups-list"></div>
+            <div id="groupsEmpty" class="groups-empty" style="display:none">
+                <div class="groups-empty-icon">👥</div>
+                <b>Chưa có dữ liệu nhóm</b>
+                <p>Mở tài khoản Zalo để hệ thống đồng bộ danh sách nhóm, sau đó bấm Làm mới.</p>
+            </div>
+        </aside>
+
+        <main class="groups-detail-card">
+            <section id="groupsNoSelection" class="groups-empty groups-empty-large">
+                <div class="groups-empty-icon">📌</div>
+                <b>Chọn một nhóm bên trái</b>
+                <p>Click vào nhóm nào thì danh sách thành viên của nhóm đó sẽ tự động hiển thị ở bảng bên phải.</p>
+            </section>
+
+            <section id="groupsDetailContent" style="display:none">
+                <div class="group-detail-top">
+                    <div class="group-detail-main">
+                        <img id="groupsDetailAvatar" class="group-detail-avatar" src="" alt="Ảnh nhóm" style="display:none">
+                        <div id="groupsDetailAvatarFallback" class="group-detail-avatar fallback">👥</div>
+                        <div class="group-detail-text">
+                            <h3 id="groupsDetailName">Nhóm</h3>
+                            <div class="group-detail-meta">
+                                <span id="groupsDetailMembers">0 thành viên</span>
+                                <span id="groupsDetailId" title="Bấm để copy ID nhóm" onclick="groupsCopyCurrentGroupId()">ID nhóm</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="group-detail-state">
+                        <span id="groupsAutoLoadState">Chọn nhóm để tự động tải thành viên</span>
+                    </div>
+                </div>
+
+                <div class="groups-members-toolbar">
+                    <div class="groups-members-search">
+                        <input id="groupsMemberSearch" type="text" placeholder="Tìm tên hoặc số điện thoại..." oninput="groupsRenderMembers()">
+                    </div>
+
+                </div>
+
+                <div id="groupsSelectedBar" class="groups-selected-bar" style="display:none">
+                    <span>Đã chọn <b id="groupsSelectedCount">0</b> thành viên</span>
+                    <button class="btn btn-sm btn-primary" onclick="groupsOpenInviteModal()">Mời vào nhóm</button>
+                    <button class="btn btn-sm btn-ghost" onclick="groupsClearSelection()">Bỏ chọn</button>
+                </div>
+
+                <div id="groupsMembersLoading" class="groups-loading" style="display:none">
+                    <span class="spinner"></span> Đang tải thành viên nhóm...
+                </div>
+
+                <div class="groups-members-table-wrap">
+                    <table class="groups-members-table">
+                        <thead>
+                            <tr>
+                                <th style="width:42px"><input id="groupsSelectAllMembers" type="checkbox" onchange="groupsToggleSelectAllMembers(this)"></th>
+                                <th style="width:56px">Ảnh</th>
+                                <th>Tên</th>
+                                <th style="width:90px">Giới tính</th>
+                                <th style="width:110px">Ngày sinh</th>
+                                <th style="width:135px">Số điện thoại</th>
+                                <th style="width:100px">Kết bạn</th>
+                                <th style="width:90px">Xem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="groupsMembersBody"></tbody>
+                    </table>
+                </div>
+
+                <div id="groupsMembersEmpty" class="groups-empty" style="display:none">
+                    <div class="groups-empty-icon">🔎</div>
+                    <b>Chưa có thành viên để hiển thị</b>
+                    <p>Click vào một nhóm bên trái, hệ thống sẽ tự động tải thành viên và hiển thị tại đây.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<div id="groupsInviteBackdrop" class="groups-modal-backdrop" style="display:none" onclick="groupsCloseInviteModal(event)">
+    <div class="groups-modal" onclick="event.stopPropagation()">
+        <div class="groups-modal-header">
+            <div>
+                <h3>Mời thành viên vào nhóm</h3>
+                <p>Chọn một hoặc nhiều nhóm đích để mời các thành viên đang chọn.</p>
+            </div>
+            <button class="groups-modal-close" type="button" onclick="groupsCloseInviteModal()">×</button>
+        </div>
+        <div class="groups-modal-summary" id="groupsInviteSummary">Chưa chọn thành viên</div>
+        <div class="groups-modal-search">
+            <input id="groupsInviteSearch" type="text" placeholder="Tìm nhóm đích..." oninput="groupsRenderInviteList()">
+        </div>
+        <div id="groupsInviteList" class="groups-invite-list"></div>
+        <div class="groups-modal-footer">
+            <div id="groupsInviteStatus" class="groups-modal-status"></div>
+            <button class="btn btn-ghost" type="button" onclick="groupsCloseInviteModal()">Đóng</button>
+            <button id="groupsInviteSubmit" class="btn btn-primary" type="button" onclick="groupsSubmitInvite()">Mời</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Profile Detail Overlay cho tab Quản lý nhóm -->
+<div class="overlay-backdrop" id="groupsProfileBackdrop" onclick="if(event.target===this) groupsCloseMemberProfile()">
+    <div class="overlay-card profile-card" onclick="event.stopPropagation()">
+        <div class="pf-header">
+            <div class="pf-avatar-wrapper">
+                <img id="groupsPfAvatar" class="pf-avatar-large" src="" alt="Avatar" style="display:none">
+                <div class="pf-avatar-placeholder-large" id="groupsPfAvatarPlaceholder" style="display:none">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="pf-user-info">
+                <div class="pf-user-name" id="groupsPfName">-</div>
+                <div class="pf-user-uid" id="groupsPfUid">-</div>
+            </div>
+            <button class="overlay-close" type="button" onclick="groupsCloseMemberProfile()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="overlay-body">
+            <div class="pf-grid" id="groupsPfFields"></div>
+        </div>
+        <div class="overlay-footer">
+            <div class="overlay-status" id="groupsPfStatus"></div>
+            <button class="btn btn-secondary" type="button" onclick="groupsCloseMemberProfile()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<div id="groupsToast" class="groups-toast" style="display:none"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}?v=9999"></script>
+<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-manager-6"></script>
+</body>
+</html>

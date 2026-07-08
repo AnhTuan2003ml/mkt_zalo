@@ -243,7 +243,7 @@ def main():
     marker_file = os.path.join(appdata, ".activation_sent")
     
     if not os.path.exists(marker_file):
-        print("🎉 Welcome to ZMKT!")
+        print("🎉 Welcome to Nexus!")
         print("Generating activation code...\n")
         
         if not register_device_with_activation():

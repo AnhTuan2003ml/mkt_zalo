@@ -3,7 +3,7 @@ import os
 import sys
 
 
-DEFAULT_ZPW_VER = "683"
+DEFAULT_ZPW_VER = "687"
 SETTINGS_FILE_NAME = "app_settings.json"
 
 

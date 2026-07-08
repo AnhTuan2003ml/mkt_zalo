@@ -7,7 +7,8 @@ import queue
 import threading
 import requests
 import re
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 
 # ─── Get App Root (PyInstaller compatible) ─────────────────────────────────────
 def get_app_root():
@@ -61,7 +62,9 @@ from features.profiles.profile_service import fetch_profiles_with_single_fallbac
 from features.messaging.send_sms import send_sms
 from features.messaging.add_friend import send_friend_request
 from features.groups.add_group import create_group as _create_group
-from features.profiles.get_single_profile import get_single_profile
+from features.groups.invite_group import invite_group as _invite_group
+from features.groups.group_join_leave import join_group_by_link as _join_group_by_link, leave_group as _leave_group
+from features.profiles.get_single_profile import get_single_profile, ProfileRateLimitError
 from features.accounts.account_manager import (
     load_accounts,
     create_account,
@@ -94,7 +97,341 @@ from features.tasks.task_manager import (
     run_task_in_background,
     set_sse_broadcast_func,
 )
+from features.messages.message_manager import (
+    list_conversations as list_message_conversations,
+    get_conversation as get_message_conversation,
+    create_conversation as create_message_conversation,
+    add_message as add_conversation_message,
+    update_conversation as update_message_conversation,
+    mark_read as mark_message_read,
+    get_stats as get_message_stats,
+    get_settings as get_message_settings,
+    update_settings as update_message_settings,
+    log_check_attempt as log_message_check_attempt,
+)
 from core.zalo.zalo_config import get_zpw_ver
+
+
+# ─── Friend request planning storage ─────────────────────────────────────────
+FRIEND_PLANS_FILE = os.path.join(app_root, "data", "friend_invite_plans.json")
+INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.json")
+
+
+def _friend_now_ms():
+    return int(time.time() * 1000)
+
+
+def _ensure_friend_plan_store():
+    os.makedirs(os.path.dirname(FRIEND_PLANS_FILE), exist_ok=True)
+
+
+def _load_friend_plans():
+    _ensure_friend_plan_store()
+    if not os.path.isfile(FRIEND_PLANS_FILE):
+        return []
+    try:
+        with open(FRIEND_PLANS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        plans = data.get("plans", data if isinstance(data, list) else [])
+        return plans if isinstance(plans, list) else []
+    except Exception as e:
+        print("[_load_friend_plans] error=", e)
+        return []
+
+
+def _save_friend_plans(plans):
+    _ensure_friend_plan_store()
+    with open(FRIEND_PLANS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"plans": plans}, f, ensure_ascii=False, indent=2)
+
+
+def _ensure_group_invite_plan_store():
+    os.makedirs(os.path.dirname(INVITE_GROUP_PLANS_FILE), exist_ok=True)
+
+
+def _load_group_invite_plans():
+    _ensure_group_invite_plan_store()
+    if not os.path.isfile(INVITE_GROUP_PLANS_FILE):
+        return []
+    try:
+        with open(INVITE_GROUP_PLANS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        plans = data.get("plans", data if isinstance(data, list) else [])
+        return plans if isinstance(plans, list) else []
+    except Exception as e:
+        print("[_load_group_invite_plans] error=", e)
+        return []
+
+
+def _save_group_invite_plans(plans):
+    _ensure_group_invite_plan_store()
+    with open(INVITE_GROUP_PLANS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"plans": plans}, f, ensure_ascii=False, indent=2)
+
+
+def _normalize_plan_group(item):
+    if isinstance(item, str):
+        gid = item.strip()
+        return {"groupId": gid, "name": gid, "avatar": "", "memberCount": 0} if gid else None
+    if not isinstance(item, dict):
+        return None
+    gid = str(
+        item.get("groupId")
+        or item.get("grid")
+        or item.get("gridId")
+        or item.get("id")
+        or ""
+    ).strip()
+    if not gid:
+        return None
+    return {
+        "groupId": gid,
+        "name": str(item.get("name") or item.get("groupName") or gid).strip(),
+        "avatar": str(item.get("avatar") or item.get("fullAvt") or item.get("avt") or "").strip(),
+        "memberCount": item.get("memberCount", item.get("totalMember", item.get("total", 0))),
+    }
+
+
+def _find_account_name(account_id: str) -> str:
+    for acc in load_accounts():
+        aid = str(acc.get("accountId") or acc.get("id") or acc.get("account_id") or "").strip()
+        if aid == str(account_id).strip():
+            return acc.get("name") or aid
+    return str(account_id).strip()
+
+
+def _normalize_plan_member(item):
+    if isinstance(item, str):
+        uid = item.strip()
+        return {"userId": uid, "name": uid, "avatar": ""} if uid else None
+    if not isinstance(item, dict):
+        return None
+    uid = str(
+        item.get("userId")
+        or item.get("uid")
+        or item.get("id")
+        or item.get("toId")
+        or ""
+    ).strip()
+    if not uid:
+        return None
+    return {
+        "userId": uid,
+        "name": str(item.get("zaloName") or item.get("name") or item.get("displayName") or uid).strip(),
+        "avatar": str(item.get("avatar") or item.get("avt") or item.get("avatarUrl") or "").strip(),
+        "phone": str(item.get("phone") or "").strip(),
+        "isFriend": item.get("isFr", item.get("isFriend", "")),
+    }
+
+
+def _build_friend_plan_batches(members, daily_limit: int, start_date: str):
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    except Exception:
+        start = datetime.now().date()
+        start_date = start.isoformat()
+
+    daily_limit = max(1, min(int(daily_limit or 1), 500))
+    batches = []
+    for index in range(0, len(members), daily_limit):
+        day_no = index // daily_limit
+        date = (start + timedelta(days=day_no)).isoformat()
+        chunk = members[index:index + daily_limit]
+        batches.append({
+            "day": day_no + 1,
+            "date": date,
+            "status": "pending_manual",
+            "count": len(chunk),
+            "members": chunk,
+        })
+    return batches
+
+# ─── Friend/group invite plan progress helpers ───────────────────────────────
+_PLAN_PENDING_STATUSES = {"", "pending", "pending_manual", "planned", "waiting"}
+_PLAN_RUNNING_STATUSES = {"running", "processing", "in_progress"}
+_PLAN_DONE_STATUSES = {"done", "completed", "success", "sent", "invited", "friend_sent"}
+_PLAN_FAILED_STATUSES = {"failed", "error"}
+_PLAN_SKIPPED_STATUSES = {"skipped", "cancelled", "canceled"}
+_PLAN_TERMINAL_STATUSES = _PLAN_DONE_STATUSES | _PLAN_FAILED_STATUSES | _PLAN_SKIPPED_STATUSES
+_ALLOWED_BATCH_STATUS = {"pending_manual", "running", "done", "failed", "skipped"}
+
+
+def _to_int(value, default=0):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+
+def _normalize_plan_batch_status(status):
+    status = str(status or "pending_manual").strip().lower()
+    if status in ("complete", "completed", "success", "sent", "invited", "friend_sent"):
+        return "done"
+    if status in ("error",):
+        return "failed"
+    if status in ("cancelled", "canceled"):
+        return "skipped"
+    if status in ("processing", "in_progress"):
+        return "running"
+    if status not in _ALLOWED_BATCH_STATUS:
+        return "pending_manual"
+    return status
+
+
+def _attach_action_plan_progress(plan: dict) -> dict:
+    """Gắn progress tổng hợp cho plan. Không gọi API Zalo, chỉ đọc trạng thái batch đã lưu."""
+    if not isinstance(plan, dict):
+        return plan
+
+    batches = plan.get("batches") or []
+    if not isinstance(batches, list):
+        batches = []
+        plan["batches"] = batches
+
+    total_members = _to_int(plan.get("totalMembers"), 0)
+    if total_members <= 0:
+        total_members = sum(_to_int(b.get("count"), len(b.get("members") or [])) for b in batches if isinstance(b, dict))
+
+    total_batches = len(batches)
+    done_batches = failed_batches = skipped_batches = running_batches = pending_batches = 0
+    done_members = failed_members = skipped_members = 0
+
+    for b in batches:
+        if not isinstance(b, dict):
+            continue
+        status = _normalize_plan_batch_status(b.get("status"))
+        b["status"] = status
+        count = _to_int(b.get("count"), len(b.get("members") or []))
+
+        if status == "done":
+            done_batches += 1
+            done_members += _to_int(b.get("successCount"), count)
+            failed_members += _to_int(b.get("failedCount"), 0)
+        elif status == "failed":
+            failed_batches += 1
+            failed_members += _to_int(b.get("failedCount"), count)
+            done_members += _to_int(b.get("successCount"), 0)
+        elif status == "skipped":
+            skipped_batches += 1
+            skipped_members += count
+        elif status == "running":
+            running_batches += 1
+            done_members += _to_int(b.get("successCount"), 0)
+            failed_members += _to_int(b.get("failedCount"), 0)
+        else:
+            pending_batches += 1
+            done_members += _to_int(b.get("successCount"), 0)
+            failed_members += _to_int(b.get("failedCount"), 0)
+
+    processed_members = max(0, min(total_members, done_members + failed_members + skipped_members))
+    progress_percent = round((processed_members * 100 / total_members), 1) if total_members else 0
+
+    if total_batches and done_batches == total_batches:
+        display_status = "completed"
+    elif total_batches and (done_batches + failed_batches + skipped_batches) == total_batches:
+        display_status = "partial" if done_batches else ("failed" if failed_batches else "cancelled")
+    elif running_batches:
+        display_status = "running"
+    else:
+        display_status = plan.get("status") or "planned"
+
+    plan["progress"] = {
+        "totalMembers": total_members,
+        "processedMembers": processed_members,
+        "doneMembers": done_members,
+        "failedMembers": failed_members,
+        "skippedMembers": skipped_members,
+        "pendingMembers": max(0, total_members - processed_members),
+        "totalBatches": total_batches,
+        "doneBatches": done_batches,
+        "failedBatches": failed_batches,
+        "skippedBatches": skipped_batches,
+        "runningBatches": running_batches,
+        "pendingBatches": pending_batches,
+        "percent": progress_percent,
+        "displayStatus": display_status,
+    }
+    return plan
+
+
+def _attach_action_plans_progress(plans):
+    return [_attach_action_plan_progress(p) for p in (plans or []) if isinstance(p, dict)]
+
+
+def _load_action_plan_store(plan_type: str):
+    if plan_type == "friend":
+        return _load_friend_plans()
+    if plan_type == "group_invite":
+        return _load_group_invite_plans()
+    raise ValueError("Loại kế hoạch không hợp lệ")
+
+
+def _save_action_plan_store(plan_type: str, plans):
+    if plan_type == "friend":
+        return _save_friend_plans(plans)
+    if plan_type == "group_invite":
+        return _save_group_invite_plans(plans)
+    raise ValueError("Loại kế hoạch không hợp lệ")
+
+
+def _update_action_plan_batch_status(plan_type: str, plan_id: str, batch_day, payload: dict):
+    plans = _load_action_plan_store(plan_type)
+    plan = None
+    for item in plans:
+        if str(item.get("id") or "") == str(plan_id):
+            plan = item
+            break
+    if not plan:
+        raise ValueError("Không tìm thấy kế hoạch")
+
+    try:
+        batch_day = int(batch_day)
+    except Exception:
+        raise ValueError("Ngày/batch không hợp lệ")
+
+    batches = plan.get("batches") or []
+    batch = None
+    for item in batches:
+        if isinstance(item, dict) and _to_int(item.get("day"), -1) == batch_day:
+            batch = item
+            break
+    if not batch:
+        raise ValueError("Không tìm thấy batch")
+
+    status = _normalize_plan_batch_status(payload.get("status"))
+    if status not in _ALLOWED_BATCH_STATUS:
+        raise ValueError("Trạng thái batch không hợp lệ")
+
+    now = _friend_now_ms()
+    batch["status"] = status
+    batch["updatedAt"] = now
+
+    for key in ("note", "error", "result"):
+        if key in payload:
+            batch[key] = payload.get(key)
+
+    if "successCount" in payload:
+        batch["successCount"] = max(0, _to_int(payload.get("successCount"), 0))
+    elif status == "done" and "successCount" not in batch:
+        batch["successCount"] = _to_int(batch.get("count"), len(batch.get("members") or []))
+
+    if "failedCount" in payload:
+        batch["failedCount"] = max(0, _to_int(payload.get("failedCount"), 0))
+    elif status in ("done", "skipped") and "failedCount" not in batch:
+        batch["failedCount"] = 0
+
+    if status == "failed" and "failedCount" not in batch:
+        batch["failedCount"] = _to_int(batch.get("count"), len(batch.get("members") or []))
+
+    plan["updatedAt"] = now
+    _attach_action_plan_progress(plan)
+    progress = plan.get("progress") or {}
+    plan["status"] = progress.get("displayStatus") or plan.get("status") or "planned"
+
+    _save_action_plan_store(plan_type, plans)
+    return plan, batch
 
 # ─── Device Activation / Info (optional - for device management) ─────────────
 try:
@@ -278,9 +615,13 @@ def api_activation_resend():
                 "sent": False,
                 "activated": bool(status.get("activated")),
                 "selected_duration": selected,
-                "message": "Không gửi được mã kích hoạt. Có thể chưa ghi được file chờ kích hoạt hoặc lỗi cấu hình email.",
+                "message": (
+                    "Không gửi được mã kích hoạt. Kiểm tra cấu hình email trong .env: "
+                    "SENDMAIL_USER phải đúng Gmail gửi, SENDMAIL_PASS phải là App Password 16 ký tự "
+                    "chứ không phải mật khẩu Gmail thường. Nếu App Password có dấu cách, hệ thống đã tự bỏ khoảng trắng khi đăng nhập SMTP."
+                ),
                 "status_message": status.get("message", ""),
-            }), 500
+            }), 400
         return jsonify({
             "success": True,
             "sent": True,
@@ -304,17 +645,17 @@ def index():
 
 @app.route("/members")
 def members_page():
-    return render_template("members.html")
+    return render_template("members.html", active_page="members")
 
 
 @app.route("/get_members")
 def get_members_page():
-    return render_template("members.html")
+    return render_template("members.html", active_page="members")
 
 
 @app.route("/accounts")
 def accounts_page():
-    return render_template("accounts.html")
+    return render_template("accounts.html", active_page="accounts")
 
 
 @app.route("/guide")
@@ -322,20 +663,29 @@ def guide_page():
     return render_template("guide.html", active_page="guide")
 
 
+@app.route("/messages")
+def messages_page():
+    return render_template("messages.html", active_page="messages")
+
+
+@app.route("/groups")
+def groups_page():
+    return render_template("groups.html", active_page="groups")
+
 
 @app.route("/schedules")
 def schedules_page():
-    return render_template("schedules.html", active_page="marketing_group", initial_tab="group", page_title="Marketing theo nhóm")
+    return render_template("schedules.html", active_page="marketing_group", initial_tab="group", page_title="Chiến dịch theo nhóm")
 
 
 @app.route("/marketing/group")
 def marketing_group_page():
-    return render_template("schedules.html", active_page="marketing_group", initial_tab="group", page_title="Marketing theo nhóm")
+    return render_template("schedules.html", active_page="marketing_group", initial_tab="group", page_title="Chiến dịch theo nhóm")
 
 
 @app.route("/marketing/phone")
 def marketing_phone_page():
-    return render_template("schedules.html", active_page="marketing_phone", initial_tab="phone", page_title="Marketing theo SĐT")
+    return render_template("schedules.html", active_page="marketing_phone", initial_tab="phone", page_title="Chiến dịch theo SĐT")
 
 
 @app.route("/marketing/personal-groups")
@@ -346,6 +696,109 @@ def marketing_personal_groups_page():
 @app.route("/marketing/schedules")
 def marketing_schedules_page():
     return render_template("schedules.html", active_page="schedules", initial_tab="schedules-list", page_title="Quản lý lịch chạy")
+
+
+
+@app.route("/api/messages/conversations", methods=["GET"])
+def api_messages_list_conversations():
+    """API: danh sách hội thoại đã lưu."""
+    try:
+        account_id = (request.args.get("account_id") or "").strip() or None
+        status = (request.args.get("status") or "all").strip() or "all"
+        q = (request.args.get("q") or "").strip() or None
+        conversations = list_message_conversations(account_id=account_id, status=status, q=q)
+        stats = get_message_stats(account_id=account_id)
+        return jsonify({"success": True, "conversations": conversations, "stats": stats})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/messages/conversations", methods=["POST"])
+def api_messages_create_conversation():
+    """API: tạo hội thoại thủ công để test UI hoặc import dữ liệu sau này."""
+    try:
+        data = request.get_json(silent=True) or request.form or {}
+        conversation = create_message_conversation(
+            account_id=(data.get("account_id") or "").strip(),
+            peer_id=(data.get("peer_id") or data.get("uid") or "").strip(),
+            peer_name=(data.get("peer_name") or data.get("name") or "").strip(),
+            peer_avatar=(data.get("peer_avatar") or data.get("avatar") or "").strip(),
+            source=(data.get("source") or "manual").strip(),
+            first_message=(data.get("first_message") or data.get("message") or "").strip(),
+            direction=(data.get("direction") or "in").strip(),
+        )
+        return jsonify({"success": True, "conversation": conversation})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/messages/conversations/<conversation_id>", methods=["GET", "PATCH"])
+def api_messages_conversation_detail(conversation_id):
+    """API: xem/cập nhật hội thoại."""
+    try:
+        if request.method == "GET":
+            conversation = get_message_conversation(conversation_id)
+            if not conversation:
+                return jsonify({"success": False, "error": "Không tìm thấy hội thoại"}), 404
+            return jsonify({"success": True, "conversation": conversation})
+
+        data = request.get_json(silent=True) or request.form or {}
+        conversation = update_message_conversation(conversation_id, dict(data))
+        return jsonify({"success": True, "conversation": conversation})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/messages/conversations/<conversation_id>/messages", methods=["POST"])
+def api_messages_add_message(conversation_id):
+    """API: lưu thêm tin nhắn vào hội thoại. Hiện chỉ lưu lịch sử, chưa tự gửi Zalo."""
+    try:
+        data = request.get_json(silent=True) or request.form or {}
+        conversation = add_conversation_message(
+            conversation_id,
+            text=(data.get("text") or data.get("message") or "").strip(),
+            direction=(data.get("direction") or "in").strip(),
+            raw=data.get("raw") if isinstance(data.get("raw"), dict) else {},
+        )
+        return jsonify({"success": True, "conversation": conversation})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/messages/conversations/<conversation_id>/read", methods=["POST"])
+def api_messages_mark_read(conversation_id):
+    """API: đánh dấu hội thoại đã đọc."""
+    try:
+        conversation = mark_message_read(conversation_id)
+        return jsonify({"success": True, "conversation": conversation})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/messages/settings", methods=["GET", "PATCH"])
+def api_messages_settings():
+    """API: thiết lập khung tự động kiểm tra/phản hồi tin nhắn."""
+    try:
+        if request.method == "GET":
+            return jsonify({"success": True, "settings": get_message_settings()})
+        data = request.get_json(silent=True) or request.form or {}
+        settings = update_message_settings(dict(data))
+        return jsonify({"success": True, "settings": settings})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/messages/check", methods=["POST"])
+def api_messages_check():
+    """API placeholder: ghi nhận yêu cầu check tin nhắn để sau này nối API Zalo."""
+    try:
+        data = request.get_json(silent=True) or request.form or {}
+        account_id = (data.get("account_id") or "").strip()
+        message = "Đã ghi nhận yêu cầu kiểm tra tin nhắn. Bản vá này mới tạo khung UI/lưu trữ, chưa nối API đồng bộ tin nhắn Zalo thật."
+        settings = log_message_check_attempt(account_id=account_id, message=message)
+        return jsonify({"success": True, "synced_count": 0, "settings": settings, "message": message})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/accounts", methods=["GET"])
@@ -519,6 +972,10 @@ def run():
     if not raw:
         raw = request.form.get("group_id", "").strip()
 
+    # Tự động fallback: nếu account chưa là thành viên và input là link nhóm,
+    # hệ thống sẽ tự join ngầm, lấy thành viên, rồi rời nhóm. Không cần checkbox UI.
+    auto_join_when_not_member = True
+
     if not raw:
         return jsonify({"error": "Thiếu Group Link hoặc Group ID!"}), 400
 
@@ -536,6 +993,8 @@ def run():
             callback=sse_broadcast,
             zpw_ver=zpw_ver,
             imei=imei,
+            auto_join_when_not_member=auto_join_when_not_member,
+            leave_after_auto_join=False,
         )
 
         uid_list = member_payload["uidList"]
@@ -552,7 +1011,17 @@ def run():
             log_func=sse_broadcast,
             zpw_ver=zpw_ver,
         )
+        auto_joined = bool(member_payload.get("autoJoined"))
+        auto_left = False
+        leave_result = None
+
         result = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
+
+        # Nếu hệ thống tự join ngầm thì chỉ rời sau khi đã lấy xong UID + mini profile
+        # và build xong bảng kết quả. Không gọi profile chi tiết hàng loạt trong /run.
+        if auto_joined and uid_list:
+            leave_result = _leave_group([group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver)
+            auto_left = bool(isinstance(leave_result, dict) and leave_result.get("ok"))
 
         sse_broadcast(f"Hoàn thành! Tổng cộng {len(result)} thành viên.", "success")
         return jsonify({
@@ -560,6 +1029,9 @@ def run():
             "total": len(result),
             "data": result,
             "groupInfo": format_group_info(group_info, group_id=group_id, fallback_total=len(result)),
+            "autoJoined": auto_joined,
+            "autoLeft": auto_left,
+            "leaveResult": leave_result,
         })
 
     except ValueError as e:
@@ -703,7 +1175,7 @@ def api_single_profile():
 
     try:
         _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
-        result = get_single_profile(uid_input, zpw_enk, cookies, imei=imei, zpw_ver=get_zpw_ver())
+        result = get_single_profile(uid_input, zpw_enk, cookies, imei=imei, zpw_ver=get_zpw_ver(), raise_on_rate_limit=True)
 
         if is_batch:
             # result dạng {uid: profile hoặc None}
@@ -718,12 +1190,338 @@ def api_single_profile():
         if not result:
             return jsonify({"error": "Không lấy được profile của UID này."}), 400
         return jsonify({"success": True, "profile": result})
+    except ProfileRateLimitError as e:
+        return jsonify({"error": str(e) or "Zalo đang giới hạn request profile. Vui lòng chờ rồi thử lại.", "error_code": getattr(e, "code", 221)}), 429
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/friend-request-plans", methods=["GET"])
+def api_list_friend_request_plans():
+    """API: danh sách kế hoạch kết bạn/mời nhóm đã lưu."""
+    try:
+        account_id = str(request.args.get("accountId") or request.args.get("account_id") or "").strip()
+        status = str(request.args.get("status") or "").strip()
+        plans = _load_friend_plans()
+        if account_id:
+            plans = [p for p in plans if str(p.get("accountId") or "") == account_id]
+        plans = _attach_action_plans_progress(plans)
+        if status:
+            plans = [p for p in plans if str(p.get("status") or "") == status or str((p.get("progress") or {}).get("displayStatus") or "") == status]
+        plans = sorted(plans, key=lambda x: int(x.get("createdAt") or 0), reverse=True)
+        return jsonify({"success": True, "plans": plans, "total": len(plans)})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e), "plans": []}), 500
+
+
+@app.route("/api/friend-request-plans", methods=["POST"])
+def api_create_friend_request_plan():
+    """
+    API: tạo kế hoạch chia batch theo ngày cho danh sách người được chọn.
+    Lưu ý: route này chỉ lưu kế hoạch pending_manual, không tự động gửi lời mời/kéo người vào nhóm.
+    """
+    data = request.get_json(silent=True) or {}
+
+    account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
+    message = str(data.get("message") or data.get("msg") or "").strip()
+    plan_name = str(data.get("name") or data.get("planName") or "Kế hoạch kết bạn").strip()
+    start_date = str(data.get("startDate") or "").strip() or datetime.now().date().isoformat()
+    after_action = str(data.get("afterAction") or "none").strip()
+    target_group_ids = data.get("targetGroupIds") or data.get("groupIds") or []
+    target_groups = data.get("targetGroups") or []
+    new_group_name = str(data.get("newGroupName") or "").strip()
+    confirm_consent = bool(data.get("confirmConsent") or data.get("consentConfirmed"))
+
+    try:
+        daily_limit = int(data.get("dailyLimit") or data.get("perDay") or 1)
+    except Exception:
+        daily_limit = 1
+    daily_limit = max(1, min(daily_limit, 500))
+
+    if isinstance(target_group_ids, str):
+        target_group_ids = [target_group_ids]
+    target_group_ids = [str(x).strip() for x in target_group_ids if str(x).strip()]
+
+    members_raw = data.get("members") or data.get("selectedMembers") or data.get("userIds") or data.get("uids") or []
+    if isinstance(members_raw, str):
+        members_raw = [x.strip() for x in members_raw.split(",") if x.strip()]
+
+    seen = set()
+    members = []
+    for item in members_raw if isinstance(members_raw, list) else []:
+        m = _normalize_plan_member(item)
+        if not m:
+            continue
+        uid = m["userId"]
+        if uid in seen:
+            continue
+        seen.add(uid)
+        members.append(m)
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản lập lịch."}), 400
+    if not get_account(account_id):
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    if not members:
+        return jsonify({"success": False, "error": "Danh sách người được chọn đang trống."}), 400
+    if not message:
+        return jsonify({"success": False, "error": "Vui lòng nhập nội dung lời mời kết bạn."}), 400
+    if not confirm_consent:
+        return jsonify({
+            "success": False,
+            "error": "Cần xác nhận danh sách người nhận hợp lệ/được phép liên hệ trước khi lưu kế hoạch."
+        }), 400
+
+    if after_action not in ("none", "invite_existing_group", "create_new_group"):
+        after_action = "none"
+    if after_action == "invite_existing_group" and not target_group_ids:
+        return jsonify({"success": False, "error": "Vui lòng chọn nhóm đích."}), 400
+    if after_action == "create_new_group" and not new_group_name:
+        return jsonify({"success": False, "error": "Vui lòng nhập tên nhóm mới."}), 400
+
+    batches = _build_friend_plan_batches(members, daily_limit, start_date)
+    now = _friend_now_ms()
+    plan = {
+        "id": uuid.uuid4().hex,
+        "name": plan_name,
+        "status": "planned",
+        "mode": "manual_review",
+        "accountId": account_id,
+        "accountName": _find_account_name(account_id),
+        "message": message,
+        "dailyLimit": daily_limit,
+        "startDate": start_date,
+        "createdAt": now,
+        "updatedAt": now,
+        "totalMembers": len(members),
+        "afterAction": after_action,
+        "targetGroupIds": target_group_ids,
+        "targetGroups": target_groups if isinstance(target_groups, list) else [],
+        "newGroupName": new_group_name,
+        "consentConfirmed": True,
+        "members": members,
+        "batches": batches,
+        "note": "Kế hoạch chỉ chia lịch và chờ xác nhận thủ công từng batch; hệ thống không tự động gửi hàng loạt.",
+    }
+
+    _attach_action_plan_progress(plan)
+    plans = _load_friend_plans()
+    plans.append(plan)
+    _save_friend_plans(plans)
+
+    return jsonify({
+        "success": True,
+        "message": f"Đã lưu kế hoạch {len(members)} người, {daily_limit} người/ngày.",
+        "plan": plan,
+    })
+
+
+@app.route("/api/group-invite-plans", methods=["GET"])
+def api_list_group_invite_plans():
+    """API: danh sách kế hoạch mời vào nhóm đã lưu."""
+    try:
+        account_id = str(request.args.get("accountId") or request.args.get("account_id") or "").strip()
+        status = str(request.args.get("status") or "").strip()
+        plans = _load_group_invite_plans()
+        if account_id:
+            plans = [p for p in plans if str(p.get("accountId") or "") == account_id]
+        plans = _attach_action_plans_progress(plans)
+        if status:
+            plans = [p for p in plans if str(p.get("status") or "") == status or str((p.get("progress") or {}).get("displayStatus") or "") == status]
+        plans = sorted(plans, key=lambda x: int(x.get("createdAt") or 0), reverse=True)
+        return jsonify({"success": True, "plans": plans, "total": len(plans)})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e), "plans": []}), 500
+
+
+@app.route("/api/group-invite-plans", methods=["POST"])
+def api_create_group_invite_plan():
+    """
+    API: tạo kế hoạch chia batch theo ngày để mời thành viên vào nhóm đã chọn.
+    Lưu ý: route này chỉ lưu kế hoạch pending_manual, không tự động mời hàng loạt.
+    """
+    data = request.get_json(silent=True) or {}
+
+    account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
+    plan_name = str(data.get("name") or data.get("planName") or "Kế hoạch mời vào nhóm").strip()
+    start_date = str(data.get("startDate") or "").strip() or datetime.now().date().isoformat()
+    confirm_consent = bool(data.get("confirmConsent") or data.get("consentConfirmed"))
+
+    try:
+        daily_limit = int(data.get("dailyLimit") or data.get("perDay") or 1)
+    except Exception:
+        daily_limit = 1
+    daily_limit = max(1, min(daily_limit, 500))
+
+    members_raw = data.get("members") or data.get("selectedMembers") or data.get("userIds") or data.get("uids") or []
+    if isinstance(members_raw, str):
+        members_raw = [x.strip() for x in members_raw.split(",") if x.strip()]
+
+    seen_members = set()
+    members = []
+    for item in members_raw if isinstance(members_raw, list) else []:
+        m = _normalize_plan_member(item)
+        if not m:
+            continue
+        uid = m["userId"]
+        if uid in seen_members:
+            continue
+        seen_members.add(uid)
+        members.append(m)
+
+    target_group_ids = data.get("targetGroupIds") or data.get("groupIds") or []
+    if isinstance(target_group_ids, str):
+        target_group_ids = [target_group_ids]
+    target_group_ids = [str(x).strip() for x in target_group_ids if str(x).strip()]
+
+    groups_raw = data.get("targetGroups") or data.get("groups") or []
+    groups = []
+    seen_groups = set()
+    for item in groups_raw if isinstance(groups_raw, list) else []:
+        g = _normalize_plan_group(item)
+        if not g:
+            continue
+        gid = g["groupId"]
+        if gid in seen_groups:
+            continue
+        seen_groups.add(gid)
+        groups.append(g)
+
+    # Nếu frontend chỉ gửi ID thì vẫn lưu được metadata tối thiểu. Đúng là máy móc cũng cần được nhắc cách thở.
+    for gid in target_group_ids:
+        if gid not in seen_groups:
+            groups.append({"groupId": gid, "name": gid, "avatar": "", "memberCount": 0})
+            seen_groups.add(gid)
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản lập lịch."}), 400
+    if not get_account(account_id):
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    if not members:
+        return jsonify({"success": False, "error": "Danh sách người cần mời đang trống."}), 400
+    if not target_group_ids:
+        return jsonify({"success": False, "error": "Vui lòng chọn ít nhất 1 nhóm đích."}), 400
+    if not confirm_consent:
+        return jsonify({
+            "success": False,
+            "error": "Cần xác nhận danh sách người nhận hợp lệ/được phép mời trước khi lưu kế hoạch."
+        }), 400
+
+    batches = _build_friend_plan_batches(members, daily_limit, start_date)
+    now = _friend_now_ms()
+    plan = {
+        "id": uuid.uuid4().hex,
+        "name": plan_name,
+        "status": "planned",
+        "mode": "manual_review",
+        "accountId": account_id,
+        "accountName": _find_account_name(account_id),
+        "dailyLimit": daily_limit,
+        "startDate": start_date,
+        "createdAt": now,
+        "updatedAt": now,
+        "totalMembers": len(members),
+        "targetGroupIds": target_group_ids,
+        "targetGroups": groups,
+        "consentConfirmed": True,
+        "members": members,
+        "batches": batches,
+        "note": "Kế hoạch chỉ chia lịch và chờ xác nhận thủ công từng batch; hệ thống không tự động mời hàng loạt.",
+    }
+
+    _attach_action_plan_progress(plan)
+    plans = _load_group_invite_plans()
+    plans.append(plan)
+    _save_group_invite_plans(plans)
+
+    return jsonify({
+        "success": True,
+        "message": f"Đã lưu kế hoạch mời {len(members)} người vào {len(target_group_ids)} nhóm, {daily_limit} người/ngày.",
+        "plan": plan,
+    })
+
+
+@app.route("/api/friend-request-plans/<plan_id>/batches/<int:batch_day>", methods=["PATCH", "POST"])
+def api_update_friend_request_plan_batch(plan_id, batch_day):
+    """Cập nhật tiến độ một batch trong kế hoạch gửi kết bạn."""
+    data = request.get_json(silent=True) or {}
+    try:
+        plan, batch = _update_action_plan_batch_status("friend", plan_id, batch_day, data)
+        return jsonify({
+            "success": True,
+            "message": "Đã cập nhật tiến độ batch kết bạn.",
+            "plan": plan,
+            "batch": batch,
+        })
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/group-invite-plans/<plan_id>/batches/<int:batch_day>", methods=["PATCH", "POST"])
+def api_update_group_invite_plan_batch(plan_id, batch_day):
+    """Cập nhật tiến độ một batch trong kế hoạch mời vào nhóm."""
+    data = request.get_json(silent=True) or {}
+    try:
+        plan, batch = _update_action_plan_batch_status("group_invite", plan_id, batch_day, data)
+        return jsonify({
+            "success": True,
+            "message": "Đã cập nhật tiến độ batch mời vào nhóm.",
+            "plan": plan,
+            "batch": batch,
+        })
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/action-plans", methods=["GET"])
+def api_list_action_plans():
+    """API tổng hợp để UI xem lịch kết bạn và lịch mời vào nhóm trong một màn."""
+    try:
+        account_id = str(request.args.get("accountId") or request.args.get("account_id") or "").strip()
+        plan_type = str(request.args.get("type") or "all").strip()
+
+        items = []
+        if plan_type in ("all", "friend", "friend_request"):
+            friend_plans = _attach_action_plans_progress(_load_friend_plans())
+            for p in friend_plans:
+                p = dict(p)
+                p["planType"] = "friend"
+                p["planTypeLabel"] = "Gửi kết bạn"
+                items.append(p)
+
+        if plan_type in ("all", "group", "group_invite"):
+            group_plans = _attach_action_plans_progress(_load_group_invite_plans())
+            for p in group_plans:
+                p = dict(p)
+                p["planType"] = "group_invite"
+                p["planTypeLabel"] = "Mời vào nhóm"
+                items.append(p)
+
+        if account_id:
+            items = [p for p in items if str(p.get("accountId") or "") == account_id]
+
+        items = sorted(items, key=lambda x: int(x.get("createdAt") or 0), reverse=True)
+        return jsonify({"success": True, "plans": items, "total": len(items)})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e), "plans": []}), 500
+
 @app.route("/api/send-friend-request", methods=["POST"])
 def api_send_friend_request():
     """
@@ -1053,7 +1851,7 @@ def api_get_userinfo_batch():
 # ─── SCHEDULE APIs ─────────────────────────────────────────────────────────
 
 
-def _fetch_group_members_worker(task, account_id: str, group_input: str):
+def _fetch_group_members_worker(task, account_id: str, group_input: str, auto_join_when_not_member: bool = True):
     """Worker lấy thành viên nhóm dùng chung service với /run để tránh trùng logic."""
     try:
         account = get_account(account_id)
@@ -1081,6 +1879,8 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str):
             callback=task_log,
             zpw_ver=zpw_ver,
             imei=imei,
+            auto_join_when_not_member=auto_join_when_not_member,
+            leave_after_auto_join=False,
         )
         uid_list = member_payload["uidList"]
         group_info = member_payload["groupInfo"]
@@ -1097,9 +1897,17 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str):
             log_func=task_log,
             zpw_ver=zpw_ver,
         )
+        auto_joined = bool(member_payload.get("autoJoined"))
+        auto_left = False
+        leave_result = None
 
         task.set_progress(70)
         result = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
+
+        # Nếu tự join ngầm thì rời sau khi đã có UID + mini profile + bảng kết quả.
+        if auto_joined and uid_list:
+            leave_result = _leave_group([group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver)
+            auto_left = bool(isinstance(leave_result, dict) and leave_result.get("ok"))
 
         task.set_progress(90)
         task.log(f"Hoàn thành! Tổng {len(result)} thành viên")
@@ -1108,6 +1916,9 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str):
             "total": len(result),
             "data": result,
             "groupInfo": format_group_info(group_info, group_id=group_id, fallback_total=len(result)),
+            "autoJoined": auto_joined,
+            "autoLeft": auto_left,
+            "leaveResult": leave_result,
         }
 
         task.set_completed(result_data)
@@ -1131,6 +1942,8 @@ def api_schedules_group_members():
 
     account_id = data.get("accountId", data.get("account_id", "")).strip()
     group_input = data.get("groupInput", data.get("group_id", data.get("group_link", ""))).strip()
+    # Lập lịch cũng tự fallback ngầm giống /run.
+    auto_join_when_not_member = True
 
     if not account_id or not group_input:
         return jsonify({"error": "Thiếu thông tin!"}), 400
@@ -1145,7 +1958,8 @@ def api_schedules_group_members():
             f"Fetch members: {group_input[:30]}",
             f"Lấy danh sách thành viên từ: {group_input}",
             account_id,
-            group_input
+            group_input,
+            auto_join_when_not_member
         )
         
         # Return task info immediately
@@ -1537,7 +2351,164 @@ def api_lookup_phones_for_schedule():
         }), 500
 
 
+@app.route("/api/groups/invite", methods=["POST"])
+def api_invite_members_to_groups():
+    """API: Mời danh sách thành viên đã chọn vào một hoặc nhiều nhóm cá nhân."""
+    data = request.get_json(silent=True) or {}
+
+    account_id = str(data.get("accountId", data.get("account_id", "")) or "").strip()
+    group_ids = data.get("groupIds") or data.get("groups") or data.get("gridIds") or []
+    user_ids = data.get("userIds") or data.get("members") or data.get("uids") or []
+
+    try:
+        batch_size = int(data.get("batchSize") or 50)
+    except Exception:
+        batch_size = 50
+    batch_size = max(1, min(batch_size, 100))
+
+    if isinstance(group_ids, str):
+        group_ids = [group_ids]
+    if isinstance(user_ids, str):
+        user_ids = [user_ids]
+
+    # Chuẩn hóa và bỏ trùng nhưng giữ thứ tự.
+    seen_groups = set()
+    clean_group_ids = []
+    for gid in group_ids:
+        gid = str(gid or "").strip()
+        if gid and gid not in seen_groups:
+            seen_groups.add(gid)
+            clean_group_ids.append(gid)
+
+    seen_users = set()
+    clean_user_ids = []
+    for uid in user_ids:
+        uid = str(uid or "").strip()
+        if uid and uid not in seen_users:
+            seen_users.add(uid)
+            clean_user_ids.append(uid)
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản thực hiện."}), 400
+    if not clean_group_ids:
+        return jsonify({"success": False, "error": "Chưa chọn nhóm để mời."}), 400
+    if not clean_user_ids:
+        return jsonify({"success": False, "error": "Danh sách thành viên cần mời đang trống."}), 400
+
+    try:
+        _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
+        zpw_ver = get_zpw_ver()
+
+        def _chunks(items, size):
+            for i in range(0, len(items), size):
+                yield items[i:i + size]
+
+        results = []
+        total_invited = 0
+        total_failed = 0
+
+        for group_id in clean_group_ids:
+            group_result = {
+                "groupId": group_id,
+                "success": True,
+                "invited": 0,
+                "failed": 0,
+                "errorMembers": [],
+                "batches": [],
+            }
+
+            for batch_index, member_batch in enumerate(_chunks(clean_user_ids, batch_size), start=1):
+                response_json, decoded = _invite_group(
+                    group_id,
+                    member_batch,
+                    imei,
+                    zpw_enk,
+                    cookies,
+                    zpw_ver=zpw_ver,
+                )
+
+                if isinstance(decoded, str):
+                    try:
+                        decoded = json.loads(decoded)
+                    except Exception:
+                        decoded = {"raw": decoded}
+
+                decoded = decoded if isinstance(decoded, dict) else {}
+                data_obj = decoded.get("data") if isinstance(decoded.get("data"), dict) else {}
+                error_code = decoded.get("error_code", response_json.get("error_code", -1))
+                error_message = decoded.get("error_message", response_json.get("error_message", ""))
+                error_members = data_obj.get("errorMembers") or []
+                if not isinstance(error_members, list):
+                    error_members = [error_members]
+
+                try:
+                    error_code_int = int(error_code or 0)
+                except Exception:
+                    error_code_int = -1
+
+                ok = error_code_int == 0
+                batch_failed = len(error_members) if ok else len(member_batch)
+                batch_invited = max(0, len(member_batch) - batch_failed) if ok else 0
+
+                if (not ok) or batch_failed:
+                    group_result["success"] = False
+
+                group_result["invited"] += batch_invited
+                group_result["failed"] += batch_failed
+                group_result["errorMembers"].extend([str(x) for x in error_members])
+                group_result["batches"].append({
+                    "batch": batch_index,
+                    "total": len(member_batch),
+                    "success": ok and batch_failed == 0,
+                    "errorCode": error_code,
+                    "errorMessage": error_message,
+                    "invited": batch_invited,
+                    "failed": batch_failed,
+                    "errorMembers": error_members,
+                })
+
+            total_invited += group_result["invited"]
+            total_failed += group_result["failed"]
+            results.append(group_result)
+
+        all_success = all(r.get("success") for r in results)
+        return jsonify({
+            "success": all_success,
+            "partial": not all_success and total_invited > 0,
+            "message": (
+                f"Mời thành công {total_invited} lượt."
+                if all_success else
+                f"Đã mời {total_invited} lượt, lỗi {total_failed} lượt."
+            ),
+            "totalGroups": len(clean_group_ids),
+            "totalMembers": len(clean_user_ids),
+            "totalInvited": total_invited,
+            "totalFailed": total_failed,
+            "results": results,
+        }), 200 if total_invited > 0 or all_success else 400
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ─── GROUP APIs ─────────────────────────────────────────────────────────
+
+
+def _chrome_debug_port_alive(port) -> bool:
+    """Kiểm tra Chrome remote-debugging port còn truy cập được không."""
+    try:
+        port = int(port)
+    except Exception:
+        return False
+    try:
+        resp = requests.get(f"http://127.0.0.1:{port}/json/version", timeout=1.2)
+        return resp.status_code == 200
+    except Exception:
+        return False
 
 
 @app.route("/api/groups/personal", methods=["GET"])
@@ -1607,6 +2578,8 @@ def api_get_account_groups():
                 "avatar": g.get("avatar") or g.get("grid_avatar") or g.get("avt") or "",
                 "fullAvt": g.get("fullAvt") or g.get("grid_fullAvt") or g.get("fullAvatar") or "",
                 "memberCount": g.get("memberCount") or g.get("grid_totalMember") or g.get("totalMember") or g.get("total") or 0,
+                "fetchStatus": g.get("fetchStatus") or "",
+                "error": g.get("error") or "",
             })
 
         print("[api_get_account_groups] account_id=", account_id, "groups=", len(groups))
@@ -1615,13 +2588,213 @@ def api_get_account_groups():
             "success": True,
             "accountId": account_id,
             "groups": groups,
-            "total": len(groups)
+            "total": len(groups),
+            "groupsSyncedAt": int(account.get("groupsSyncedAt") or 0),
+            "groupsSyncStatus": account.get("groupsSyncStatus") or "",
+            "accountUpdatedAt": int(account.get("updatedAt") or 0),
         })
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e), "groups": []}), 500
+
+
+@app.route("/api/groups/refresh-account", methods=["POST"])
+def api_refresh_account_groups():
+    """
+    Mở hoặc kích hoạt lại tài khoản Zalo đang chọn để monitor bắt getlg/v4,
+    giải mã danh sách nhóm và cập nhật personalGroups.
+    """
+    data = request.get_json(silent=True) or request.form or {}
+    account_id = str(
+        data.get("accountId")
+        or data.get("account_id")
+        or data.get("id")
+        or ""
+    ).strip()
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản."}), 400
+
+    try:
+        account = get_account(account_id)
+        if not account:
+            return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+
+        started_at = int(time.time() * 1000)
+        port = account.get("remoteDebugPort")
+        reused_running_browser = False
+
+        # Nếu Chrome của account đang mở, không mở thêm profile trùng nữa.
+        # Chỉ reset trạng thái capture và start monitor để điều hướng/reload Zalo Web.
+        if port and _chrome_debug_port_alive(port):
+            update_account(
+                account_id,
+                loginCaptured=False,
+                userinfoCaptured=False,
+                cookies="",
+                personalGroups=[],
+                groupsSyncedAt=0,
+                groupsSyncStatus="refreshing",
+            )
+            from features.accounts.account_network_monitor import start_account_network_monitor
+            start_account_network_monitor(account_id, int(port))
+            account = get_account(account_id) or account
+            reused_running_browser = True
+        else:
+            account = open_account(account_id, clear_groups=True)
+
+        return jsonify({
+            "success": True,
+            "accountId": account_id,
+            "startedAt": started_at,
+            "reusedRunningBrowser": reused_running_browser,
+            "account": account,
+            "message": "Đã mở tài khoản Zalo và bật monitor đồng bộ nhóm.",
+        })
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except FileNotFoundError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/groups/join-link", methods=["POST"])
+def api_join_group_by_link():
+    """API riêng: tham gia nhóm bằng link mời."""
+    data = request.get_json(silent=True) or request.form or {}
+    account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
+    link = str(data.get("link") or data.get("groupLink") or data.get("group_link") or "").strip()
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản."}), 400
+    if not link:
+        return jsonify({"success": False, "error": "Thiếu link nhóm."}), 400
+
+    try:
+        _account, cookies, zpw_enk, _imei = _get_account_credentials(account_id, require_imei=False)
+        result = _join_group_by_link(link, zpw_enk, cookies, zpw_ver=get_zpw_ver())
+        status = 200 if result.get("ok") else 400
+        return jsonify({
+            "success": bool(result.get("ok")),
+            "message": result.get("message", ""),
+            "groupId": result.get("groupId", ""),
+            "error_code": result.get("error_code"),
+            "decoded": result.get("decoded"),
+        }), status
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/groups/leave", methods=["POST"])
+def api_leave_group():
+    """API riêng: rời một hoặc nhiều nhóm theo groupId/grid."""
+    data = request.get_json(silent=True) or request.form or {}
+    account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
+    grids = data.get("grids") or data.get("groupIds") or data.get("group_ids") or data.get("grid") or data.get("groupId") or ""
+
+    if isinstance(grids, str):
+        grids = [x.strip() for x in re.split(r"[,\n\s]+", grids) if x.strip()]
+    elif not isinstance(grids, list):
+        grids = [grids]
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản."}), 400
+    if not grids:
+        return jsonify({"success": False, "error": "Thiếu groupId cần rời."}), 400
+
+    try:
+        _account, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=False)
+        result = _leave_group(grids, imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=get_zpw_ver())
+        status = 200 if result.get("ok") else 400
+        return jsonify({
+            "success": bool(result.get("ok")),
+            "message": result.get("message", ""),
+            "grids": result.get("grids", []),
+            "error_code": result.get("error_code"),
+            "decoded": result.get("decoded"),
+        }), status
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route("/api/groups/members", methods=["GET"])
+def api_get_group_members_for_manager():
+    """API: Lấy thành viên của một nhóm trong tab Quản lý nhóm."""
+    account_id = (
+        request.args.get("accountId")
+        or request.args.get("account_id")
+        or ""
+    ).strip()
+    group_id = (
+        request.args.get("groupId")
+        or request.args.get("grid")
+        or request.args.get("id")
+        or ""
+    ).strip()
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản.", "members": []}), 400
+    if not group_id:
+        return jsonify({"success": False, "error": "Chưa chọn nhóm.", "members": []}), 400
+
+    try:
+        account, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=False)
+        zpw_ver = get_zpw_ver()
+
+        member_payload = fetch_group_members_by_input(
+            group_id,
+            zpw_enk,
+            cookies,
+            callback=None,
+            zpw_ver=zpw_ver,
+            imei=imei,
+        )
+
+        uid_list = member_payload.get("uidList") or []
+        group_info = member_payload.get("groupInfo") or {}
+        resolved_group_id = member_payload.get("groupId") or group_id
+        member_map = member_payload.get("memberMap") or {}
+
+        profiles = fetch_profiles_with_single_fallback(
+            uid_list,
+            zpw_enk,
+            cookies,
+            imei=imei,
+            log_func=None,
+            zpw_ver=zpw_ver,
+        )
+        members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
+
+        return jsonify({
+            "success": True,
+            "accountId": account_id,
+            "groupId": str(resolved_group_id),
+            "total": len(members),
+            "members": members,
+            "groupInfo": format_group_info(group_info, group_id=resolved_group_id, fallback_total=len(members)),
+        })
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e), "members": []}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e), "members": []}), 500
 
 
 # ─── TASK MANAGEMENT APIs ──────────────────────────────────────────────────────
@@ -2087,13 +3260,13 @@ def _launch_log_window():
         if sys.platform.startswith("win"):
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "PhanMem.ZMKT.CMDLog"
+                "PhanMem.Nexus.CMDLog"
             )
     except Exception:
         pass
 
     root = tk.Tk()
-    root.title("ZMKT - CMD Log")
+    root.title("Nexus - CMD Log")
     root.geometry("1000x640")
     root.minsize(760, 420)
     root.configure(bg="#0c0c0c")
@@ -2122,7 +3295,7 @@ def _launch_log_window():
     header = ttk.Frame(root, padding=(12, 10, 12, 6), style="Cmd.TFrame")
     header.pack(fill="x")
 
-    title = ttk.Label(header, text="ZMKT - CMD Log", style="CmdTitle.TLabel")
+    title = ttk.Label(header, text="Nexus - CMD Log", style="CmdTitle.TLabel")
     title.pack(side="left")
 
     status_var = tk.StringVar(value="Đang khởi động backend...")
@@ -2199,7 +3372,7 @@ def _launch_log_window():
     server_thread = threading.Thread(target=_start_backend_server, daemon=True)
     server_thread.start()
 
-    print("🚀 Đang khởi động ZMKT...", flush=True)
+    print("🚀 Đang khởi động Nexus...", flush=True)
     print("📌 Trình duyệt sẽ không tự mở. Bấm 'Mở giao diện' khi cần.", flush=True)
     pump_logs()
     root.mainloop()

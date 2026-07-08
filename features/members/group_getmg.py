@@ -6,7 +6,7 @@ Mục đích:
 - Chạy độc lập để xem response thật của API getmg.
 - Tự đọc cookies / zpwEnk / imei từ data/accounts.json.
 - Cho phép dán groupId hoặc link nhóm Zalo.
-- Không import vào flow chính của app nếu chưa chọn endpoint cuối cùng.
+- Không import vào luồng chính của app nếu chưa chọn endpoint cuối cùng.
 
 Cách chạy từ thư mục gốc dự án:
     python -m features.members.group_getmg

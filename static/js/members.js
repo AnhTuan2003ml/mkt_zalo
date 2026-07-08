@@ -1,3 +1,7 @@
+function escapeJsStringMembers(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+}
 
 // Helper: Escape HTML
 function escapeHtmlMembers(str) {
@@ -9,11 +13,134 @@ function escapeHtmlMembers(str) {
         .replace(/'/g, "&#039;");
 }
 
+
+// UX: thông báo nổi + trạng thái thân thiện trên trang lấy thành viên
+var _memberLastToastKey = '';
+var _memberLastToastAt = 0;
+
+function stripMemberHtml(input) {
+    var div = document.createElement('div');
+    div.innerHTML = String(input || '');
+    return (div.textContent || div.innerText || '').trim();
+}
+
+function ensureMemberToastStack() {
+    var stack = document.getElementById('memberToastStack');
+    if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'memberToastStack';
+        stack.className = 'member-toast-stack';
+        stack.setAttribute('aria-live', 'polite');
+        stack.setAttribute('aria-atomic', 'true');
+        document.body.appendChild(stack);
+    }
+    return stack;
+}
+
+function showMemberToast(message, type) {
+    var text = stripMemberHtml(message);
+    if (!text) return;
+
+    type = type || 'info';
+    var key = type + ':' + text;
+    var now = Date.now();
+    if (_memberLastToastKey === key && now - _memberLastToastAt < 1200) return;
+    _memberLastToastKey = key;
+    _memberLastToastAt = now;
+
+    var stack = ensureMemberToastStack();
+    var toast = document.createElement('div');
+    toast.className = 'member-toast ' + type;
+
+    var icon = type === 'success' ? '✓' : (type === 'error' ? '!' : (type === 'warning' || type === 'warn' ? '⚠' : 'i'));
+    toast.innerHTML = '<span class="member-toast-icon">' + icon + '</span><span class="member-toast-text"></span><button type="button" class="member-toast-close" aria-label="Đóng">×</button>';
+    toast.querySelector('.member-toast-text').textContent = text;
+
+    function removeToast() {
+        toast.classList.add('hiding');
+        setTimeout(function() {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 220);
+    }
+
+    toast.querySelector('.member-toast-close').addEventListener('click', removeToast);
+    stack.appendChild(toast);
+    setTimeout(removeToast, type === 'error' ? 5200 : 3600);
+}
+
+function setStatus(msg, type) {
+    var el = document.getElementById('statusBar');
+    type = type || 'info';
+    if (el) {
+        el.innerHTML = (type === 'loading' ? '<span class="spinner"></span>' : '') + escapeHtmlMembers(stripMemberHtml(msg));
+        el.className = 'status-bar members-inline-status ' + type;
+        el.style.display = 'block';
+    }
+    if (type && type !== 'loading') {
+        showMemberToast(msg, type === 'warn' ? 'warning' : type);
+    }
+}
+
+function updateMemberActionState() {
+    var hasData = Array.isArray(_lastFetchedData) && _lastFetchedData.length > 0;
+    var createBtn = document.getElementById('createGroupBtn');
+    var addBtn = document.getElementById('addFriendBtn');
+    var inviteBtn = document.getElementById('inviteGroupBtn');
+    var clearBtn = document.getElementById('clearMembersBtn');
+    var selectAll = document.getElementById('selectAllMembers');
+
+    [createBtn, inviteBtn, addBtn].forEach(function(btn) {
+        if (!btn) return;
+        btn.disabled = !hasData;
+        btn.classList.toggle('is-disabled', !hasData);
+        btn.title = hasData ? '' : 'Hãy lấy danh sách thành viên trước';
+    });
+
+    if (clearBtn) {
+        clearBtn.style.display = hasData ? 'inline-flex' : 'none';
+        clearBtn.disabled = !hasData;
+    }
+    if (selectAll) {
+        selectAll.disabled = !hasData;
+        selectAll.checked = false;
+    }
+}
+
 // Helper: Normalize avatar URL
 function normalizeAvatarUrlMembers(url) {
     if (!url) return "";
     if (url.startsWith("//")) return "https:" + url;
     return url;
+}
+
+
+function hasMemberValue(v) {
+    return v !== undefined && v !== null && v !== '' && v !== '-';
+}
+
+function getMemberGenderValue(member) {
+    if (!member) return null;
+    if (hasMemberValue(member.gender)) return member.gender;
+    if (hasMemberValue(member.sex)) return member.sex;
+    if (hasMemberValue(member.genderType)) return member.genderType;
+    return null;
+}
+
+function formatMemberGender(value) {
+    if (!hasMemberValue(value)) return '-';
+    if (typeof value === 'string') {
+        var normalized = value.trim().toLowerCase();
+        if (!normalized || normalized === '-' || normalized === 'unknown' || normalized === 'null' || normalized === 'undefined') return '-';
+        if (normalized === 'nam' || normalized === 'male' || normalized === 'm') return 'Nam';
+        if (normalized === 'nữ' || normalized === 'nu' || normalized === 'female' || normalized === 'f') return 'Nữ';
+    }
+    var n = Number(value);
+    if (Number.isNaN(n)) return String(value);
+    // Theo response profile hiện tại của Zalo Web trong tool này: 0 = Nam, 1 = Nữ.
+    // Một số endpoint cũ có thể trả 2 = Nữ, nên vẫn hỗ trợ để tránh hiện sai.
+    if (n === 0) return 'Nam';
+    if (n === 1 || n === 2) return 'Nữ';
+    return 'Không xác định';
 }
 
 async function loadMemberAccounts() {
@@ -114,6 +241,7 @@ async function loadMemberAccounts() {
             if (empty) empty.style.display = 'flex';
             var clearBtn = document.getElementById('clearMembersBtn');
             if (clearBtn) clearBtn.style.display = 'none';
+            updateMemberActionState();
         }
 
         function bindDropdown(sel) {
@@ -236,11 +364,67 @@ function disconnectLogStream() {
 }
 
 
+// ─── Right side Activity Drawer ─────────────────────────────────────────────────
+function openMemberLogDrawer() {
+    var drawer = document.getElementById('memberLogDrawer');
+    var backdrop = document.getElementById('memberLogBackdrop');
+    if (drawer) {
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+    }
+    if (backdrop) backdrop.classList.add('open');
+    document.body.classList.add('log-drawer-open');
+}
+
+function closeMemberLogDrawer() {
+    var drawer = document.getElementById('memberLogDrawer');
+    var backdrop = document.getElementById('memberLogBackdrop');
+    if (drawer) {
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+    if (backdrop) backdrop.classList.remove('open');
+    document.body.classList.remove('log-drawer-open');
+}
+
+function isMemberLogDrawerOpen() {
+    var drawer = document.getElementById('memberLogDrawer');
+    return !!(drawer && drawer.classList.contains('open'));
+}
+
+function toggleMemberLogDrawer() {
+    if (isMemberLogDrawerOpen()) closeMemberLogDrawer();
+    else openMemberLogDrawer();
+}
+
+function setMemberLogMini(text, type) {
+    var mini = document.getElementById('memberLogMini');
+    if (!mini) return;
+    mini.textContent = text || 'xem';
+    mini.className = type ? ('log-mini-' + type) : '';
+}
+
+function appendMemberLogLine(msg, type) {
+    var logOutput = document.getElementById('logOutput');
+    if (!logOutput) return;
+    var empty = logOutput.querySelector('.log-empty-note');
+    if (empty) empty.remove();
+    var line = document.createElement('div');
+    line.className = 'log-line ' + (type || 'info');
+    line.textContent = msg;
+    logOutput.appendChild(line);
+    logOutput.scrollTop = logOutput.scrollHeight;
+    if (type === 'error') setMemberLogMini('lỗi', 'error');
+    else if (type === 'warning' || type === 'warn') setMemberLogMini('cảnh báo', 'warning');
+    else if (type === 'success') setMemberLogMini('xong', 'success');
+    else setMemberLogMini('đang chạy', 'loading');
+}
+
+
 
 async function runFetch() {
     var accountId = document.getElementById('memberAccountId') ? document.getElementById('memberAccountId').value : '';
     var groupLink = document.getElementById('groupLinkInput').value.trim();
-
     if (!accountId) {
         setStatus('Vui lòng chọn tài khoản thực hiện!', 'error');
         return;
@@ -255,14 +439,22 @@ async function runFetch() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>Đang xử lý...';
 
-    // Show log panel in right column and clear
-    document.getElementById('logCard').style.display = 'block';
-    document.getElementById('logOutput').innerHTML = '';
-    document.getElementById('logProgress').textContent = '';
+    // Chuẩn bị lịch sử hoạt động nhưng không tự mở drawer.
+    // Người dùng bấm thẻ/nút "Lịch sử hoạt động" để mở, bấm lần 2 để đóng.
+    var logCard = document.getElementById('logCard');
+    var logOutputEl = document.getElementById('logOutput');
+    var logProgressEl = document.getElementById('logProgress');
+    if (logCard) logCard.style.display = 'block';
+    if (logOutputEl) logOutputEl.innerHTML = '';
+    if (logProgressEl) logProgressEl.textContent = 'Đang chạy...';
+    setMemberLogMini('đang chạy', 'loading');
 
     // Clear previous results
+    _lastFetchedData = [];
+    _membersCache = {};
     document.getElementById('resultsBody').innerHTML = '';
     document.getElementById('totalCount').textContent = '0';
+    updateMemberActionState();
     
     // Clear search input
     var searchInput = document.getElementById('searchInput');
@@ -274,12 +466,7 @@ async function runFetch() {
 
     // Setup log streaming
     setLogCallback(function(msg, type) {
-        var logOutput = document.getElementById('logOutput');
-        var line = document.createElement('div');
-        line.className = 'log-line ' + (type || 'info');
-        line.textContent = msg;
-        logOutput.appendChild(line);
-        logOutput.scrollTop = logOutput.scrollHeight;
+        appendMemberLogLine(msg, type);
     });
     connectLogStream();
 
@@ -297,13 +484,20 @@ async function runFetch() {
 
         if (json.error) {
             setStatus(json.error, 'error');
+            var lpErr = document.getElementById('logProgress');
+            if (lpErr) lpErr.textContent = 'Lỗi';
+            setMemberLogMini('lỗi', 'error');
             document.getElementById('emptyState').style.display = 'flex';
+            updateMemberActionState();
             return;
         }
 
         if (json.success) {
-            setStatus('Hoàn thành! Lấy được ' + json.total + ' thành viên.', 'success');
-            document.getElementById('logProgress').textContent = '\u2713 Hoàn thành';
+            var doneMessage = 'Hoàn thành! Lấy được ' + json.total + ' thành viên.';
+            setStatus(doneMessage, 'success');
+            var lp = document.getElementById('logProgress');
+            if (lp) lp.textContent = '\u2713 Hoàn thành';
+            setMemberLogMini('xong', 'success');
 
             _lastFetchedData = json.data || [];
 
@@ -332,26 +526,25 @@ async function runFetch() {
             saveMembersToStorage();
             // Show clear button
             var clearBtn = document.getElementById('clearMembersBtn');
-            if (clearBtn) clearBtn.style.display = 'inline-block';
+            if (clearBtn) clearBtn.style.display = 'inline-flex';
+            updateMemberActionState();
 
-            // Enrich chạy nền sau khi bảng đã hiển thị.
-            setStatus('Đã hiển thị ' + _lastFetchedData.length + ' thành viên. Đang bổ sung chi tiết...', 'loading');
-            enrichMembersWithProfileData(_lastFetchedData, accountId)
-                .then(function() {
-                    renderResults(_lastFetchedData);
-                    saveMembersToStorage();
-                    setStatus('Hoàn thành! Lấy được ' + _lastFetchedData.length + ' thành viên.', 'success');
-                })
-                .catch(function(err) {
-                    console.warn('[runFetch] enrich background error:', err);
-                    setStatus('Đã hiển thị danh sách. Lỗi bổ sung chi tiết: ' + (err.message || String(err)), 'error');
-                });
+            // Không gọi /api/single-profile tự động sau khi lấy danh sách.
+            // Profile chi tiết chỉ được lấy khi người dùng bấm nút Xem từng thành viên.
+            var finalMessage = 'Hoàn thành! Lấy được ' + _lastFetchedData.length + ' thành viên. Bấm Xem để tải chi tiết từng người.';
+            setStatus(finalMessage, 'success');
+            var lpDone = document.getElementById('logProgress');
+            if (lpDone) lpDone.textContent = '\u2713 Hoàn thành';
+            setMemberLogMini('xong', 'success');
         }
     } catch(err) {
         setStatus('Lỗi kết nối: ' + err.message, 'error');
+        var lpCatch = document.getElementById('logProgress');
+        if (lpCatch) lpCatch.textContent = 'Lỗi kết nối';
+        setMemberLogMini('lỗi', 'error');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Lấy danh sách thành viên';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Lấy thành viên';
         setTimeout(disconnectLogStream, 2000);
     }
 }
@@ -423,7 +616,7 @@ async function enrichMembersWithProfileData(members, accountId) {
                 batchUids.forEach(function(uid) {
                     var member = members.find(function(m) { return (m.userId || m.id) === uid; });
                     if (member) {
-                        member.gender = member.gender || 0;
+                        if (!hasMemberValue(member.gender)) member.gender = null;
                         member.sdob = member.sdob || '-';
                         member.isFr = member.isFr || 0;
                     }
@@ -442,12 +635,12 @@ async function enrichMembersWithProfileData(members, accountId) {
                                     member[k] = profile[k];
                                 }
                             });
-                            member.gender = Number(member.gender || 0);
+                            member.gender = hasMemberValue(member.gender) ? Number(member.gender) : null;
                             member.sdob = member.sdob || '-';
                             member.isFr = Number(member.isFr || 0);
                         } else {
                             // Profile not found, use defaults
-                            member.gender = Number(member.gender || 0);
+                            member.gender = hasMemberValue(member.gender) ? Number(member.gender) : null;
                             member.sdob = member.sdob || '-';
                             member.isFr = Number(member.isFr || 0);
                         }
@@ -476,7 +669,7 @@ async function enrichMembersWithProfileData(members, accountId) {
         console.error('[enrichMembersWithProfileData] Fetch error:', err);
         // Use defaults if fetch error
         members.forEach(function(member) {
-            member.gender = member.gender || 0;
+            if (!hasMemberValue(member.gender)) member.gender = null;
             member.sdob = member.sdob || '-';
             member.isFr = member.isFr || 0;
         });
@@ -514,7 +707,7 @@ function filterResults() {
         resultsSection.style.display = 'block';
         document.getElementById('emptyState').style.display = 'none';
         
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-secondary);">Không tìm thấy thành viên nào</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-secondary);">Không tìm thấy thành viên nào</td></tr>';
         return;
     }
     
@@ -558,6 +751,7 @@ function renderResults(members) {
         totalCount.textContent = '0';
         resultsSection.style.display = 'none';
         emptyState.style.display = 'flex';
+        updateMemberActionState();
         return;
     }
 
@@ -571,13 +765,10 @@ function renderResults(members) {
         var name = member.zaloName || member.displayName || member.dName || member.name || 'Không tên';
         var avatar = normalizeAvatarUrlMembers(member.avatar || member.avt || '');
         var isFr = Number(member.isFr || 0);
-        var gender = Number(member.gender || 0);
+        var genderDisplay = formatMemberGender(getMemberGenderValue(member));
         var sdob = member.sdob || member.dob || '-';
         var phoneNumber = member.phoneNumber || member.phone || member.mobile || '-';
         var statusText = member.status || member.accountStatus || '-';
-
-        // Zalo thường trả gender: 0 Nam, 1 Nữ
-        var genderDisplay = gender === 1 ? 'Nữ' : 'Nam';
 
         var friendStatus = isFr === 1 ? 'Đã kết bạn' : 'Chưa';
         var friendColor = isFr === 1 ? 'var(--green)' : 'var(--orange)';
@@ -586,10 +777,10 @@ function renderResults(members) {
         html += '<tr data-member-id="' + escapeHtmlMembers(userId) + '" style="cursor:pointer">';
 
         // 1. checkbox
-        html += '<td style="text-align:center"><input type="checkbox" class="member-checkbox" data-user-id="' + escapeHtmlMembers(userId) + '" style="cursor:pointer"></td>';
+        html += '<td class="member-select-col" style="text-align:center"><input type="checkbox" class="member-checkbox" data-user-id="' + escapeHtmlMembers(userId) + '" style="cursor:pointer"></td>';
 
         // 2. avatar
-        html += '<td>';
+        html += '<td class="member-avatar-col">';
         if (avatar) {
             html += '<img src="' + escapeHtmlMembers(avatar) + '" class="avatar-small" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display=\'none\'">';
         } else {
@@ -597,34 +788,36 @@ function renderResults(members) {
         }
         html += '</td>';
 
-        // 3. tên
-        html += '<td>' + escapeHtmlMembers(name) + '</td>';
+        // 3. tên - ẩn ID kỹ thuật khỏi bảng chính, vẫn giữ trong popup chi tiết
+        html += '<td class="member-name-col"><div class="member-name-cell" title="Bấm Xem để mở chi tiết">' + escapeHtmlMembers(name) + '</div></td>';
 
-        // 4. ID
-        html += '<td><code style="font-size:11px;color:var(--text-secondary)">' + escapeHtmlMembers(userId) + '</code></td>';
+        // 4. giới tính
+        html += '<td class="member-gender-col">' + escapeHtmlMembers(genderDisplay) + '</td>';
 
-        // 5. giới tính
-        html += '<td>' + escapeHtmlMembers(genderDisplay) + '</td>';
+        // 5. ngày sinh
+        html += '<td class="member-dob-col"><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlMembers(sdob) + '</span></td>';
 
-        // 6. ngày sinh
-        html += '<td><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlMembers(sdob) + '</span></td>';
+        // 6. số điện thoại
+        html += '<td class="member-phone-col"><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlMembers(phoneNumber) + '</span></td>';
 
-        // 7. số điện thoại
-        html += '<td><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlMembers(phoneNumber) + '</span></td>';
+        // 7. trạng thái - chỉ hiển thị rút gọn, bấm vào để xem đầy đủ
+        html += '<td class="member-status-col">';
+        html += '<button type="button" class="member-status-preview" title="Bấm để xem đầy đủ trạng thái" onclick="event.stopPropagation(); openMemberStatusDetail(\'' + escapeJsStringMembers(userId) + '\')">';
+        html += '<span class="member-status-text">' + escapeHtmlMembers(statusText) + '</span>';
+        html += '</button>';
+        html += '</td>';
 
-        // 8. trạng thái
-        html += '<td><span class="member-status-text" title="' + escapeHtmlMembers(statusText) + '">' + escapeHtmlMembers(statusText) + '</span></td>';
+        // 8. kết bạn
+        html += '<td class="member-friend-col"><span class="status-badge" style="color:' + friendColor + ';background-color:' + friendBgColor + ';font-weight:500">' + escapeHtmlMembers(friendStatus) + '</span></td>';
 
-        // 9. kết bạn
-        html += '<td><span class="status-badge" style="color:' + friendColor + ';background-color:' + friendBgColor + ';font-weight:500">' + escapeHtmlMembers(friendStatus) + '</span></td>';
-
-        // 10. xem
-        html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); showMemberProfile(\'' + escapeHtmlMembers(userId) + '\')" style="cursor:pointer">Xem</button></td>';
+        // 9. xem
+        html += '<td class="member-view-col"><button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); showMemberProfile(\'' + escapeHtmlMembers(userId) + '\')" style="cursor:pointer">Xem</button></td>';
 
         html += '</tr>';
     });
 
     tbody.innerHTML = html;
+    updateMemberActionState();
 
     bindMemberRowClick();
 
@@ -670,6 +863,50 @@ function getSelectedMembers() {
     });
     
     return selectedMembers;
+}
+
+
+// ─── Member Status Detail Modal ───────────────────────────────────────────────
+function getMemberDisplayName(member) {
+    if (!member) return '-';
+    return member.zaloName || member.displayName || member.dName || member.name || 'Không tên';
+}
+
+function getMemberStatusText(member) {
+    if (!member) return '-';
+    var status = member.status || member.accountStatus || member.bio || member.description || '-';
+    status = String(status || '-').trim();
+    return status || '-';
+}
+
+function openMemberStatusDetail(userId) {
+    var modal = document.getElementById('memberStatusBackdrop');
+    if (!modal) return;
+
+    var member = null;
+    if (window._lastFetchedData && Array.isArray(window._lastFetchedData)) {
+        member = window._lastFetchedData.find(function(m) {
+            return String(m.userId || m.id || '') === String(userId || '');
+        });
+    }
+
+    var nameEl = document.getElementById('memberStatusName');
+    var uidEl = document.getElementById('memberStatusUid');
+    var textEl = document.getElementById('memberStatusText');
+
+    if (nameEl) nameEl.textContent = getMemberDisplayName(member);
+    if (uidEl) uidEl.textContent = userId || '-';
+    if (textEl) textEl.textContent = getMemberStatusText(member);
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeMemberStatusDetail() {
+    var modal = document.getElementById('memberStatusBackdrop');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
 }
 
 // ─── Member Profile Modal ────────────────────────────────────────────────────
@@ -720,6 +957,11 @@ async function showMemberProfile(userId) {
         
         if (result.error) {
             console.error('[showMemberProfile] API error:', result.error);
+            // Nếu bảng đã có dữ liệu từ backend thì giữ popup đang mở, không đóng modal.
+            if (memberData) {
+                setStatus('Đã hiển thị dữ liệu hiện có. API chi tiết đang bị giới hạn: ' + result.error, 'warning');
+                return;
+            }
             setStatus('Lỗi: ' + result.error, 'error');
             profileBackdrop.classList.remove('visible');
             profileBackdrop.style.display = 'none';
@@ -728,14 +970,35 @@ async function showMemberProfile(userId) {
         
         if (!result.profile) {
             console.warn('[showMemberProfile] No profile returned');
+            if (memberData) {
+                setStatus('Đã hiển thị dữ liệu hiện có. Chưa lấy thêm được profile chi tiết.', 'warning');
+                return;
+            }
             setStatus('Không lấy được profile', 'error');
             profileBackdrop.classList.remove('visible');
             profileBackdrop.style.display = 'none';
             return;
         }
         
-        // Populate and show modal
-        populateProfileModal(result.profile);
+        // Merge profile chi tiết vào cache + bảng để dòng vừa bấm cũng cập nhật giới tính/ngày sinh.
+        var detailedProfile = Object.assign({}, memberData || {}, result.profile || {});
+        detailedProfile.userId = detailedProfile.userId || userId;
+        populateProfileModal(detailedProfile);
+
+        if (window._lastFetchedData && Array.isArray(window._lastFetchedData)) {
+            for (var i = 0; i < window._lastFetchedData.length; i++) {
+                var rowUid = window._lastFetchedData[i].userId || window._lastFetchedData[i].id;
+                if (String(rowUid) === String(userId)) {
+                    window._lastFetchedData[i] = Object.assign({}, window._lastFetchedData[i], detailedProfile);
+                    break;
+                }
+            }
+            renderResults(window._lastFetchedData);
+            saveMembersToStorage();
+        }
+        if (typeof _membersCache !== 'undefined' && _membersCache) {
+            _membersCache[userId] = detailedProfile;
+        }
         
     } catch (err) {
         console.error('[showMemberProfile] Fetch error:', err);
@@ -797,7 +1060,7 @@ function populateProfileModal(profile) {
             { label: 'User ID', value: profile.userId || '-' },
             { label: 'Số điện thoại', value: profile.phoneNumber || '-' },
             { label: 'Trạng thái', value: profile.status || '-' },
-            { label: 'Giới tính', value: profile.gender === 1 ? 'Nữ' : 'Nam' },
+            { label: 'Giới tính', value: formatMemberGender(getMemberGenderValue(profile)) },
             { label: 'Ngày sinh', value: profile.sdob || '-' },
             { label: 'Kết bạn', value: isFriendStatus }
         ];
@@ -930,6 +1193,335 @@ function submitCreateGroup() {
 }
 
 
+// ─── Invite To Existing Groups Modal ─────────────────────────────────────────
+
+window._igSelectedMembers = [];
+window._igGroups = [];
+
+function getInviteTargetMembers() {
+    var selectedMembers = getSelectedMembers();
+    if (selectedMembers.length > 0) return selectedMembers;
+    return Array.isArray(_lastFetchedData) ? _lastFetchedData.slice() : [];
+}
+
+function openInviteGroupModal() {
+    if (!_lastFetchedData.length) {
+        setStatus('Chưa có danh sách thành viên. Vui lòng quét nhóm trước!', 'error');
+        return;
+    }
+
+    var accountId = document.getElementById('memberAccountId') ? document.getElementById('memberAccountId').value.trim() : '';
+    if (!accountId) {
+        setStatus('Vui lòng chọn tài khoản thực hiện trước khi mời vào nhóm.', 'error');
+        return;
+    }
+
+    var selectedMembers = getInviteTargetMembers();
+    if (!selectedMembers.length) {
+        setStatus('Danh sách thành viên đang trống.', 'error');
+        return;
+    }
+
+    window._igSelectedMembers = selectedMembers;
+
+    var selectedCount = getSelectedMembers().length;
+    var countText = selectedMembers.length + ' thành viên';
+    if (selectedCount === 0) countText += ' · dùng toàn bộ danh sách';
+    var countEl = document.getElementById('igMemberCount');
+    if (countEl) countEl.textContent = countText;
+
+    var previewNames = selectedMembers.slice(0, 6).map(function(m) {
+        return m.zaloName || m.displayName || m.name || m.userId || m.id || 'Không tên';
+    }).join(', ');
+    if (selectedMembers.length > 6) previewNames += ' ... (+' + (selectedMembers.length - 6) + ' khác)';
+
+    var preview = document.getElementById('igMembersPreview');
+    if (preview) {
+        preview.innerHTML = '<strong>Sẽ mời:</strong> ' + escapeHtmlMembers(previewNames) +
+            (selectedCount === 0 ? '<div class="ig-hint">Bạn chưa tick riêng ai nên hệ thống sẽ dùng toàn bộ danh sách hiện có.</div>' : '');
+    }
+
+    var status = document.getElementById('igStatus');
+    if (status) {
+        status.textContent = '';
+        status.className = 'overlay-status';
+    }
+    var search = document.getElementById('igGroupSearch');
+    if (search) search.value = '';
+    var startDate = document.getElementById('igStartDate');
+    if (startDate && !startDate.value) startDate.value = getIgLocalDateString();
+    var consent = document.getElementById('igConsentConfirm');
+    if (consent) consent.checked = false;
+    updateIgSchedulePreview();
+    var btn = document.getElementById('igSubmitBtn');
+    if (btn) btn.disabled = true;
+    var btnTxt = document.getElementById('igBtnText');
+    if (btnTxt) btnTxt.textContent = 'Xác nhận lưu kế hoạch';
+
+    var backdrop = document.getElementById('inviteGroupBackdrop');
+    if (backdrop) {
+        backdrop.classList.add('visible');
+        backdrop.style.display = 'flex';
+    }
+
+    loadInviteGroups(accountId);
+}
+
+function closeInviteGroupModal() {
+    var backdrop = document.getElementById('inviteGroupBackdrop');
+    if (backdrop) {
+        backdrop.classList.remove('visible');
+        backdrop.style.display = 'none';
+    }
+}
+
+function loadInviteGroups(accountId) {
+    var list = document.getElementById('igGroupsList');
+    var btn = document.getElementById('igSubmitBtn');
+    if (list) list.innerHTML = '<div class="invite-group-empty">Đang tải danh sách nhóm...</div>';
+    if (btn) btn.disabled = true;
+
+    fetch('/api/groups/personal?accountId=' + encodeURIComponent(accountId))
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
+            if (!result.success) {
+                window._igGroups = [];
+                if (list) list.innerHTML = '<div class="invite-group-empty error">' + escapeHtmlMembers(result.error || 'Không tải được danh sách nhóm') + '</div>';
+                return;
+            }
+            window._igGroups = Array.isArray(result.groups) ? result.groups : [];
+            renderInviteGroups(window._igGroups);
+        })
+        .catch(function(err) {
+            window._igGroups = [];
+            if (list) list.innerHTML = '<div class="invite-group-empty error">Lỗi tải nhóm: ' + escapeHtmlMembers(err.message) + '</div>';
+        });
+}
+
+function renderInviteGroups(groups) {
+    var list = document.getElementById('igGroupsList');
+    if (!list) return;
+
+    if (!groups || !groups.length) {
+        list.innerHTML = '<div class="invite-group-empty">Tài khoản này chưa có danh sách nhóm. Hãy mở tài khoản để hệ thống đồng bộ nhóm cá nhân trước.</div>';
+        updateInviteSubmitState();
+        return;
+    }
+
+    var html = '';
+    groups.forEach(function(g) {
+        var gid = String(g.groupId || g.gridId || g.id || '').trim();
+        if (!gid) return;
+        var name = g.name || g.groupName || ('Nhóm ' + gid.slice(0, 8));
+        var avatar = normalizeAvatarUrlMembers(g.avatar || g.fullAvt || g.avt || '');
+        var memberCount = g.memberCount || g.totalMember || g.total || 0;
+        html += '<label class="invite-group-item" data-group-name="' + escapeHtmlMembers(String(name).toLowerCase()) + '">';
+        html += '<input type="checkbox" class="ig-group-checkbox" value="' + escapeHtmlMembers(gid) + '" onchange="updateInviteSubmitState()">';
+        if (avatar) {
+            html += '<img src="' + escapeHtmlMembers(avatar) + '" class="invite-group-avatar" onerror="this.style.display=\'none\'">';
+        } else {
+            html += '<span class="invite-group-avatar placeholder"></span>';
+        }
+        html += '<span class="invite-group-info"><b>' + escapeHtmlMembers(name) + '</b><small>ID: ' + escapeHtmlMembers(gid) + (memberCount ? ' · ' + escapeHtmlMembers(memberCount) + ' thành viên' : '') + '</small></span>';
+        html += '</label>';
+    });
+
+    list.innerHTML = html || '<div class="invite-group-empty">Không tìm thấy nhóm hợp lệ.</div>';
+    updateInviteSubmitState();
+}
+
+function filterInviteGroups() {
+    var keyword = (document.getElementById('igGroupSearch') ? document.getElementById('igGroupSearch').value : '').trim().toLowerCase();
+    document.querySelectorAll('.invite-group-item').forEach(function(item) {
+        var name = item.getAttribute('data-group-name') || '';
+        item.style.display = !keyword || name.indexOf(keyword) !== -1 ? 'flex' : 'none';
+    });
+}
+
+function getSelectedInviteGroupIds() {
+    return Array.prototype.slice.call(document.querySelectorAll('.ig-group-checkbox:checked'))
+        .map(function(cb) { return cb.value; })
+        .filter(Boolean);
+}
+
+function getSelectedInviteGroupObjects() {
+    var selected = new Set(getSelectedInviteGroupIds().map(String));
+    return (Array.isArray(window._igGroups) ? window._igGroups : [])
+        .map(function(g) {
+            var gid = String(g.groupId || g.gridId || g.id || '').trim();
+            if (!gid || !selected.has(gid)) return null;
+            return {
+                groupId: gid,
+                name: g.name || g.groupName || gid,
+                avatar: g.avatar || g.fullAvt || g.avt || '',
+                memberCount: g.memberCount || g.totalMember || g.total || 0
+            };
+        })
+        .filter(Boolean);
+}
+
+function getIgLocalDateString() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+}
+
+function updateIgSchedulePreview() {
+    var preview = document.getElementById('igSchedulePreview');
+    if (!preview) return;
+
+    var total = Array.isArray(window._igSelectedMembers) ? window._igSelectedMembers.length : 0;
+    var dailyLimit = parseInt((document.getElementById('igDailyLimit') || {}).value || '0', 10);
+    var startDate = (document.getElementById('igStartDate') || {}).value || getIgLocalDateString();
+
+    if (!total) {
+        preview.textContent = 'Chưa có người để lập lịch.';
+        updateInviteSubmitState();
+        return;
+    }
+    if (!dailyLimit || dailyLimit < 1) {
+        preview.textContent = 'Số người mỗi ngày phải lớn hơn 0.';
+        updateInviteSubmitState();
+        return;
+    }
+
+    var days = Math.ceil(total / dailyLimit);
+    preview.textContent = 'Dự kiến: ' + total + ' người · ' + dailyLimit + ' người/ngày · bắt đầu ' + startDate + ' · hoàn tất trong ' + days + ' ngày.';
+    updateInviteSubmitState();
+}
+
+function updateInviteSubmitState() {
+    var btn = document.getElementById('igSubmitBtn');
+    if (!btn) return;
+    var hasGroups = getSelectedInviteGroupIds().length > 0;
+    var hasMembers = Array.isArray(window._igSelectedMembers) && window._igSelectedMembers.length > 0;
+    var dailyLimit = parseInt((document.getElementById('igDailyLimit') || {}).value || '0', 10);
+    var consent = document.getElementById('igConsentConfirm') ? document.getElementById('igConsentConfirm').checked : false;
+    btn.disabled = !(hasGroups && hasMembers && dailyLimit > 0 && consent);
+}
+
+function submitInviteGroups() {
+    var accountId = document.getElementById('memberAccountId') ? document.getElementById('memberAccountId').value.trim() : '';
+    var groupIds = getSelectedInviteGroupIds();
+    var targetGroups = getSelectedInviteGroupObjects();
+    var selectedMembers = window._igSelectedMembers || [];
+    var dailyLimit = parseInt((document.getElementById('igDailyLimit') || {}).value || '0', 10);
+    var startDate = (document.getElementById('igStartDate') || {}).value || getIgLocalDateString();
+    var consent = document.getElementById('igConsentConfirm') ? document.getElementById('igConsentConfirm').checked : false;
+    var status = document.getElementById('igStatus');
+    var btn = document.getElementById('igSubmitBtn');
+    var btnTxt = document.getElementById('igBtnText');
+
+    if (!accountId) {
+        status.textContent = 'Chưa chọn tài khoản thực hiện.';
+        status.className = 'overlay-status error';
+        return;
+    }
+    if (!groupIds.length) {
+        status.textContent = 'Vui lòng chọn ít nhất 1 nhóm.';
+        status.className = 'overlay-status error';
+        return;
+    }
+    if (!selectedMembers.length) {
+        status.textContent = 'Danh sách thành viên cần mời đang trống.';
+        status.className = 'overlay-status error';
+        return;
+    }
+    if (!dailyLimit || dailyLimit < 1) {
+        status.textContent = 'Số người mỗi ngày phải lớn hơn 0.';
+        status.className = 'overlay-status error';
+        var dailyInput = document.getElementById('igDailyLimit');
+        if (dailyInput) dailyInput.focus();
+        return;
+    }
+    if (!startDate) {
+        status.textContent = 'Vui lòng chọn ngày bắt đầu.';
+        status.className = 'overlay-status error';
+        return;
+    }
+    if (!consent) {
+        status.textContent = 'Bạn cần xác nhận danh sách người nhận hợp lệ/được phép mời trước khi lưu kế hoạch.';
+        status.className = 'overlay-status error';
+        return;
+    }
+
+    var payloadMembers = selectedMembers.map(function(member) {
+        return {
+            userId: String(member.userId || member.id || '').trim(),
+            name: member.zaloName || member.name || member.displayName || '',
+            avatar: member.avatar || member.avt || '',
+            phone: member.phone || '',
+            isFriend: member.isFr || member.isFriend || ''
+        };
+    }).filter(function(m) { return m.userId; });
+
+    if (!payloadMembers.length) {
+        status.textContent = 'Không tìm thấy UID hợp lệ trong danh sách đã chọn.';
+        status.className = 'overlay-status error';
+        return;
+    }
+
+    btn.disabled = true;
+    if (btnTxt) btnTxt.textContent = 'Đang lưu...';
+    status.textContent = 'Đang tạo kế hoạch chia lịch mời vào nhóm...';
+    status.className = 'overlay-status';
+
+    fetch('/api/group-invite-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            accountId: accountId,
+            groupIds: groupIds,
+            targetGroupIds: groupIds,
+            targetGroups: targetGroups,
+            dailyLimit: dailyLimit,
+            startDate: startDate,
+            members: payloadMembers,
+            confirmConsent: consent
+        })
+    })
+    .then(function(r) { return r.json().then(function(json) { json._httpOk = r.ok; return json; }); })
+    .then(function(result) {
+        if (!result.success) {
+            status.textContent = result.error || 'Không lưu được kế hoạch mời vào nhóm.';
+            status.className = 'overlay-status error';
+            btn.disabled = false;
+            if (btnTxt) btnTxt.textContent = 'Xác nhận lưu kế hoạch';
+            return;
+        }
+
+        var plan = result.plan || {};
+        var batches = Array.isArray(plan.batches) ? plan.batches : [];
+        var html = '<div><strong>' + escapeHtmlMembers(result.message || 'Đã lưu kế hoạch mời vào nhóm.') + '</strong></div>';
+        html += '<div class="ig-hint">Trạng thái: chờ xác nhận thủ công từng batch. Không tự động mời hàng loạt.</div>';
+        if (batches.length) {
+            html += '<div class="ig-result-list">';
+            batches.slice(0, 8).forEach(function(b) {
+                html += '<div class="ig-result-row success"><span>📅</span><b>Ngày ' + escapeHtmlMembers(b.day) + '</b><small>' + escapeHtmlMembers(b.date) + ' · ' + escapeHtmlMembers(b.count) + ' người</small></div>';
+            });
+            if (batches.length > 8) {
+                html += '<div class="ig-result-row warning"><span>…</span><b>Còn ' + escapeHtmlMembers(batches.length - 8) + ' ngày</b><small>xem trong file dữ liệu kế hoạch</small></div>';
+            }
+            html += '</div>';
+        }
+        status.innerHTML = html;
+        status.className = 'overlay-status success';
+        showMemberToast(result.message || 'Đã lưu kế hoạch mời vào nhóm.', 'success');
+        btn.disabled = false;
+        if (btnTxt) btnTxt.textContent = 'Đã lưu kế hoạch!';
+        setTimeout(closeInviteGroupModal, 2200);
+    })
+    .catch(function(err) {
+        status.textContent = 'Lỗi: ' + err.message;
+        status.className = 'overlay-status error';
+        btn.disabled = false;
+        if (btnTxt) btnTxt.textContent = 'Xác nhận lưu kế hoạch';
+    });
+}
+
+
+
 // ─── Khôi phục dữ liệu members từ localStorage khi reload ──────────────────
 
 function restoreMembersOnLoad() {
@@ -959,12 +1551,39 @@ function restoreMembersOnLoad() {
     if (_lastFetchedData.length > 0) {
         renderResults(_lastFetchedData);
         var clearBtn = document.getElementById('clearMembersBtn');
-        if (clearBtn) clearBtn.style.display = 'inline-block';
+        if (clearBtn) clearBtn.style.display = 'inline-flex';
+        updateMemberActionState();
         setStatus('Đã khôi phục ' + _lastFetchedData.length + ' thành viên (dữ liệu lần quét trước)', 'info');
     }
 }
 
 // ─── Xóa dữ liệu members đã lưu ────────────────────────────────────────────
+
+
+function openClearMembersConfirm() {
+    if (!Array.isArray(_lastFetchedData) || _lastFetchedData.length === 0) {
+        setStatus('Chưa có danh sách thành viên để xóa.', 'info');
+        return;
+    }
+    var backdrop = document.getElementById('clearMembersConfirmBackdrop');
+    if (backdrop) {
+        backdrop.classList.add('open');
+        backdrop.setAttribute('aria-hidden', 'false');
+    }
+}
+
+function closeClearMembersConfirm() {
+    var backdrop = document.getElementById('clearMembersConfirmBackdrop');
+    if (backdrop) {
+        backdrop.classList.remove('open');
+        backdrop.setAttribute('aria-hidden', 'true');
+    }
+}
+
+function confirmClearSavedMembers() {
+    closeClearMembersConfirm();
+    clearSavedMembers();
+}
 
 function clearSavedMembers() {
     _lastFetchedData = [];
@@ -991,128 +1610,188 @@ function clearSavedMembers() {
     
     var clearBtn = document.getElementById('clearMembersBtn');
     if (clearBtn) clearBtn.style.display = 'none';
-    setStatus('Đã xóa dữ liệu đã lưu.', 'info');
+    updateMemberActionState();
+    setStatus('Đã xóa danh sách thành viên đã lưu.', 'info');
 }
 
 // ─── Add Friend Modal ──────────────────────────────────────────────────────
+
+function getAfLocalDateString(offsetDays) {
+    var d = new Date();
+    d.setDate(d.getDate() + (offsetDays || 0));
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+}
+
+function addDaysToDateString(dateString, days) {
+    var parts = String(dateString || getAfLocalDateString()).split('-').map(Number);
+    var d = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+    d.setDate(d.getDate() + (days || 0));
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return dd + '/' + mm + '/' + yyyy;
+}
+
+function updateAfSchedulePreview() {
+    var selectedMembers = window._afSelectedMembers || [];
+    var total = selectedMembers.length;
+    var dailyInput = document.getElementById('afDailyLimit');
+    var startInput = document.getElementById('afStartDate');
+    var preview = document.getElementById('afSchedulePreview');
+    if (!preview) return;
+    var daily = parseInt(dailyInput && dailyInput.value ? dailyInput.value : '1', 10);
+    if (!daily || daily < 1) daily = 1;
+    if (dailyInput && Number(dailyInput.value) !== daily) dailyInput.value = daily;
+    var startDate = startInput && startInput.value ? startInput.value : getAfLocalDateString();
+    var days = total ? Math.ceil(total / daily) : 0;
+    var end = days ? addDaysToDateString(startDate, days - 1) : '';
+    preview.innerHTML = total
+        ? 'Kế hoạch dự kiến: <b>' + escapeHtmlMembers(total) + '</b> người · <b>' + escapeHtmlMembers(daily) + '</b> người/ngày · <b>' + escapeHtmlMembers(days) + '</b> ngày' + (end ? ' · kết thúc khoảng <b>' + escapeHtmlMembers(end) + '</b>' : '')
+        : '';
+}
 
 async function loadAddFriendAccounts() {
     try {
         const resp = await fetch('/api/accounts');
         const json = await resp.json();
-        const accounts = json.accounts || [];
-        
-        const container = document.getElementById('afAccountDropdown');
-        if (!container) return;
-        
-        const hiddenInput = document.getElementById('afAccountId');
-        const selectedAcc = accounts[0] || null;
-        
-        // Render selected account
-        function renderSelected(acc) {
-            if (!acc) {
-                return `
-                    <button type="button" class="account-dropdown-button">
-                        <span>Chọn tài khoản</span>
-                    </button>
-                `;
-            }
-            
-            var avatar = normalizeAvatarUrlMembers(acc.avatarUrl || acc.avatar || "");
-            var name = acc.name || acc.accountId || "Không tên";
-            
-            return `
-                <button type="button" class="account-dropdown-button">
-                    ${avatar ? `<img src="${escapeHtmlMembers(avatar)}" class="account-dropdown-avatar" />` : `<span class="account-dropdown-avatar placeholder"></span>`}
-                    <span class="account-dropdown-name">${escapeHtmlMembers(name)}</span>
-                </button>
-            `;
-        }
-        
-        // Render menu
-        function renderMenu() {
-            return `
-                <div class="account-dropdown-menu hidden">
-                    ${accounts.map(acc => {
-                        var avatar = normalizeAvatarUrlMembers(acc.avatarUrl || acc.avatar || "");
-                        var name = acc.name || acc.accountId || "Không tên";
-                        var id = acc.accountId || "";
-                        var ready = acc.cookies && acc.zpwEnk;
-                        var missing = [];
-                        if (!acc.cookies) missing.push('cookies');
-                        if (!acc.zpwEnk) missing.push('zpwEnk');
-                        
-                        return `
-                            <button
-                                type="button"
-                                class="account-dropdown-item ${!ready ? 'disabled' : ''}"
-                                data-account-id="${escapeHtmlMembers(id)}"
-                                ${!ready ? 'disabled' : ''}
-                            >
-                                ${avatar ? `<img src="${escapeHtmlMembers(avatar)}" class="account-dropdown-avatar" />` : `<span class="account-dropdown-avatar placeholder"></span>`}
-                                <span>
-                                    <b>${escapeHtmlMembers(name)}</b><br>
-                                    <small>${!ready ? 'thiếu: ' + missing.join(', ') : ''}</small>
-                                </span>
-                            </button>
-                        `;
-                    }).join("")}
-                </div>
-            `;
-        }
-        
-        container.innerHTML = renderSelected(selectedAcc) + renderMenu();
-        
-        var button = container.querySelector(".account-dropdown-button");
-        var menu = container.querySelector(".account-dropdown-menu");
-        
-        if (selectedAcc && hiddenInput) {
-            hiddenInput.value = selectedAcc.accountId;
-        }
-        
-        button.addEventListener("click", function() {
-            menu.classList.toggle("hidden");
-        });
-        
-        container.querySelectorAll(".account-dropdown-item:not([disabled])").forEach(item => {
-            item.addEventListener("click", function(e) {
-                var accountId = this.dataset.accountId;
-                var acc = accounts.find(a => a.accountId === accountId);
-                if (!acc) return;
-                
-                if (hiddenInput) hiddenInput.value = accountId;
-                button.innerHTML = renderSelected(acc).split('</button>')[0].split('>')[1];
-                button.parentElement.innerHTML = renderSelected(acc) + renderMenu();
-                
-                // Auto-fill message with account name
-                var accountName = acc.name || acc.accountId;
-                var defaultMsg = "Xin chào, mình là " + escapeHtmlMembers(accountName) + ". Kết bạn với mình nhé!";
-                document.getElementById('afMessage').value = defaultMsg;
-                
-                // Re-attach event listener to new button
-                var newButton = container.querySelector(".account-dropdown-button");
-                var newMenu = container.querySelector(".account-dropdown-menu");
-                newButton.addEventListener("click", function() {
-                    newMenu.classList.toggle("hidden");
-                });
+        const accounts = Array.isArray(json.accounts) ? json.accounts : [];
+        window._afAccounts = accounts;
+
+        var select = document.getElementById('afAccountSelect');
+        var hidden = document.getElementById('afAccountId');
+        if (!select || !hidden) return;
+
+        var currentAccountId = '';
+        var memberAcc = document.getElementById('memberAccountId');
+        if (memberAcc && memberAcc.value) currentAccountId = memberAcc.value.trim();
+
+        var readyAccounts = accounts.filter(function(acc) { return acc && acc.accountId && acc.cookies && acc.zpwEnk; });
+        var html = '';
+        if (!readyAccounts.length) {
+            html = '<option value="">Chưa có tài khoản đủ cookies/zpwEnk</option>';
+        } else {
+            readyAccounts.forEach(function(acc) {
+                var name = acc.name || acc.accountId || 'Không tên';
+                var selected = (currentAccountId && acc.accountId === currentAccountId) ? ' selected' : '';
+                html += '<option value="' + escapeHtmlMembers(acc.accountId) + '"' + selected + '>' + escapeHtmlMembers(name) + '</option>';
             });
-        });
-        
-        document.addEventListener("click", function(e) {
-            if (!container.contains(e.target) && menu) {
-                menu.classList.add("hidden");
-            }
-        });
+        }
+        select.innerHTML = html;
+        hidden.value = select.value || '';
+        fillAfDefaultMessage();
+        loadAfGroupsForSelectedAccount();
     } catch (err) {
         console.error('Error loading add friend accounts:', err);
     }
+}
+
+function onAfAccountChange() {
+    var select = document.getElementById('afAccountSelect');
+    var hidden = document.getElementById('afAccountId');
+    if (hidden && select) hidden.value = select.value || '';
+    fillAfDefaultMessage();
+    loadAfGroupsForSelectedAccount();
+}
+
+function fillAfDefaultMessage() {
+    var select = document.getElementById('afAccountSelect');
+    var msg = document.getElementById('afMessage');
+    if (!select || !msg || msg.value.trim()) return;
+    var accountId = select.value || '';
+    var acc = (window._afAccounts || []).find(function(a) { return a.accountId === accountId; });
+    var accountName = acc ? (acc.name || acc.accountId) : '';
+    msg.value = accountName ? ('Xin chào, mình là ' + accountName + '. Kết bạn với mình nhé!') : 'Chào bạn, mình muốn kết bạn với bạn!';
+}
+
+function onAfAfterActionChange() {
+    var action = document.getElementById('afAfterAction') ? document.getElementById('afAfterAction').value : 'none';
+    var existingBox = document.getElementById('afExistingGroupBox');
+    var newBox = document.getElementById('afNewGroupBox');
+    if (existingBox) existingBox.style.display = action === 'invite_existing_group' ? 'block' : 'none';
+    if (newBox) newBox.style.display = action === 'create_new_group' ? 'block' : 'none';
+    if (action === 'invite_existing_group') loadAfGroupsForSelectedAccount();
+}
+
+function loadAfGroupsForSelectedAccount() {
+    var action = document.getElementById('afAfterAction') ? document.getElementById('afAfterAction').value : 'none';
+    if (action !== 'invite_existing_group') return;
+    var accountId = document.getElementById('afAccountId') ? document.getElementById('afAccountId').value.trim() : '';
+    var list = document.getElementById('afGroupsList');
+    if (!list) return;
+    if (!accountId) {
+        list.innerHTML = '<div class="invite-group-empty">Chưa chọn tài khoản.</div>';
+        return;
+    }
+    list.innerHTML = '<div class="invite-group-empty">Đang tải danh sách nhóm...</div>';
+    fetch('/api/groups/personal?accountId=' + encodeURIComponent(accountId))
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
+            if (!result.success) {
+                window._afGroups = [];
+                list.innerHTML = '<div class="invite-group-empty error">' + escapeHtmlMembers(result.error || 'Không tải được danh sách nhóm') + '</div>';
+                return;
+            }
+            window._afGroups = Array.isArray(result.groups) ? result.groups : [];
+            renderAfGroups(window._afGroups);
+        })
+        .catch(function(err) {
+            window._afGroups = [];
+            list.innerHTML = '<div class="invite-group-empty error">Lỗi tải nhóm: ' + escapeHtmlMembers(err.message) + '</div>';
+        });
+}
+
+function renderAfGroups(groups) {
+    var list = document.getElementById('afGroupsList');
+    if (!list) return;
+    if (!groups || !groups.length) {
+        list.innerHTML = '<div class="invite-group-empty">Tài khoản này chưa có danh sách nhóm. Hãy bấm Làm mới ở mục Nhóm cá nhân trước.</div>';
+        return;
+    }
+    var html = '';
+    groups.forEach(function(g) {
+        var gid = String(g.groupId || g.gridId || g.id || '').trim();
+        if (!gid) return;
+        var name = g.name || g.groupName || ('Nhóm ' + gid.slice(0, 8));
+        var avatar = normalizeAvatarUrlMembers(g.avatar || g.fullAvt || g.avt || '');
+        var memberCount = g.memberCount || g.totalMember || g.total || 0;
+        html += '<label class="invite-group-item af-group-item" data-group-name="' + escapeHtmlMembers(String(name).toLowerCase()) + '">';
+        html += '<input type="checkbox" class="af-group-checkbox" value="' + escapeHtmlMembers(gid) + '" data-name="' + escapeHtmlMembers(name) + '">';
+        if (avatar) html += '<img src="' + escapeHtmlMembers(avatar) + '" class="invite-group-avatar" onerror="this.style.display=\'none\'">';
+        else html += '<span class="invite-group-avatar placeholder"></span>';
+        html += '<span class="invite-group-info"><b>' + escapeHtmlMembers(name) + '</b><small>ID: ' + escapeHtmlMembers(gid) + (memberCount ? ' · ' + escapeHtmlMembers(memberCount) + ' thành viên' : '') + '</small></span>';
+        html += '</label>';
+    });
+    list.innerHTML = html || '<div class="invite-group-empty">Không tìm thấy nhóm hợp lệ.</div>';
+}
+
+function filterAfGroups() {
+    var keyword = (document.getElementById('afGroupSearch') ? document.getElementById('afGroupSearch').value : '').trim().toLowerCase();
+    document.querySelectorAll('.af-group-item').forEach(function(item) {
+        var name = item.getAttribute('data-group-name') || '';
+        item.style.display = !keyword || name.indexOf(keyword) !== -1 ? 'flex' : 'none';
+    });
+}
+
+function getSelectedAfGroupIds() {
+    return Array.prototype.slice.call(document.querySelectorAll('.af-group-checkbox:checked'))
+        .map(function(cb) { return cb.value; })
+        .filter(Boolean);
+}
+
+function getSelectedAfGroupObjects() {
+    return Array.prototype.slice.call(document.querySelectorAll('.af-group-checkbox:checked')).map(function(cb) {
+        return { groupId: cb.value, name: cb.getAttribute('data-name') || cb.value };
+    });
 }
 
 function openAddFriendModal() {
     var selectedMembers = getSelectedMembers();
     
     if (selectedMembers.length === 0) {
-        setStatus('Vui lòng chọn ít nhất 1 người để gửi kết bạn!', 'error');
+        setStatus('Vui lòng chọn ít nhất 1 người để lập lịch kết bạn!', 'error');
         return;
     }
 
@@ -1120,35 +1799,50 @@ function openAddFriendModal() {
     status.textContent = '';
     status.className = 'overlay-status';
     
-    // Display selected members
     var selectedList = document.getElementById('afSelectedList');
     var listHtml = '';
     selectedMembers.forEach(function(member) {
         var avatar = normalizeAvatarUrlMembers(member.avatar || member.avt || '');
         var name = member.zaloName || member.name || 'Không tên';
-        listHtml += '<div style="padding:8px;background:var(--bg-hover);border-radius:4px;margin-bottom:6px;display:flex;align-items:center;gap:8px;font-size:13px;">';
-        if (avatar) {
-            listHtml += '<img src="' + escapeHtmlMembers(avatar) + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover">';
-        } else {
-            listHtml += '<div style="width:32px;height:32px;border-radius:50%;background:var(--text-secondary);opacity:0.3"></div>';
-        }
-        listHtml += '<span>' + escapeHtmlMembers(name) + '</span>';
+        var uid = member.userId || member.id || '';
+        listHtml += '<div style="padding:8px;background:var(--bg-hover);border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px;font-size:13px;">';
+        if (avatar) listHtml += '<img src="' + escapeHtmlMembers(avatar) + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover">';
+        else listHtml += '<div style="width:32px;height:32px;border-radius:50%;background:var(--text-secondary);opacity:0.3"></div>';
+        listHtml += '<span style="min-width:0"><b>' + escapeHtmlMembers(name) + '</b><br><small style="color:var(--text-secondary)">' + escapeHtmlMembers(uid) + '</small></span>';
         listHtml += '</div>';
     });
     selectedList.innerHTML = listHtml || '<div style="color:var(--text-secondary);font-size:13px;text-align:center;">Chưa chọn ai</div>';
-    
-    // Store selected members for submit
     window._afSelectedMembers = selectedMembers;
+    window._afGroups = [];
     
-    document.getElementById('afMessage').value = 'Chào bạn, mình muốn kết bạn với bạn!';
+    var msg = document.getElementById('afMessage');
+    if (msg) msg.value = '';
+    var daily = document.getElementById('afDailyLimit');
+    if (daily) daily.value = Math.min(Math.max(selectedMembers.length, 1), 20);
+    var startDate = document.getElementById('afStartDate');
+    if (startDate) startDate.value = getAfLocalDateString();
+    var afterAction = document.getElementById('afAfterAction');
+    if (afterAction) afterAction.value = 'none';
+    var consent = document.getElementById('afConsentConfirm');
+    if (consent) consent.checked = false;
+    var newGroupName = document.getElementById('afNewGroupName');
+    if (newGroupName) newGroupName.value = '';
+    var groupSearch = document.getElementById('afGroupSearch');
+    if (groupSearch) groupSearch.value = '';
+    onAfAfterActionChange();
+
     document.getElementById('afSubmitBtn').disabled = false;
-    document.getElementById('afBtnText').textContent = 'Gửi Kết Bạn';
+    document.getElementById('afBtnText').textContent = 'Lưu kế hoạch';
 
     loadAddFriendAccounts();
+    updateAfSchedulePreview();
 
     document.getElementById('addFriendBackdrop').classList.add('visible');
     document.getElementById('addFriendBackdrop').style.display = 'flex';
-    document.getElementById('afMessage').focus();
+    setTimeout(function() {
+        var messageBox = document.getElementById('afMessage');
+        if (messageBox) messageBox.focus();
+    }, 50);
 }
 
 function closeAddFriendModal() {
@@ -1160,6 +1854,24 @@ function closeAddFriendModal() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Invite Group Modal close button
+    var igCloseBtn = document.getElementById('igCloseBtn');
+    if (igCloseBtn) {
+        igCloseBtn.addEventListener('click', closeInviteGroupModal);
+    }
+
+    var igBackdrop = document.getElementById('inviteGroupBackdrop');
+    if (igBackdrop) {
+        igBackdrop.addEventListener('click', function(e) {
+            if (e.target === this) closeInviteGroupModal();
+        });
+    }
+
+    var igConsent = document.getElementById('igConsentConfirm');
+    if (igConsent) {
+        igConsent.addEventListener('change', updateInviteSubmitState);
+    }
+
     // Add Friend Modal close button
     var afCloseBtn = document.getElementById('afCloseBtn');
     if (afCloseBtn) {
@@ -1189,8 +1901,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+        closeInviteGroupModal();
         closeAddFriendModal();
         closeMemberProfile();
+        closeMemberLogDrawer();
     }
 });
 
@@ -1201,88 +1915,132 @@ function submitAddFriend() {
     var btn = document.getElementById('afSubmitBtn');
     var btnTxt = document.getElementById('afBtnText');
     var selectedMembers = window._afSelectedMembers || [];
+    var dailyLimit = parseInt(document.getElementById('afDailyLimit').value || '0', 10);
+    var startDate = document.getElementById('afStartDate').value || getAfLocalDateString();
+    var afterAction = document.getElementById('afAfterAction').value || 'none';
+    var targetGroupIds = getSelectedAfGroupIds();
+    var targetGroups = getSelectedAfGroupObjects();
+    var newGroupName = (document.getElementById('afNewGroupName') ? document.getElementById('afNewGroupName').value.trim() : '');
+    var consent = document.getElementById('afConsentConfirm') ? document.getElementById('afConsentConfirm').checked : false;
 
     if (!accountId) {
-        status.textContent = 'Vui lòng chọn tài khoản gửi!';
+        status.textContent = 'Vui lòng chọn tài khoản thực hiện!';
         status.className = 'overlay-status error';
         return;
     }
-
     if (selectedMembers.length === 0) {
-        status.textContent = 'Vui lòng chọn ít nhất 1 người để gửi!';
+        status.textContent = 'Vui lòng chọn ít nhất 1 người để lập lịch!';
         status.className = 'overlay-status error';
         return;
     }
-
+    if (!dailyLimit || dailyLimit < 1) {
+        status.textContent = 'Số người mỗi ngày phải lớn hơn 0.';
+        status.className = 'overlay-status error';
+        document.getElementById('afDailyLimit').focus();
+        return;
+    }
     if (!message) {
         status.textContent = 'Vui lòng nhập nội dung lời mời!';
         status.className = 'overlay-status error';
         document.getElementById('afMessage').focus();
         return;
     }
+    if (afterAction === 'invite_existing_group' && targetGroupIds.length === 0) {
+        status.textContent = 'Vui lòng chọn ít nhất 1 nhóm đích.';
+        status.className = 'overlay-status error';
+        return;
+    }
+    if (afterAction === 'create_new_group' && !newGroupName) {
+        status.textContent = 'Vui lòng nhập tên nhóm mới.';
+        status.className = 'overlay-status error';
+        document.getElementById('afNewGroupName').focus();
+        return;
+    }
+    if (!consent) {
+        status.textContent = 'Bạn cần xác nhận danh sách người nhận hợp lệ/được phép liên hệ trước khi lưu kế hoạch.';
+        status.className = 'overlay-status error';
+        return;
+    }
 
     btn.disabled = true;
-    btnTxt.textContent = 'Đang gửi...';
-    status.textContent = '';
+    btnTxt.textContent = 'Đang lưu...';
+    status.textContent = 'Đang tạo kế hoạch chia lịch...';
     status.className = 'overlay-status';
 
-    var totalCount = selectedMembers.length;
-    var successCount = 0;
-    var failCount = 0;
-    var results = [];
+    var payloadMembers = selectedMembers.map(function(member) {
+        return {
+            userId: String(member.userId || member.id || '').trim(),
+            name: member.zaloName || member.name || '',
+            avatar: member.avatar || member.avt || '',
+            phone: member.phone || '',
+            isFriend: member.isFr || member.isFriend || ''
+        };
+    }).filter(function(m) { return m.userId; });
 
-    // Send friend request to each selected member
-    var sendRequests = selectedMembers.map(function(member) {
-        var toId = member.userId || member.id;
-        return fetch('/api/send-friend-request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accountId: accountId, toId: toId, message: message })
+    fetch('/api/friend-request-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            accountId: accountId,
+            message: message,
+            dailyLimit: dailyLimit,
+            startDate: startDate,
+            members: payloadMembers,
+            afterAction: afterAction,
+            targetGroupIds: targetGroupIds,
+            targetGroups: targetGroups,
+            newGroupName: newGroupName,
+            confirmConsent: consent
         })
-        .then(function(r) { return r.json(); })
-        .then(function(result) {
-            var memberName = member.zaloName || member.name || toId;
-            if (result.error) {
-                results.push({ name: memberName, status: 'thất bại', error: result.error });
-                failCount++;
-            } else {
-                results.push({ name: memberName, status: 'thành công' });
-                successCount++;
+    })
+    .then(function(r) { return r.json().then(function(json) { json._httpOk = r.ok; return json; }); })
+    .then(function(result) {
+        if (!result.success) {
+            status.textContent = result.error || 'Không lưu được kế hoạch.';
+            status.className = 'overlay-status error';
+            btn.disabled = false;
+            btnTxt.textContent = 'Lưu kế hoạch';
+            return;
+        }
+        var plan = result.plan || {};
+        var batches = Array.isArray(plan.batches) ? plan.batches : [];
+        var html = '<div><strong>' + escapeHtmlMembers(result.message || 'Đã lưu kế hoạch.') + '</strong></div>';
+        html += '<div class="ig-hint">Trạng thái: chờ xác nhận thủ công từng batch. Không tự động gửi hàng loạt.</div>';
+        if (batches.length) {
+            html += '<div class="ig-result-list">';
+            batches.slice(0, 8).forEach(function(b) {
+                html += '<div class="ig-result-row success"><span>📅</span><b>Ngày ' + escapeHtmlMembers(b.day) + '</b><small>' + escapeHtmlMembers(b.date) + ' · ' + escapeHtmlMembers(b.count) + ' người</small></div>';
+            });
+            if (batches.length > 8) {
+                html += '<div class="ig-result-row warning"><span>…</span><b>Còn ' + escapeHtmlMembers(batches.length - 8) + ' ngày</b><small>xem trong file dữ liệu kế hoạch</small></div>';
             }
-        })
-        .catch(function(err) {
-            var memberName = member.zaloName || member.name || toId;
-            results.push({ name: memberName, status: 'thất bại', error: err.message });
-            failCount++;
-        });
-    });
-
-    Promise.all(sendRequests).then(function() {
-        var resultHtml = '<div style="margin-bottom:12px;"><strong>Kết quả:</strong> ' + successCount + ' thành công, ' + failCount + ' thất bại</div>';
-        resultHtml += '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px;">';
-        results.forEach(function(r) {
-            var icon = r.status === 'thành công' ? '✓' : '✗';
-            var color = r.status === 'thành công' ? 'var(--green)' : 'var(--red)';
-            resultHtml += '<div style="padding:6px;border-bottom:1px solid var(--border);font-size:12px;">';
-            resultHtml += '<span style="color:' + color + ';font-weight:600;">' + icon + '</span> ';
-            resultHtml += '<span>' + escapeHtmlMembers(r.name) + '</span>';
-            if (r.error) {
-                resultHtml += '<div style="color:var(--text-secondary);font-size:11px;margin-left:20px;">' + escapeHtmlMembers(r.error) + '</div>';
-            }
-            resultHtml += '</div>';
-        });
-        resultHtml += '</div>';
-
-        status.innerHTML = resultHtml;
-        status.className = 'overlay-status ' + (failCount === 0 ? 'success' : 'warning');
+            html += '</div>';
+        }
+        status.innerHTML = html;
+        status.className = 'overlay-status success';
+        showMemberToast(result.message || 'Đã lưu kế hoạch kết bạn.', 'success');
         btn.disabled = false;
-        btnTxt.textContent = 'Đã xong!';
-        setTimeout(closeAddFriendModal, 3000);
+        btnTxt.textContent = 'Đã lưu';
+    })
+    .catch(function(err) {
+        status.textContent = 'Lỗi: ' + err.message;
+        status.className = 'overlay-status error';
+        btn.disabled = false;
+        btnTxt.textContent = 'Lưu lại';
     });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    updateMemberActionState();
     loadMemberAccounts().then(function() {
         restoreMembersOnLoad();
+        updateMemberActionState();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeClearMembersConfirm();
+            closeMemberStatusDetail();
+        }
     });
 });

@@ -11,11 +11,19 @@
 
         <div class="schedule-filter-bar">
             <input type="text" id="schedListSearch" placeholder="Tìm theo tiêu đề, nội dung..." oninput="schedFilterSchedulesList()">
+            <select id="schedListTypeFilter" onchange="schedFilterSchedulesList()">
+                <option value="">Tất cả loại lịch</option>
+                <option value="schedule">Lịch gửi tin nhắn</option>
+                <option value="friend">Lịch gửi kết bạn</option>
+                <option value="group_invite">Lịch mời vào nhóm</option>
+            </select>
             <select id="schedListStatusFilter" onchange="schedFilterSchedulesList()">
                 <option value="">Tất cả trạng thái</option>
                 <option value="pending">Chờ</option>
+                <option value="planned">Đã lên kế hoạch</option>
                 <option value="running">Đang chạy</option>
                 <option value="done">Hoàn thành</option>
+                <option value="completed">Hoàn thành kế hoạch</option>
                 <option value="partial">Một phần</option>
                 <option value="failed">Thất bại</option>
                 <option value="cancelled">Đã hủy</option>

@@ -98,6 +98,8 @@ def normalize_account(acc: dict, default_name: str = None) -> dict:
         "createdAt": created,
         "updatedAt": acc.get("updatedAt") or created,
         "personalGroups": acc.get("personalGroups") or [],  # Danh sách nhóm cá nhân
+        "groupsSyncedAt": int(acc.get("groupsSyncedAt") or 0),
+        "groupsSyncStatus": acc.get("groupsSyncStatus", "") or "",
     }
 
     if acc.get("uid"):
@@ -202,6 +204,13 @@ def account_capture_complete(account_id: str) -> bool:
         print(f"[account_capture_complete] userinfoCaptured=False for {account_id[:8]}...")
         return False
     
+    # Khi đang yêu cầu Làm mới nhóm, không được coi dữ liệu cũ là đủ.
+    # Monitor phải tiếp tục chạy cho đến khi bắt được getlg/v4 mới và save_account_groups cập nhật lại trạng thái.
+    groups_sync_status = str(acc.get("groupsSyncStatus") or "").strip().lower()
+    if groups_sync_status in {"opening", "refreshing", "syncing"}:
+        print(f"[account_capture_complete] groupsSyncStatus={groups_sync_status} for {account_id[:8]}..., continue capture")
+        return False
+
     # Kiểm tra personalGroups
     personal_groups = acc.get("personalGroups", [])
     has_groups = False
@@ -276,14 +285,26 @@ def auto_capture_account_imei(account_id: str):
     return None
 
 
-def reset_account_session(account_id: str):
-    """Reset cờ capture để lần Mở tiếp theo trích xuất lại cookies và phiên."""
-    update_account(
-        account_id,
-        loginCaptured=False,
-        userinfoCaptured=False,
-        cookies="",
-    )
+def reset_account_session(account_id: str, clear_groups: bool = True):
+    """
+    Reset cờ capture để lần Mở/Làm mới tiếp theo trích xuất lại cookies và phiên.
+
+    clear_groups=True để không còn hiển thị danh sách nhóm cũ trong lúc đang đồng bộ lại.
+    Nếu không xóa personalGroups cũ, account_capture_complete có thể dừng monitor
+    quá sớm ngay khi login/userinfo/cookies đã đủ, trước khi bắt được getlg/v4 mới.
+    """
+    fields = {
+        "loginCaptured": False,
+        "userinfoCaptured": False,
+        "cookies": "",
+        "groupsSyncStatus": "opening",
+    }
+    if clear_groups:
+        fields.update({
+            "personalGroups": [],
+            "groupsSyncedAt": 0,
+        })
+    update_account(account_id, **fields)
 
 
 def rename_account(account_id: str, name: str):
@@ -555,10 +576,10 @@ def _start_network_monitor(account_id: str, debug_port: int):
     threading.Thread(target=_delayed, daemon=True).start()
 
 
-def _open_chrome_for_account(account: dict, resync: bool = True):
+def _open_chrome_for_account(account: dict, resync: bool = True, clear_groups: bool = False):
     account_id = account["accountId"]
     if resync:
-        reset_account_session(account_id)
+        reset_account_session(account_id, clear_groups=clear_groups)
         account = get_account(account_id) or account
 
     accounts = load_accounts()
@@ -614,7 +635,7 @@ def create_account():
     return get_account(account_id) or account
 
 
-def open_account(account_id: str):
+def open_account(account_id: str, clear_groups: bool = False):
     """Mở Chrome với profile của tài khoản + bật monitor."""
     accounts = load_accounts()
     account = _find_account(accounts, account_id)
@@ -627,7 +648,7 @@ def open_account(account_id: str):
         update_account(account_id, profilePath=os.path.abspath(profile_path))
         account = get_account(account_id)
 
-    return _open_chrome_for_account(account)
+    return _open_chrome_for_account(account, clear_groups=clear_groups)
 
 
 def close_account(account_id: str):

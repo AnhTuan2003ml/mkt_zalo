@@ -63,7 +63,7 @@ def invite_group(grid: str, members: list, imei: str, zpw_enk: str, cookies: str
     payload = {
         "grid":        grid,
         "members":     members,
-        "memberTypes": [0] * len(members),
+        "memberTypes": [-1] * len(members),
         "imei":        imei,
         "clientLang":  "vi",
     }

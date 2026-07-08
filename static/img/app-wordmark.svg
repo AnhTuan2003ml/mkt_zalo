@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 112" role="img" aria-label="Nexus">
+  <defs>
+    <linearGradient id="nexusBg" x1="18" y1="18" x2="94" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.5" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="nexusLine" x1="39" y1="37" x2="75" y2="75" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dbeafe" stop-opacity=".86"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="112" rx="28" fill="#020617"/>
+  <rect x="18" y="18" width="76" height="76" rx="22" fill="url(#nexusBg)"/>
+  <path d="M39 75V37L75 75V37" fill="none" stroke="url(#nexusLine)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="39" cy="37" r="5.5" fill="#ecfeff"/>
+  <circle cx="39" cy="75" r="5.5" fill="#ecfeff"/>
+  <circle cx="75" cy="37" r="5.5" fill="#ecfeff"/>
+  <circle cx="75" cy="75" r="5.5" fill="#ecfeff"/>
+  <circle cx="57" cy="56" r="4" fill="#f8fafc" opacity=".95"/>
+  <text x="112" y="58" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="37" font-weight="850" fill="#f8fafc">Nexus</text>
+  <text x="114" y="82" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" fill="#94a3b8">Quản lý chiến dịch &amp; dữ liệu</text>
+</svg>

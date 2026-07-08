@@ -464,9 +464,13 @@ def _process_group_list(account_id: str, headers: dict, body_text: str, zpw_enk:
     Response: {"error_code": 0, "data": "encrypted_string"}
     """
     try:
-        from group_manager import extract_groups_from_getlg_response, save_account_groups
+        from features.groups.group_manager import extract_groups_from_getlg_response, save_account_groups
     except ImportError:
-        from .group_manager import extract_groups_from_getlg_response, save_account_groups
+        # Fallback khi chạy file lẻ: thêm thư mục features/groups vào sys.path.
+        groups_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "groups")
+        if groups_dir not in sys.path:
+            sys.path.insert(0, groups_dir)
+        from group_manager import extract_groups_from_getlg_response, save_account_groups
     
     if not zpw_enk:
         _pending_group_bodies[account_id] = {

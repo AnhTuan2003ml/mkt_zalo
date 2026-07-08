@@ -9,9 +9,11 @@ Nguyên tắc chính:
 """
 
 import re
+import time
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from features.groups.get_group import resolve_group_id_from_url
+from features.groups.group_join_leave import join_group_by_link, leave_group
 from features.members.get_members import get_members, get_members_by_group_id
 
 LogFunc = Optional[Callable[[str, str], None]]
@@ -24,6 +26,17 @@ def log_message(callback: LogFunc, message: str, msg_type: str = "info") -> None
         callback(message, msg_type)
     except TypeError:
         callback(message)
+
+
+def is_not_member_error(message: str) -> bool:
+    msg = str(message or "").lower()
+    return (
+        "không phải thành viên" in msg
+        or "khong phai thanh vien" in msg
+        or "not a member" in msg
+        or "account hiện tại không phải thành viên" in msg
+        or "không có quyền xem" in msg
+    )
 
 
 def normalize_group_input(raw: str) -> Tuple[str, str]:
@@ -187,13 +200,56 @@ def fetch_group_member_uids(group_id: str, zpw_enk: str, cookies: str,
 
 def fetch_group_members_by_input(raw: str, zpw_enk: str, cookies: str,
                                  callback: LogFunc = None, zpw_ver: str = None,
-                                 imei: str = "") -> dict:
+                                 imei: str = "",
+                                 auto_join_when_not_member: bool = True,
+                                 leave_after_auto_join: bool = True) -> dict:
+    input_type, normalized_input = normalize_group_input(raw)
     input_type, group_id, resolved_group_info, member_map = resolve_group_input_to_group_id(
         raw, zpw_enk, cookies, callback=callback, zpw_ver=zpw_ver
     )
-    members_group_info, uid_list = fetch_group_member_uids(
-        group_id, zpw_enk, cookies, callback=callback, zpw_ver=zpw_ver, imei=imei
-    )
+
+    auto_joined = False
+    auto_left = False
+    join_result = None
+    leave_result = None
+
+    try:
+        members_group_info, uid_list = fetch_group_member_uids(
+            group_id, zpw_enk, cookies, callback=callback, zpw_ver=zpw_ver, imei=imei
+        )
+    except ValueError as exc:
+        err = str(exc)
+        if not auto_join_when_not_member or not is_not_member_error(err):
+            raise
+        if input_type != "link" or not normalized_input:
+            raise ValueError(
+                err + " Nếu muốn hệ thống tự tham gia rồi lấy thành viên, hãy nhập link nhóm Zalo thay vì chỉ nhập groupId."
+            )
+
+        # Chạy ngầm: không đẩy log UI khi tự tham gia/rời nhóm.
+        join_result = join_group_by_link(
+            normalized_input, zpw_enk, cookies, zpw_ver=zpw_ver
+        )
+        if not join_result.get("ok"):
+            msg = join_result.get("message", "Lỗi không xác định")
+            code = join_result.get("error_code")
+            suffix = f" [{code}]" if code not in (None, "") else ""
+            raise ValueError(f"Không lấy được thành viên nhóm {group_id}: tự tham gia bằng link thất bại{suffix}: {msg}")
+
+        auto_joined = True
+        time.sleep(1.0)
+
+        try:
+            members_group_info, uid_list = fetch_group_member_uids(
+                group_id, zpw_enk, cookies, callback=callback, zpw_ver=zpw_ver, imei=imei
+            )
+        finally:
+            if leave_after_auto_join and auto_joined:
+                leave_result = leave_group(
+                    [group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver
+                )
+                auto_left = bool(leave_result.get("ok"))
+
     group_info = merge_group_info(resolved_group_info, members_group_info)
     group_info.setdefault("groupId", group_id)
     group_info.setdefault("gridId", group_id)
@@ -208,6 +264,10 @@ def fetch_group_members_by_input(raw: str, zpw_enk: str, cookies: str,
         "groupInfo": group_info,
         "uidList": uid_list,
         "memberMap": member_map,
+        "autoJoined": auto_joined,
+        "autoLeft": auto_left,
+        "joinResult": join_result,
+        "leaveResult": leave_result,
     }
 
 

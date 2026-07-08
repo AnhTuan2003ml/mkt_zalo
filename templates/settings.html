@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cài đặt - Zalo Marketing</title>
+    <title>Cài đặt - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=marketing-ui-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-ui-1">
 </head>
 <body>
 {% include '_nav.html' %}
@@ -20,7 +20,7 @@
     <div class="settings-grid">
         <div class="card">
             <div class="card-title">Thông tin giao diện</div>
-            <p class="muted">Tên phần mềm: <b>Zalo Marketing</b></p>
+            <p class="muted">Tên phần mềm: <b>Nexus</b></p>
             <p class="muted">Giao diện mặc định: <b>/guide</b></p>
             <p class="muted">Cổng chạy local: <b>5000</b></p>
         </div>
@@ -29,8 +29,8 @@
             <div class="module-list">
                 <a href="{{ url_for('accounts_page') }}">Tài khoản Zalo</a>
                 <a href="{{ url_for('members_page') }}">Lấy thành viên nhóm</a>
-                <a href="{{ url_for('marketing_group_page') }}">Marketing theo nhóm</a>
-                <a href="{{ url_for('marketing_phone_page') }}">Marketing theo SĐT</a>
+                <a href="{{ url_for('marketing_group_page') }}">Chiến dịch theo nhóm</a>
+                <a href="{{ url_for('marketing_phone_page') }}">Chiến dịch theo SĐT</a>
                 <a href="{{ url_for('marketing_schedules_page') }}">Quản lý lịch chạy</a>
             </div>
         </div>

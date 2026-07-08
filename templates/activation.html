@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kích hoạt phần mềm - ZMKT</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Kích hoạt phần mềm - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-ui-1">
     <style>
         .activation-wrap { max-width: 1080px; margin: 0 auto; }
         .activation-hero {
@@ -76,7 +77,7 @@
                 <div class="status-badge {{ 'ok' if activated else 'warn' }}">
                     {{ '✅ Đã kích hoạt' if activated else '🔐 Chưa kích hoạt' }}
                 </div>
-                <h2>Kích hoạt ZMKT trên thiết bị này</h2>
+                <h2>Kích hoạt Nexus trên thiết bị này</h2>
                 <p>{{ activation_message }}</p>
                 {% if activated %}
                     <p>{% if days_remaining >= 99999 %}License <b>vĩnh viễn</b> hợp lệ. Bạn có thể sử dụng phần mềm bình thường.{% elif days_remaining == 0 %}License còn <b>dưới 1 ngày</b>. Bạn có thể sử dụng phần mềm bình thường.{% else %}License còn khoảng <b>{{ days_remaining }}</b> ngày. Bạn có thể sử dụng phần mềm bình thường.{% endif %}</p>

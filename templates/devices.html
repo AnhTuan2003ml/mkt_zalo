@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Thiết Bị - ZMKT</title>
+    <title>Quản Lý Thiết Bị - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
     <style>
         * {
             margin: 0;
@@ -234,12 +235,22 @@
                 grid-template-columns: 1fr;
             }
         }
+    
+        /* Nexus device page redesign */
+        :root { --nexus-bg:#08111f; --nexus-surface:#111827; --nexus-card:#0f172a; --nexus-border:#24344d; --nexus-text:#e5edf8; --nexus-muted:#8fa3bd; --nexus-accent:#38bdf8; }
+        body { background: radial-gradient(circle at 18% 0%, rgba(56,189,248,.20), transparent 36%), radial-gradient(circle at 95% 10%, rgba(124,58,237,.18), transparent 32%), var(--nexus-bg) !important; color: var(--nexus-text); }
+        header, .card, .device-card, .stats .stat-card { background: linear-gradient(180deg, rgba(17,24,39,.94), rgba(15,23,42,.94)) !important; border: 1px solid rgba(148,163,184,.16) !important; box-shadow: 0 20px 50px rgba(2,6,23,.28) !important; }
+        header h1, .card h2, .device-card h3 { color: #f8fafc !important; }
+        header p, .muted, .device-info, .device-card p { color: var(--nexus-muted) !important; }
+        button, .btn { border-radius: 12px !important; background: linear-gradient(135deg, #38bdf8, #2563eb) !important; color: #fff !important; border: 0 !important; font-weight: 750 !important; box-shadow: 0 12px 28px rgba(37,99,235,.26) !important; }
+        input, select, textarea { background:#07111f !important; color:var(--nexus-text) !important; border:1px solid var(--nexus-border) !important; border-radius:12px !important; }
+    
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>📱 Quản Lý Thiết Bị ZMKT</h1>
+            <h1>📱 Quản Lý Thiết Bị Nexus</h1>
             <p>Theo dõi tất cả thiết bị đang chạy ứng dụng</p>
         </header>
         

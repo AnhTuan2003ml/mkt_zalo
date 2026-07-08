@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý tin nhắn - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-ui-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-1">
+</head>
+<body>
+{% set active_page = 'messages' %}
+{% include '_nav.html' %}
+
+<div class="page messages-page">
+    <div class="page-hero messages-hero">
+        <div>
+            <div class="eyebrow">Hộp thư Zalo</div>
+            <h2>Quản lý tin nhắn</h2>
+            <p>Theo dõi hội thoại, phân loại khách cần phản hồi, ghi chú nội dung và chuẩn bị khung tự động check/lưu/phản hồi tin nhắn ở giai đoạn sau.</p>
+        </div>
+        <div class="hero-actions">
+            <button class="btn btn-secondary" id="btnReloadMessages">Làm mới</button>
+            <button class="btn btn-primary" id="btnCheckMessages">Kiểm tra tin nhắn</button>
+        </div>
+    </div>
+
+    <div id="messageStatus" class="status-bar" style="display:none"></div>
+
+    <div class="message-kpi-grid">
+        <div class="message-kpi-card">
+            <span>Tổng hội thoại</span>
+            <strong id="msgStatTotal">0</strong>
+        </div>
+        <div class="message-kpi-card warning">
+            <span>Chưa đọc</span>
+            <strong id="msgStatUnread">0</strong>
+        </div>
+        <div class="message-kpi-card info">
+            <span>Cần phản hồi</span>
+            <strong id="msgStatWaiting">0</strong>
+        </div>
+        <div class="message-kpi-card success">
+            <span>Đã phản hồi</span>
+            <strong id="msgStatReplied">0</strong>
+        </div>
+    </div>
+
+    <div class="card message-toolbar-card">
+        <div class="message-toolbar">
+            <div class="form-group toolbar-field">
+                <label>Tài khoản</label>
+                <select id="msgAccountSelect">
+                    <option value="">Tất cả tài khoản</option>
+                </select>
+            </div>
+            <div class="form-group toolbar-field">
+                <label>Trạng thái</label>
+                <select id="msgStatusFilter">
+                    <option value="all">Tất cả</option>
+                    <option value="new">Tin mới</option>
+                    <option value="waiting">Cần phản hồi</option>
+                    <option value="replied">Đã phản hồi</option>
+                    <option value="closed">Đã đóng</option>
+                </select>
+            </div>
+            <div class="form-group toolbar-search">
+                <label>Tìm kiếm</label>
+                <input id="msgSearchInput" type="text" placeholder="Tên, UID, nội dung, ghi chú...">
+            </div>
+            <div class="toolbar-note">
+                <span class="pill muted" id="msgLastCheck">Chưa đồng bộ</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="message-workspace">
+        <section class="card inbox-panel">
+            <div class="message-panel-header">
+                <div>
+                    <h3>Danh sách hội thoại</h3>
+                    <p id="msgListCount">0 hội thoại</p>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btnAddManualConversation">+ Thêm mẫu</button>
+            </div>
+            <div id="conversationList" class="conversation-list">
+                <div class="empty-state">Chưa có hội thoại nào được lưu.</div>
+            </div>
+        </section>
+
+        <section class="card thread-panel">
+            <div id="threadEmpty" class="thread-empty">
+                <div class="empty-icon">💬</div>
+                <h3>Chọn một hội thoại</h3>
+                <p>Khi có dữ liệu tin nhắn, nội dung trao đổi sẽ hiện ở đây để bạn xem, ghi chú và phản hồi.</p>
+            </div>
+
+            <div id="threadDetail" class="thread-detail" style="display:none">
+                <div class="thread-header">
+                    <div class="thread-user">
+                        <img id="threadAvatar" class="thread-avatar" src="" alt="">
+                        <div>
+                            <h3 id="threadName">Người nhắn</h3>
+                            <p id="threadMeta">UID</p>
+                        </div>
+                    </div>
+                    <div class="thread-status-actions">
+                        <select id="threadStatusSelect">
+                            <option value="new">Tin mới</option>
+                            <option value="waiting">Cần phản hồi</option>
+                            <option value="replied">Đã phản hồi</option>
+                            <option value="closed">Đã đóng</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" id="btnMarkRead">Đánh dấu đã đọc</button>
+                    </div>
+                </div>
+
+                <div id="messageThread" class="message-thread"></div>
+
+                <div class="reply-box">
+                    <label>Nội dung phản hồi / ghi nháp</label>
+                    <textarea id="replyText" placeholder="Nhập nội dung phản hồi. Hiện tại nút lưu chỉ ghi vào lịch sử, chưa tự gửi Zalo."></textarea>
+                    <div class="reply-actions">
+                        <button class="btn btn-secondary" id="btnInsertDefaultReply">Chèn mẫu</button>
+                        <button class="btn btn-primary" id="btnSaveReply">Lưu phản hồi</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="card message-side-panel">
+            <div class="message-panel-header compact">
+                <div>
+                    <h3>Thiết lập phản hồi</h3>
+                    <p>Chuẩn bị cho bản auto-reply</p>
+                </div>
+            </div>
+
+            <div class="side-section">
+                <label class="switch-row">
+                    <span>
+                        <b>Tự động kiểm tra tin nhắn</b>
+                        <small>Sau này worker sẽ quét định kỳ và lưu tin mới.</small>
+                    </span>
+                    <input type="checkbox" id="autoCheckEnabled">
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>Chu kỳ kiểm tra dự kiến</label>
+                <select id="checkInterval">
+                    <option value="1">1 phút</option>
+                    <option value="3">3 phút</option>
+                    <option value="5">5 phút</option>
+                    <option value="10">10 phút</option>
+                    <option value="15">15 phút</option>
+                </select>
+            </div>
+
+            <div class="side-section">
+                <label class="switch-row">
+                    <span>
+                        <b>Tự động phản hồi</b>
+                        <small>Chỉ nên bật sau khi đã có rule chống spam và giới hạn gửi.</small>
+                    </span>
+                    <input type="checkbox" id="globalAutoReplyEnabled">
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>Mẫu phản hồi mặc định</label>
+                <textarea id="defaultReply" placeholder="Ví dụ: Chào {name}, bên em đã nhận tin nhắn và sẽ phản hồi ngay ạ."></textarea>
+            </div>
+
+            <button class="btn btn-primary full-width" id="btnSaveMessageSettings">Lưu thiết lập</button>
+
+            <div class="side-section roadmap-box">
+                <b>Lộ trình phát triển</b>
+                <ul>
+                    <li>Nối API lấy danh sách hội thoại Zalo.</li>
+                    <li>Lưu tin nhắn mới vào `data/messages.json`.</li>
+                    <li>Gắn rule phản hồi theo từ khóa/tag.</li>
+                    <li>Thêm chống gửi trùng và giới hạn tốc độ.</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}?v=9999"></script>
+<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-1"></script>
+</body>
+</html>

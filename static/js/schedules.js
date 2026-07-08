@@ -147,6 +147,20 @@ function closeAvatarOverlay() {
 }
 
 // ─── HELPERS ────────────────────────────────────────────────────────────
+
+function hasScheduleValue(v) {
+    return v !== undefined && v !== null && v !== '' && v !== '-';
+}
+
+function formatScheduleGender(value) {
+    if (!hasScheduleValue(value)) return '-';
+    var n = Number(value);
+    if (Number.isNaN(n)) return String(value);
+    if (n === 0) return 'Nam';
+    if (n === 1 || n === 2) return 'Nữ';
+    return 'Không xác định';
+}
+
 function escapeHtmlSchedules(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
@@ -447,102 +461,339 @@ function schedSwitchTab(tabName) {
 // ─── SCHEDULE LIST ──────────────────────────────────────────────────────
 var _schedAllData = [];
 
+function schedFetchJson(url) {
+    return fetch(url).then(function(r) { return r.json(); }).catch(function(e) { return { __error: e.message || String(e) }; });
+}
+
+function schedPrepareScheduleItem(sch) {
+    sch = sch || {};
+    sch._itemType = 'schedule';
+    sch._listType = 'schedule';
+    sch._sortTime = Date.parse(sch.runAt || '') || Number(sch.createdAt || 0) || 0;
+    return sch;
+}
+
+function schedPrepareActionPlanItem(plan) {
+    plan = plan || {};
+    var t = plan.planType || plan.type || 'friend';
+    if (t === 'group' || t === 'invite_group') t = 'group_invite';
+    plan._itemType = 'action_plan';
+    plan._listType = t;
+    plan.planType = t;
+    plan.planTypeLabel = plan.planTypeLabel || (t === 'group_invite' ? 'Mời vào nhóm' : 'Gửi kết bạn');
+    plan._sortTime = Number(plan.createdAt || 0) || Date.parse(plan.startDate || '') || 0;
+    return plan;
+}
+
 function schedLoadSchedulesForDisplay() {
     var c = document.getElementById('schedulesListContainer');
     if (!c) return;
-    c.innerHTML = '<div class="sched-loading"><div class="spinner"></div><p>Đang tải lịch...</p></div>';
-    fetch('/api/schedules')
-        .then(function(r) { return r.json(); })
-        .then(function(j) {
-            if (!j.schedules || !j.schedules.length) {
-                var cached = getSchedulesFromStorage();
-                if (cached.length) { saveSchedulesToStorage(cached); _renderSchedulesList(cached, c); }
-                else c.innerHTML = '<div class="sched-empty"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4"/><path d="M3 10h18"/></svg><p>Chưa có lịch nào</p></div>';
-                return;
+    c.innerHTML = '<div class="sched-loading"><div class="spinner"></div><p>Đang tải lịch gửi, lịch kết bạn và lịch mời nhóm...</p></div>';
+
+    Promise.all([schedFetchJson('/api/schedules'), schedFetchJson('/api/action-plans')])
+        .then(function(res) {
+            var sj = res[0] || {};
+            var pj = res[1] || {};
+            var normalSchedules = (sj.schedules || []).map(schedPrepareScheduleItem);
+            var actionPlans = (pj.plans || []).map(schedPrepareActionPlanItem);
+            var combined = normalSchedules.concat(actionPlans).sort(function(a, b) {
+                return (b._sortTime || 0) - (a._sortTime || 0);
+            });
+
+            if (sj.schedules) saveSchedulesToStorage(sj.schedules);
+
+            if (!combined.length) {
+                var cached = getSchedulesFromStorage().map(schedPrepareScheduleItem);
+                if (cached.length) combined = cached;
             }
-            saveSchedulesToStorage(j.schedules);
-            _renderSchedulesList(j.schedules, c);
+
+            _schedAllData = combined;
+            _renderSchedulesList(combined, c, true);
         })
         .catch(function() {
-            var cached = getSchedulesFromStorage();
-            if (cached.length) _renderSchedulesList(cached, c);
-            else c.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;">Lỗi tải dữ liệu</p>';
+            var cached = getSchedulesFromStorage().map(schedPrepareScheduleItem);
+            if (cached.length) {
+                _schedAllData = cached;
+                _renderSchedulesList(cached, c, true);
+            } else {
+                c.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;">Lỗi tải dữ liệu lịch</p>';
+            }
         });
 }
 
 function schedLoadSchedules() { schedLoadSchedulesForDisplay(); }
 
-function _renderSchedulesList(schedules, list) {
+function schedStatusLabel(status) {
+    var labels = {
+        pending: 'Chờ', planned: 'Đã lên kế hoạch', running: 'Đang chạy', done: 'Hoàn thành', completed: 'Hoàn thành',
+        partial: 'Một phần', failed: 'Thất bại', cancelled: 'Đã hủy', canceled: 'Đã hủy', skipped: 'Đã bỏ qua',
+        pending_manual: 'Chờ xác nhận'
+    };
+    return labels[status] || status || 'Chờ';
+}
+
+function schedBadgeClass(status) {
+    if (status === 'planned' || status === 'pending_manual') return 'pending';
+    if (status === 'completed') return 'done';
+    if (status === 'canceled' || status === 'skipped') return 'cancelled';
+    return status || 'pending';
+}
+
+function schedActionPlanStatus(plan) {
+    var p = plan.progress || {};
+    return p.displayStatus || plan.status || 'planned';
+}
+
+function schedFormatDateText(v) {
+    if (!v) return '-';
+    var d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('vi-VN');
+    return String(v);
+}
+
+function schedFormatDateTimeText(v) {
+    if (!v) return '-';
+    var d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return String(v);
+}
+
+function schedJsArg(v) { return JSON.stringify(String(v == null ? '' : v)); }
+
+function _renderSchedulesList(items, list, keepMaster) {
     if (!list) list = document.getElementById('schedulesListContainer');
     if (!list) return;
-    _schedAllData = schedules;
+    if (!keepMaster) _schedAllData = items || [];
+    items = items || [];
     list.innerHTML = '';
-    if (!schedules.length) {
+    if (!items.length) {
         list.innerHTML = '<div class="sched-empty"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4"/><path d="M3 10h18"/></svg><p>Chưa có lịch nào</p></div>';
+        var cnt0 = document.getElementById('schedListCount');
+        if (cnt0) cnt0.textContent = '0 lịch';
         return;
     }
-    var labels = { pending: 'Chờ', running: 'Đang chạy', done: 'Hoàn thành', partial: 'Một phần', failed: 'Thất bại', cancelled: 'Đã hủy' };
-    var sources = { group: 'Từ nhóm', phone: 'Danh sách số điện thoại', 'personal-groups': 'Nhóm cá nhân' };
 
-    schedules.forEach(function(sch) {
-        var st = sch.status || 'pending';
-        var lb = labels[st] || st;
-        var d = new Date(sch.runAt);
-        var ds = d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        var total = (sch.recipients || []).length;
-        var ok = (sch.results || []).filter(function(r) { return r.status === 'success'; }).length;
-        var fail = (sch.results || []).filter(function(r) { return r.status === 'failed'; }).length;
-        var pend = Math.max(total - ok - fail, 0);
-        var src = sources[sch.source] || 'Khác';
-        var acct = sch.accountName || sch.senderName || ((sch.groupInfo || {}).accountName) || 'N/A';
-        var msg = sch.message || '';
-
-        var card = document.createElement('div');
-        card.className = 'schedule-card';
-        card.innerHTML =
-            '<div class="schedule-card-header">' +
-                '<div class="schedule-card-title-area">' +
-                    '<h3 class="schedule-title">' + escHtml(sch.title || 'Không có tiêu đề') + '</h3>' +
-                    '<div class="schedule-time">\u{1F552} ' + ds + '</div>' +
-                '</div>' +
-                '<span class="schedule-status-badge ' + st + '">' + lb + '</span>' +
-            '</div>' +
-            (msg ? '<div class="schedule-message">' + escHtml(msg) + '</div>' : '') +
-            '<div class="schedule-meta-row">' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Nguồn</span><span class="schedule-meta-value">' + escHtml(src) + '</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Người nhận</span><span class="schedule-meta-value">' + ok + '/' + total + ' thành công</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Chưa gửi / Lỗi</span><span class="schedule-meta-value">' + pend + ' / ' + fail + '</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Tài khoản</span><span class="schedule-meta-value">' + escHtml(acct) + '</span></div>' +
-            '</div>' +
-            '<div class="schedule-actions-group">' +
-                '<button class="btn btn-primary btn-sm" onclick="schedShowEditModal(\'' + sch.scheduleId + '\')">Sửa</button>' +
-                '<button class="btn btn-ghost btn-sm" onclick="schedShowDetail(\'' + sch.scheduleId + '\')">Chi tiết</button>' +
-                (st === 'pending' ? '<button class="btn btn-success btn-sm" onclick="schedRunNow(\'' + sch.scheduleId + '\')">Chạy ngay</button>' : '') +
-                (st === 'pending' || st === 'running' ? '<button class="btn btn-warning btn-sm" onclick="schedCancel(\'' + sch.scheduleId + '\')">Hủy</button>' : '') +
-                (st !== 'running' ? '<button class="btn btn-danger btn-sm" onclick="schedDelete(\'' + sch.scheduleId + '\')">Xóa</button>' : '') +
-            '</div>';
-        list.appendChild(card);
+    items.forEach(function(item) {
+        if (item._itemType === 'action_plan') {
+            list.appendChild(schedBuildActionPlanCard(item));
+        } else {
+            list.appendChild(schedBuildNormalScheduleCard(item));
+        }
     });
+
     var cnt = document.getElementById('schedListCount');
-    if (cnt) cnt.textContent = _schedAllData.length + ' lịch';
+    if (cnt) cnt.textContent = items.length + ' lịch';
+}
+
+function schedBuildNormalScheduleCard(sch) {
+    var sources = { group: 'Từ nhóm', phone: 'Danh sách số điện thoại', 'personal-groups': 'Nhóm cá nhân' };
+    var st = sch.status || 'pending';
+    var lb = schedStatusLabel(st);
+    var ds = schedFormatDateTimeText(sch.runAt);
+    var total = (sch.recipients || []).length;
+    var ok = (sch.results || []).filter(function(r) { return r.status === 'success'; }).length;
+    var fail = (sch.results || []).filter(function(r) { return r.status === 'failed'; }).length;
+    var pend = Math.max(total - ok - fail, 0);
+    var src = sources[sch.source] || 'Khác';
+    var acct = sch.accountName || sch.senderName || ((sch.groupInfo || {}).accountName) || 'N/A';
+    var msg = sch.message || '';
+
+    var card = document.createElement('div');
+    card.className = 'schedule-card';
+    card.innerHTML =
+        '<div class="schedule-card-header">' +
+            '<div class="schedule-card-title-area">' +
+                '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><span class="schedule-kind-badge">Tin nhắn</span></div>' +
+                '<h3 class="schedule-title">' + escHtml(sch.title || 'Không có tiêu đề') + '</h3>' +
+                '<div class="schedule-time">🕒 ' + escHtml(ds) + '</div>' +
+            '</div>' +
+            '<span class="schedule-status-badge ' + schedBadgeClass(st) + '">' + escHtml(lb) + '</span>' +
+        '</div>' +
+        (msg ? '<div class="schedule-message">' + escHtml(msg) + '</div>' : '') +
+        '<div class="schedule-meta-row">' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Nguồn</span><span class="schedule-meta-value">' + escHtml(src) + '</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Người nhận</span><span class="schedule-meta-value">' + ok + '/' + total + ' thành công</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Chưa gửi / Lỗi</span><span class="schedule-meta-value">' + pend + ' / ' + fail + '</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Tài khoản</span><span class="schedule-meta-value">' + escHtml(acct) + '</span></div>' +
+        '</div>' +
+        '<div class="schedule-actions-group">' +
+            '<button class="btn btn-primary btn-sm" onclick="schedShowEditModal(\'' + sch.scheduleId + '\')">Sửa</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="schedShowDetail(\'' + sch.scheduleId + '\')">Chi tiết</button>' +
+            (st === 'pending' ? '<button class="btn btn-success btn-sm" onclick="schedRunNow(\'' + sch.scheduleId + '\')">Chạy ngay</button>' : '') +
+            (st === 'pending' || st === 'running' ? '<button class="btn btn-warning btn-sm" onclick="schedCancel(\'' + sch.scheduleId + '\')">Hủy</button>' : '') +
+            (st !== 'running' ? '<button class="btn btn-danger btn-sm" onclick="schedDelete(\'' + sch.scheduleId + '\')">Xóa</button>' : '') +
+        '</div>';
+    return card;
+}
+
+function schedBuildActionPlanCard(plan) {
+    var st = schedActionPlanStatus(plan);
+    var pg = plan.progress || {};
+    var type = plan.planType || plan._listType || 'friend';
+    var kindClass = type === 'group_invite' ? 'group_invite' : 'friend';
+    var total = Number(pg.totalMembers || plan.totalMembers || 0);
+    var done = Number(pg.doneMembers || 0);
+    var failed = Number(pg.failedMembers || 0);
+    var pending = Number(pg.pendingMembers || Math.max(total - done - failed, 0));
+    var percent = Math.max(0, Math.min(100, Number(pg.percent || 0)));
+    var groups = (plan.targetGroups || []).map(function(g) { return g.name || g.groupName || g.groupId; }).filter(Boolean).join(', ');
+    if (!groups && (plan.targetGroupIds || []).length) groups = (plan.targetGroupIds || []).join(', ');
+    var after = plan.afterAction === 'invite_existing_group' ? ('Sau kết bạn: mời vào ' + (groups || 'nhóm đã chọn')) : (plan.afterAction === 'create_new_group' ? ('Sau kết bạn: tạo nhóm ' + (plan.newGroupName || 'mới')) : 'Chỉ lưu/gửi theo lịch');
+    var title = plan.name || (type === 'group_invite' ? 'Kế hoạch mời vào nhóm' : 'Kế hoạch gửi kết bạn');
+    var metaTarget = type === 'group_invite' ? (groups || '-') : after;
+
+    var card = document.createElement('div');
+    card.className = 'schedule-card';
+    card.innerHTML =
+        '<div class="schedule-card-header">' +
+            '<div class="schedule-card-title-area">' +
+                '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">' +
+                    '<span class="schedule-kind-badge ' + kindClass + '">' + escHtml(plan.planTypeLabel || (type === 'group_invite' ? 'Mời vào nhóm' : 'Gửi kết bạn')) + '</span>' +
+                    '<span class="schedule-time">Bắt đầu ' + escHtml(schedFormatDateText(plan.startDate)) + '</span>' +
+                '</div>' +
+                '<h3 class="schedule-title">' + escHtml(title) + '</h3>' +
+            '</div>' +
+            '<span class="schedule-status-badge ' + schedBadgeClass(st) + '">' + escHtml(schedStatusLabel(st)) + '</span>' +
+        '</div>' +
+        (plan.message ? '<div class="schedule-message">' + escHtml(plan.message) + '</div>' : '') +
+        '<div class="schedule-progress-wrap">' +
+            '<div class="schedule-progress-line"><div class="schedule-progress-bar" style="width:' + percent + '%"></div></div>' +
+            '<div class="schedule-progress-text"><span>Tiến độ: ' + percent + '%</span><span>' + (pg.processedMembers || 0) + '/' + total + ' đã xử lý</span></div>' +
+        '</div>' +
+        '<div class="schedule-meta-row">' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Mỗi ngày</span><span class="schedule-meta-value">' + escHtml(String(plan.dailyLimit || 1)) + ' người</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Batch</span><span class="schedule-meta-value">' + (pg.doneBatches || 0) + '/' + (pg.totalBatches || (plan.batches || []).length) + ' xong</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Chờ / Lỗi</span><span class="schedule-meta-value">' + pending + ' / ' + failed + '</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Tài khoản</span><span class="schedule-meta-value">' + escHtml(plan.accountName || plan.accountId || 'N/A') + '</span></div>' +
+            '<div class="schedule-meta-item"><span class="schedule-meta-label">Đích</span><span class="schedule-meta-value">' + escHtml(metaTarget || '-') + '</span></div>' +
+        '</div>' +
+        '<div class="schedule-actions-group">' +
+            '<button class="btn btn-ghost btn-sm" onclick=\'schedShowActionPlanDetail(' + schedJsArg(type) + ',' + schedJsArg(plan.id || '') + ')\'>Chi tiết / cập nhật tiến độ</button>' +
+        '</div>';
+    return card;
 }
 
 function schedFilterSchedulesList() {
     var q = (document.getElementById('schedListSearch') || {}).value || '';
-    var sf = (document.getElementById('schedListStatusFilter') || {});
-    sf = sf.value || '';
+    var sf = (document.getElementById('schedListStatusFilter') || {}).value || '';
+    var tf = (document.getElementById('schedListTypeFilter') || {}).value || '';
     q = q.toLowerCase();
-    var filtered = _schedAllData.filter(function(s) {
-        if (q && (s.title || '').toLowerCase().indexOf(q) === -1 && (s.message || '').toLowerCase().indexOf(q) === -1) return false;
-        if (sf && s.status !== sf) return false;
+    var filtered = (_schedAllData || []).filter(function(s) {
+        var isPlan = s._itemType === 'action_plan';
+        var type = isPlan ? (s.planType || s._listType || 'friend') : 'schedule';
+        var status = isPlan ? schedActionPlanStatus(s) : (s.status || 'pending');
+        var searchText = [s.title, s.name, s.message, s.accountName, s.accountId, s.planTypeLabel].join(' ').toLowerCase();
+        if (q && searchText.indexOf(q) === -1) return false;
+        if (tf && type !== tf) return false;
+        if (sf && status !== sf && !(sf === 'done' && status === 'completed') && !(sf === 'pending' && (status === 'planned' || status === 'pending_manual'))) return false;
         return true;
     });
-    _renderSchedulesList(filtered);
+    _renderSchedulesList(filtered, null, true);
     var cnt = document.getElementById('schedListCount');
-    if (cnt) cnt.textContent = (q || sf) ? filtered.length + '/' + _schedAllData.length + ' lịch' : _schedAllData.length + ' lịch';
+    if (cnt) cnt.textContent = (q || sf || tf) ? filtered.length + '/' + _schedAllData.length + ' lịch' : _schedAllData.length + ' lịch';
+}
+
+function schedFindActionPlan(planType, planId) {
+    return (_schedAllData || []).find(function(x) {
+        return x._itemType === 'action_plan' && String(x.id || '') === String(planId) && String(x.planType || x._listType || '') === String(planType);
+    });
+}
+
+function schedShowActionPlanDetail(planType, planId) {
+    var plan = schedFindActionPlan(planType, planId);
+    if (plan) {
+        schedRenderActionPlanDetail(plan);
+        return;
+    }
+    schedFetchJson('/api/action-plans?type=' + encodeURIComponent(planType)).then(function(j) {
+        var p = (j.plans || []).map(schedPrepareActionPlanItem).find(function(x) { return String(x.id || '') === String(planId); });
+        if (!p) {
+            schedShowNotif('Lỗi', 'Không tìm thấy kế hoạch', 'error');
+            return;
+        }
+        schedRenderActionPlanDetail(p);
+    });
+}
+
+function schedRenderActionPlanDetail(plan) {
+    plan = schedPrepareActionPlanItem(plan);
+    var type = plan.planType || 'friend';
+    var pg = plan.progress || {};
+    var st = schedActionPlanStatus(plan);
+    var groups = (plan.targetGroups || []).map(function(g) { return g.name || g.groupName || g.groupId; }).filter(Boolean).join(', ');
+    if (!groups && (plan.targetGroupIds || []).length) groups = (plan.targetGroupIds || []).join(', ');
+    var html = '';
+    html += '<div class="detail-item"><div class="detail-label">Mã kế hoạch:</div><div class="detail-value" style="font-family:monospace;word-break:break-all;">' + escapeHtmlSchedules(plan.id || '-') + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Loại lịch:</div><div class="detail-value">' + escapeHtmlSchedules(plan.planTypeLabel || (type === 'group_invite' ? 'Mời vào nhóm' : 'Gửi kết bạn')) + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Tên kế hoạch:</div><div class="detail-value">' + escapeHtmlSchedules(plan.name || '-') + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Tài khoản:</div><div class="detail-value">' + escapeHtmlSchedules(plan.accountName || plan.accountId || '-') + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Ngày bắt đầu:</div><div class="detail-value">' + escapeHtmlSchedules(schedFormatDateText(plan.startDate)) + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Số người/ngày:</div><div class="detail-value">' + escapeHtmlSchedules(String(plan.dailyLimit || 1)) + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Trạng thái:</div><div class="detail-value">' + escapeHtmlSchedules(schedStatusLabel(st)) + '</div></div>';
+    if (type === 'group_invite') html += '<div class="detail-item"><div class="detail-label">Nhóm đích:</div><div class="detail-value">' + escapeHtmlSchedules(groups || '-') + '</div></div>';
+    if (type === 'friend' && plan.afterAction && plan.afterAction !== 'none') html += '<div class="detail-item"><div class="detail-label">Sau khi kết bạn:</div><div class="detail-value">' + escapeHtmlSchedules(plan.afterAction === 'invite_existing_group' ? ('Mời vào nhóm: ' + (groups || '-')) : ('Tạo nhóm mới: ' + (plan.newGroupName || '-'))) + '</div></div>';
+    if (plan.message) html += '<div class="detail-item"><div class="detail-label">Lời mời:</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtmlSchedules(plan.message) + '</div></div>';
+
+    html += '<hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">';
+    html += '<div class="detail-item"><div class="detail-label">Tiến độ:</div><div class="detail-value">' + (pg.processedMembers || 0) + '/' + (pg.totalMembers || plan.totalMembers || 0) + ' người, ' + (pg.percent || 0) + '%</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Batch:</div><div class="detail-value">' + (pg.doneBatches || 0) + '/' + (pg.totalBatches || (plan.batches || []).length) + ' xong, ' + (pg.pendingBatches || 0) + ' chờ, ' + (pg.failedBatches || 0) + ' lỗi</div></div>';
+
+    html += '<hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">';
+    html += '<div style="font-weight:700;margin-bottom:8px;">Danh sách ngày/batch</div>';
+    html += '<div class="action-plan-batches">';
+    (plan.batches || []).forEach(function(b) {
+        var bst = b.status || 'pending_manual';
+        var members = b.members || [];
+        var memberNames = members.slice(0, 10).map(function(m) { return m.name || m.zaloName || m.userId || m.uid || '-'; });
+        var more = members.length > 10 ? ' ... +' + (members.length - 10) + ' người khác' : '';
+        html += '<div class="action-plan-batch">';
+        html += '<div class="action-plan-batch-head"><div><div class="action-plan-batch-title">Ngày ' + escapeHtmlSchedules(String(b.day || '-')) + ' · ' + escapeHtmlSchedules(schedFormatDateText(b.date)) + '</div><div class="action-plan-batch-meta">' + escapeHtmlSchedules(String(b.count || members.length || 0)) + ' người · ' + escapeHtmlSchedules(schedStatusLabel(bst)) + '</div></div><span class="schedule-status-badge ' + schedBadgeClass(bst) + '">' + escapeHtmlSchedules(schedStatusLabel(bst)) + '</span></div>';
+        html += '<div class="action-plan-batch-actions">';
+        html += '<button class="btn btn-primary btn-sm" onclick=\'schedUpdateActionPlanBatch(' + schedJsArg(type) + ',' + schedJsArg(plan.id || '') + ',' + schedJsArg(b.day || '') + ',"running")\'>Đang chạy</button>';
+        html += '<button class="btn btn-success btn-sm" onclick=\'schedUpdateActionPlanBatch(' + schedJsArg(type) + ',' + schedJsArg(plan.id || '') + ',' + schedJsArg(b.day || '') + ',"done")\'>Xong</button>';
+        html += '<button class="btn btn-danger btn-sm" onclick=\'schedUpdateActionPlanBatch(' + schedJsArg(type) + ',' + schedJsArg(plan.id || '') + ',' + schedJsArg(b.day || '') + ',"failed")\'>Lỗi</button>';
+        html += '<button class="btn btn-ghost btn-sm" onclick=\'schedUpdateActionPlanBatch(' + schedJsArg(type) + ',' + schedJsArg(plan.id || '') + ',' + schedJsArg(b.day || '') + ',"pending_manual")\'>Chờ</button>';
+        html += '</div>';
+        html += '<div class="action-plan-mini-list">' + escapeHtmlSchedules(memberNames.join(', ') + more) + '</div>';
+        html += '</div>';
+    });
+    html += '</div>';
+
+    var titleEl = document.getElementById('detailTitle');
+    var contentEl = document.getElementById('detailContent');
+    var avatarEl = document.getElementById('detailAvatar');
+    var modalEl = document.getElementById('detailModal');
+    if (titleEl) titleEl.textContent = 'Chi tiết lịch - ' + (plan.planTypeLabel || 'Kế hoạch');
+    if (contentEl) contentEl.innerHTML = html;
+    if (avatarEl) avatarEl.style.display = 'none';
+    if (modalEl) modalEl.classList.add('show');
+}
+
+function schedUpdateActionPlanBatch(planType, planId, batchDay, status) {
+    var endpoint = planType === 'group_invite' ? '/api/group-invite-plans/' : '/api/friend-request-plans/';
+    fetch(endpoint + encodeURIComponent(planId) + '/batches/' + encodeURIComponent(batchDay), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: status })
+    })
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+            if (!j.success) {
+                schedShowNotif('Lỗi', j.error || 'Không cập nhật được batch', 'error');
+                return;
+            }
+            schedShowNotif('OK', 'Đã cập nhật tiến độ batch', 'success');
+            var updated = schedPrepareActionPlanItem(j.plan || {});
+            var idx = (_schedAllData || []).findIndex(function(x) { return x._itemType === 'action_plan' && String(x.id || '') === String(planId); });
+            if (idx >= 0) _schedAllData[idx] = updated;
+            schedRenderActionPlanDetail(updated);
+            schedFilterSchedulesList();
+        })
+        .catch(function(e) { schedShowNotif('Lỗi', e.message || 'Không cập nhật được batch', 'error'); });
 }
 
 // ─── SAVE SCHEDULE ──────────────────────────────────────────────────────
+
 function schedSaveSchedule() {
     var gt = document.getElementById('tab-group');
     var pt = document.getElementById('tab-phone');
@@ -845,15 +1096,16 @@ async function schedGetGroupMembers() {
         _schedGroupInfo = json.groupInfo || {};
         _schedSelectedMembers.clear();
 
-        // 2) GIỐNG /members: sau khi /run trả data, gọi /api/single-profile dạng batch
-        // để enrich gender, sdob, isFr, phoneNumber, status... rồi mới render bảng.
-        schedShowNotif('Đang tải', 'Đang lấy thông tin chi tiết từng thành viên...', 'info');
-        await schedEnrichMembersWithProfileData(_schedMembers, accountId);
-
+        // Backend /run đã lấy profile chi tiết rồi mới trả kết quả.
+        // Không gọi /api/single-profile tự động lần nữa để tránh lỗi Zalo [221].
         schedRenderMembersTable();
 
         if (section) section.style.display = 'block';
-        schedShowNotif('OK', 'Hoàn thành! Lấy được ' + _schedMembers.length + ' thành viên.', 'success');
+        var msg = 'Hoàn thành! Lấy được ' + _schedMembers.length + ' thành viên.';
+        if (json.profileDetailTotal && json.profileDetailAttempted < json.profileDetailTotal) {
+            msg += ' Profile chi tiết còn thiếu ' + (json.profileDetailTotal - json.profileDetailAttempted) + ' UID do Zalo giới hạn request.';
+        }
+        schedShowNotif('OK', msg, 'success');
     } catch (err) {
         schedShowNotif('Lỗi kết nối', err.message || String(err), 'error');
     } finally {
@@ -900,7 +1152,7 @@ async function schedEnrichMembersWithProfileData(members, accountId) {
                 batchUids.forEach(function(uid) {
                     var member = members.find(function(m) { return (m.userId || m.id || m.uid) === uid; });
                     if (member) {
-                        member.gender = member.gender || 0;
+                        if (!hasScheduleValue(member.gender)) member.gender = null;
                         member.sdob = member.sdob || '-';
                         member.isFr = member.isFr || 0;
                     }
@@ -917,11 +1169,11 @@ async function schedEnrichMembersWithProfileData(members, accountId) {
                                 }
                             });
                             member.userId = member.userId || member.id || userId;
-                            member.gender = Number(member.gender || 0);
+                            member.gender = hasScheduleValue(member.gender) ? Number(member.gender) : null;
                             member.sdob = member.sdob || '-';
                             member.isFr = Number(member.isFr || 0);
                         } else {
-                            member.gender = Number(member.gender || 0);
+                            member.gender = hasScheduleValue(member.gender) ? Number(member.gender) : null;
                             member.sdob = member.sdob || '-';
                             member.isFr = Number(member.isFr || 0);
                         }
@@ -937,7 +1189,7 @@ async function schedEnrichMembersWithProfileData(members, accountId) {
     } catch (err) {
         console.error('[schedEnrichMembersWithProfileData] Fetch error:', err);
         members.forEach(function(member) {
-            member.gender = member.gender || 0;
+            if (!hasScheduleValue(member.gender)) member.gender = null;
             member.sdob = member.sdob || '-';
             member.isFr = member.isFr || 0;
         });
@@ -966,13 +1218,10 @@ function schedRenderMembersTable() {
         var name = member.zaloName || member.displayName || member.dName || member.name || 'Không tên';
         var avatar = normalizeAvatarUrlSchedules(member.avatar || member.avt || '');
         var isFr = Number(member.isFr || 0);
-        var gender = Number(member.gender || 0);
+        var genderDisplay = formatScheduleGender(member.gender);
         var sdob = member.sdob || member.dob || '-';
         var phoneNumber = member.phoneNumber || member.phone || member.mobile || '-';
         var statusText = member.status || member.accountStatus || '-';
-
-        // Giống members.js: Zalo thường trả gender 0 Nam, 1 Nữ.
-        var genderDisplay = gender === 1 ? 'Nữ' : 'Nam';
 
         var friendStatus = isFr === 1 ? 'Đã kết bạn' : 'Chưa';
         var friendColor = isFr === 1 ? 'var(--green)' : 'var(--orange)';

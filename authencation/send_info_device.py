@@ -109,10 +109,12 @@ def _load_dotenv_safe():
 _load_dotenv_safe()
 
 # Email config - from .env
-SENDMAIL_USER = os.getenv("SENDMAIL_USER", "")
-SENDMAIL_PASS = os.getenv("SENDMAIL_PASS", "")
-RECEIVER_EMAIL_1 = os.getenv("RECEIVER_EMAIL_1", "")
-RECEIVER_EMAIL_2 = os.getenv("RECEIVER_EMAIL_2", "")
+SENDMAIL_USER = (os.getenv("SENDMAIL_USER", "") or "").strip()
+# Gmail App Password thường được hiển thị theo nhóm có dấu cách.
+# SMTP login cần chuỗi liền 16 ký tự, nên loại bỏ toàn bộ khoảng trắng để tránh lỗi 535 BadCredentials.
+SENDMAIL_PASS = ''.join((os.getenv("SENDMAIL_PASS", "") or "").split())
+RECEIVER_EMAIL_1 = (os.getenv("RECEIVER_EMAIL_1", "") or "").strip()
+RECEIVER_EMAIL_2 = (os.getenv("RECEIVER_EMAIL_2", "") or "").strip()
 ACTIVATION_DAYS_VALID = int(os.getenv("ACTIVATION_DAYS_VALID", "30"))
 SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key_change_this")
 
@@ -615,7 +617,7 @@ def send_activation_code_by_email(device_info, activation_code):
             </head>
             <body>
                 <div class="container">
-                    <h1>🔐 ZMKT - Mã kích hoạt</h1>
+                    <h1>🔐 Nexus - Mã kích hoạt</h1>
                     
                     <div class="info-block">
                         <div><span class="label">🖥️ Device Name:</span> <span class="value">{device_info['device_name']}</span></div>
@@ -666,6 +668,11 @@ def send_activation_code_by_email(device_info, activation_code):
         
         return True
         
+    except smtplib.SMTPAuthenticationError as e:
+        print("[AUTH] Gmail SMTP authentication failed. Kiểm tra SENDMAIL_USER và SENDMAIL_PASS trong .env.")
+        print("[AUTH] Nếu dùng Gmail, SENDMAIL_PASS phải là App Password 16 ký tự; không dùng mật khẩu Gmail thường. Khoảng trắng trong App Password đã được tự loại bỏ.")
+        print(f"[AUTH] SMTP error: {e}")
+        return False
     except Exception as e:
         print(f"[AUTH] Error sending activation email: {e}")
         return False
@@ -737,11 +744,11 @@ def format_mac_address(device_id_int):
         return str(device_id_int)
 
 
-# ====================== MAIN FLOW ======================
+# ====================== MAIN PROCESS ======================
 
 def register_device_with_activation(verbose=False):
     """
-    Main flow: Generate and send activation code for this device.
+    Main process: Generate and send activation code for this device.
     
     Key behavior (per requirements):
     - Each device gets its own unique key (tied to fingerprint).
@@ -760,7 +767,7 @@ def register_device_with_activation(verbose=False):
     """
     if verbose:
         print("\n" + "="*60)
-        print("🔐 ZMKT - ACTIVATION CODE GENERATOR")
+        print("🔐 Nexus - ACTIVATION CODE GENERATOR")
         print("="*60 + "\n")
     
     # SECRET_KEY is required because the same key verifies the pasted activation code.
@@ -865,7 +872,7 @@ def save_user_activation_code(code_text):
         full_code_text = None
         display_code = normalized_short_code
 
-        # New short-code flow: user enters max 12 characters.
+        # New short-code process: user enters max 12 characters.
         if '|' not in raw_input_code and ':' not in raw_input_code:
             if len(normalized_short_code) != SHORT_CODE_LENGTH:
                 return False, f"❌ Mã kích hoạt phải đúng {SHORT_CODE_LENGTH} ký tự"
@@ -1200,7 +1207,7 @@ def send_activation_code_by_email(device_info, activation_code):
 
     try:
         for recipient in recipients:
-            subject = f"🔐 ZMKT - Mã kích hoạt {plan_label} - {device_info['device_name']}"
+            subject = f"🔐 Nexus - Mã kích hoạt {plan_label} - {device_info['device_name']}"
             body = f"""
             <html>
             <head>
@@ -1218,7 +1225,7 @@ def send_activation_code_by_email(device_info, activation_code):
             </head>
             <body>
                 <div class="container">
-                    <h1>🔐 ZMKT - Mã kích hoạt</h1>
+                    <h1>🔐 Nexus - Mã kích hoạt</h1>
                     <div class="info-block">
                         <div><span class="label">🖥️ Device Name:</span> <span class="value">{device_info['device_name']}</span></div>
                         <div><span class="label">👤 User:</span> <span class="value">{device_info['username']}</span></div>
@@ -1257,6 +1264,11 @@ def send_activation_code_by_email(device_info, activation_code):
             server.send_message(msg)
             server.quit()
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print("[AUTH] Gmail SMTP authentication failed. Kiểm tra SENDMAIL_USER và SENDMAIL_PASS trong .env.")
+        print("[AUTH] Nếu dùng Gmail, SENDMAIL_PASS phải là App Password 16 ký tự; không dùng mật khẩu Gmail thường. Khoảng trắng trong App Password đã được tự loại bỏ.")
+        print(f"[AUTH] SMTP error: {e}")
+        return False
     except Exception as e:
         print(f"[AUTH] Error sending activation email: {e}")
         return False
@@ -1314,7 +1326,7 @@ def validate_activation_code():
 def register_device_with_activation(verbose=False, duration_key=None, force=True):
     if verbose:
         print("\n" + "="*60)
-        print("🔐 ZMKT - ACTIVATION CODE GENERATOR")
+        print("🔐 Nexus - ACTIVATION CODE GENERATOR")
         print("="*60 + "\n")
     if not _is_secret_key_valid():
         if verbose:
@@ -1474,15 +1486,15 @@ def register_device_on_startup(verbose=True):
 
 def _get_hidden_license_dir() -> Path:
     """Thư mục lưu license ẩn trên máy người dùng."""
-    base = os.getenv("ZMKT_LICENSE_DIR", "").strip()
+    base = os.getenv("NEXUS_LICENSE_DIR", "").strip()
     if base:
         root = Path(base)
     else:
         appdata = os.getenv("APPDATA") or os.getenv("LOCALAPPDATA")
         if appdata:
-            root = Path(appdata) / "ZMKT" / ".license"
+            root = Path(appdata) / "Nexus" / ".license"
         else:
-            root = Path.home() / ".zmkt" / ".license"
+            root = Path.home() / ".nexus" / ".license"
     root.mkdir(parents=True, exist_ok=True)
     _hide_path(root, directory=True)
     return root
@@ -1549,7 +1561,7 @@ PATHS = _get_persistent_paths()
 def _license_fernet_key():
     """Tạo key mã hóa từ SECRET_KEY + fingerprint. Không lưu key ra file riêng."""
     fp = generate_device_fingerprint() or {}
-    raw = f"{SECRET_KEY}:{fp.get('hash', '')}:ZMKT_LICENSE_V2".encode("utf-8")
+    raw = f"{SECRET_KEY}:{fp.get('hash', '')}:NEXUS_LICENSE_V2".encode("utf-8")
     return base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
 
 
@@ -1756,7 +1768,7 @@ def send_activation_code_by_email(device_info, activation_code):
 
     try:
         for recipient in recipients:
-            subject = f"🔐 ZMKT - Mã kích hoạt {plan_label} - {device_info['device_name']}"
+            subject = f"🔐 Nexus - Mã kích hoạt {plan_label} - {device_info['device_name']}"
             body = f"""
             <html>
             <head>
@@ -1774,7 +1786,7 @@ def send_activation_code_by_email(device_info, activation_code):
             </head>
             <body>
                 <div class="container">
-                    <h1>🔐 ZMKT - Mã kích hoạt</h1>
+                    <h1>🔐 Nexus - Mã kích hoạt</h1>
                     <div class="info-block">
                         <div><span class="label">🖥️ Device Name:</span> <span class="value">{device_info['device_name']}</span></div>
                         <div><span class="label">👤 User:</span> <span class="value">{device_info['username']}</span></div>
@@ -1813,6 +1825,11 @@ def send_activation_code_by_email(device_info, activation_code):
             server.send_message(msg)
             server.quit()
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print("[AUTH] Gmail SMTP authentication failed. Kiểm tra SENDMAIL_USER và SENDMAIL_PASS trong .env.")
+        print("[AUTH] Nếu dùng Gmail, SENDMAIL_PASS phải là App Password 16 ký tự; không dùng mật khẩu Gmail thường. Khoảng trắng trong App Password đã được tự loại bỏ.")
+        print(f"[AUTH] SMTP error: {e}")
+        return False
     except Exception as e:
         print(f"[AUTH] Error sending activation email: {e}")
         return False
@@ -1943,7 +1960,7 @@ def register_device_with_activation(verbose=False, duration_key=None, force=True
     """Tạo/gửi mã kích hoạt; không print mã kích hoạt hoặc file license ra console."""
     if verbose:
         print("\n" + "="*60)
-        print("🔐 ZMKT - ACTIVATION")
+        print("🔐 Nexus - ACTIVATION")
         print("="*60 + "\n")
 
     if not _is_secret_key_valid():
@@ -2037,15 +2054,15 @@ def _is_secret_key_valid(sk=None):
 
 
 def _get_hidden_license_dir() -> Path:
-    base = os.getenv("ZMKT_LICENSE_DIR", "").strip()
+    base = os.getenv("NEXUS_LICENSE_DIR", "").strip()
     if base:
         root = Path(base)
     else:
         appdata = os.getenv("APPDATA") or os.getenv("LOCALAPPDATA")
         if appdata:
-            root = Path(appdata) / "ZMKT" / ".license"
+            root = Path(appdata) / "Nexus" / ".license"
         else:
-            root = Path.home() / ".zmkt" / ".license"
+            root = Path.home() / ".nexus" / ".license"
     root.mkdir(parents=True, exist_ok=True)
     _hide_path(root, directory=True)
     return root
@@ -2105,7 +2122,7 @@ PATHS = _get_persistent_paths()
 
 def _license_fernet_key():
     fp = generate_device_fingerprint() or {}
-    raw = f"{SECRET_KEY}:{fp.get('hash', '')}:ZMKT_LICENSE_V3".encode("utf-8")
+    raw = f"{SECRET_KEY}:{fp.get('hash', '')}:NEXUS_LICENSE_V3".encode("utf-8")
     return base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
 
 
@@ -2402,7 +2419,7 @@ def save_user_activation_code(code_text):
 def register_device_with_activation(verbose=False, duration_key=None, force=True):
     if verbose:
         print("\n" + "="*60)
-        print("🔐 ZMKT - ACTIVATION")
+        print("🔐 Nexus - ACTIVATION")
         print("="*60 + "\n")
     if not _is_secret_key_valid():
         if verbose:
