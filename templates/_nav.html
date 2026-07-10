@@ -23,5 +23,33 @@
         <a href="{{ url_for('marketing_phone_page') }}" class="{% if active_page == 'marketing_phone' %}active{% endif %}">☎️ <span>Gửi theo SĐT</span></a>
         <a href="{{ url_for('marketing_schedules_page') }}" class="{% if active_page == 'schedules' %}active{% endif %}">📅 <span>Lịch gửi</span></a>
     </nav>
+    <div class="sidebar-updater">
+        <div>
+            <span>Cập nhật</span>
+            <strong id="nexusUpdateHint">Kiểm tra bản mới</strong>
+        </div>
+        <button type="button" id="nexusUpdateBtn" onclick="NexusUpdater.checkAndOpen()">Cập nhật</button>
+    </div>
     <div class="sidebar-footer">Trung tâm chiến dịch &amp; dữ liệu</div>
 </div>
+
+<div class="nexus-update-backdrop" id="nexusUpdateBackdrop" aria-hidden="true">
+    <div class="nexus-update-modal" role="dialog" aria-modal="true" aria-labelledby="nexusUpdateTitle">
+        <div class="nexus-update-head">
+            <div>
+                <h3 id="nexusUpdateTitle">Cập nhật Nexus</h3>
+                <p id="nexusUpdateSubtitle">Kiểm tra bản phát hành mới nhất từ GitHub.</p>
+            </div>
+            <button type="button" class="nexus-update-close" onclick="NexusUpdater.close()" aria-label="Đóng">×</button>
+        </div>
+        <div class="nexus-update-body">
+            <div class="nexus-update-status" id="nexusUpdateStatus">Sẵn sàng kiểm tra cập nhật.</div>
+        </div>
+        <div class="nexus-update-actions">
+            <button type="button" class="btn btn-secondary" onclick="NexusUpdater.close()">Đóng</button>
+            <button type="button" class="btn btn-primary" id="nexusApplyUpdateBtn" onclick="NexusUpdater.apply()" disabled>Tải và cập nhật</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/updater.js') }}?v=nexus-updater-20260709"></script>

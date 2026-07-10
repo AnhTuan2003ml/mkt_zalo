@@ -1,13 +1,43 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import glob
+import os
+import sys
+
+
+def collect_python_runtime_binaries():
+    binaries = []
+    search_dirs = {
+        os.path.dirname(sys.executable),
+        sys.base_prefix,
+        os.path.join(sys.base_prefix, "DLLs"),
+    }
+    patterns = [
+        f"python{sys.version_info.major}{sys.version_info.minor}.dll",
+        "vcruntime*.dll",
+        "api-ms-win-*.dll",
+    ]
+    seen = set()
+    for folder in search_dirs:
+        if not folder or not os.path.isdir(folder):
+            continue
+        for pattern in patterns:
+            for path in glob.glob(os.path.join(folder, pattern)):
+                norm = os.path.normcase(os.path.abspath(path))
+                if os.path.isfile(path) and norm not in seen:
+                    binaries.append((path, "."))
+                    seen.add(norm)
+    return binaries
+
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
-    datas=[('templates', 'templates'), ('static', 'static'), ('authencation', 'authencation'), ('.env', '.')],
+    binaries=collect_python_runtime_binaries(),
+    datas=[('templates', 'templates'), ('static', 'static'), ('authencation', 'authencation'), ('.env', '.'), ('VERSION', '.')],
     hiddenimports=[
         'appdirs', 'tkinter', 'tkinter.scrolledtext', 'websocket',
+        'unicodedata', 'encodings', 'encodings.utf_8', 'codecs',
         'core.zalo.enc', 'core.zalo.dec', 'core.zalo.debugs',
         'core.zalo.zalo_config', 'core.zalo.zalo_headers',
         'features.accounts.account_manager',
@@ -54,7 +84,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,

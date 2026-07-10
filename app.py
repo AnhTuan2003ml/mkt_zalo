@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify, Response, redirect, url_for
 import sys
 import os
+
+from flask import Flask, render_template, request, jsonify, Response, redirect, url_for
 import json
 import time
 import queue
@@ -8,6 +9,11 @@ import threading
 import requests
 import re
 import uuid
+import hashlib
+import shutil
+import subprocess
+import tempfile
+import zipfile
 from datetime import datetime, timedelta
 
 # ─── Get App Root (PyInstaller compatible) ─────────────────────────────────────
@@ -115,6 +121,245 @@ from core.zalo.zalo_config import get_zpw_ver
 # ─── Friend request planning storage ─────────────────────────────────────────
 FRIEND_PLANS_FILE = os.path.join(app_root, "data", "friend_invite_plans.json")
 INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.json")
+VERSION_FILE = os.path.join(app_root, "VERSION")
+UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
+UPDATE_ASSET_NAME = "Nexus.zip"
+UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
+UPDATE_EXE_NAME = "Nexus.exe"
+
+
+def _read_app_version():
+    try:
+        if os.path.isfile(VERSION_FILE):
+            with open(VERSION_FILE, "r", encoding="utf-8") as f:
+                version = f.read().strip()
+                if version:
+                    return version.lstrip("v")
+    except Exception as e:
+        print("[updater] read VERSION error=", e)
+    return "1.0.0"
+
+
+def _parse_version_parts(version):
+    return [int(x) for x in re.findall(r"\d+", str(version or ""))]
+
+
+def _is_newer_version(latest, current):
+    latest_parts = _parse_version_parts(latest)
+    current_parts = _parse_version_parts(current)
+    size = max(len(latest_parts), len(current_parts), 1)
+    latest_parts += [0] * (size - len(latest_parts))
+    current_parts += [0] * (size - len(current_parts))
+    return latest_parts > current_parts
+
+
+def _github_headers():
+    return {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Nexus-Updater",
+    }
+
+
+def _fetch_latest_release():
+    url = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
+    res = requests.get(url, headers=_github_headers(), timeout=20)
+    res.raise_for_status()
+    release = res.json()
+    tag_name = str(release.get("tag_name") or "").strip()
+    latest_version = tag_name.lstrip("v")
+    assets = release.get("assets") or []
+    asset = next((a for a in assets if str(a.get("name") or "").lower() == UPDATE_ASSET_NAME.lower()), None)
+    hash_asset = next((a for a in assets if str(a.get("name") or "").lower() == UPDATE_HASH_ASSET_NAME.lower()), None)
+    if not latest_version:
+        raise ValueError("Release mới nhất không có tag phiên bản.")
+    if not asset or not asset.get("browser_download_url"):
+        raise ValueError(f"Không tìm thấy asset {UPDATE_ASSET_NAME} trong release {tag_name}.")
+    return {
+        "version": latest_version,
+        "downloadUrl": asset.get("browser_download_url"),
+        "size": asset.get("size") or 0,
+        "digest": asset.get("digest") or "",
+        "hashUrl": hash_asset.get("browser_download_url") if hash_asset else "",
+    }
+
+
+def _download_update_zip(download_url, target_zip):
+    part_path = target_zip + ".part"
+    if os.path.exists(part_path):
+        os.remove(part_path)
+    with requests.get(download_url, headers=_github_headers(), timeout=60, stream=True) as res:
+        res.raise_for_status()
+        with open(part_path, "wb") as f:
+            for chunk in res.iter_content(chunk_size=1024 * 256):
+                if chunk:
+                    f.write(chunk)
+    os.replace(part_path, target_zip)
+
+
+def _download_text(url):
+    if not url:
+        return ""
+    res = requests.get(url, headers=_github_headers(), timeout=20)
+    res.raise_for_status()
+    return res.text
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _extract_sha256(value):
+    if not value:
+        return ""
+    match = re.search(r"\b[a-fA-F0-9]{64}\b", str(value))
+    return match.group(0).lower() if match else ""
+
+
+def _verify_update_hash(update_zip, release):
+    expected = _extract_sha256(release.get("digest"))
+    if not expected and release.get("hashUrl"):
+        expected = _extract_sha256(_download_text(release["hashUrl"]))
+    if not expected:
+        return
+    actual = _sha256_file(update_zip)
+    if actual.lower() != expected:
+        raise ValueError("SHA-256 của gói cập nhật không khớp release.")
+
+
+def _get_update_dir():
+    return os.path.join(app_root, "update")
+
+
+def _validate_update_zip(update_zip, expected_size=0):
+    if not os.path.isfile(update_zip) or os.path.getsize(update_zip) < 1024 * 1024:
+        raise ValueError("Gói cập nhật không hợp lệ hoặc quá nhỏ.")
+    if expected_size and os.path.getsize(update_zip) != int(expected_size):
+        raise ValueError("Kích thước gói cập nhật không khớp release.")
+    with zipfile.ZipFile(update_zip, "r") as zf:
+        exe_members = []
+        for info in zf.infolist():
+            normalized = info.filename.replace("\\", "/")
+            if normalized.startswith("/") or ".." in normalized.split("/"):
+                raise ValueError("Gói cập nhật chứa đường dẫn không an toàn.")
+            if os.path.basename(normalized).lower() == UPDATE_EXE_NAME.lower():
+                exe_members.append(info)
+        if not exe_members:
+            raise ValueError("Nexus.zip không chứa Nexus.exe.")
+
+def _install_zip_update(update_zip, version):
+    import tempfile
+
+    install_dir = app_root
+    if getattr(sys, "frozen", False):
+        install_dir = os.path.dirname(sys.executable)
+
+    os.makedirs(install_dir, exist_ok=True)
+
+    update_dir = os.path.dirname(update_zip)
+
+    script_path = os.path.join(tempfile.gettempdir(), "_nexus_apply_update.bat")
+    wait_pid = os.getpid() if getattr(sys, "frozen", False) else 0
+    script = r'''@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+chcp 65001 >nul
+
+set "PID_TO_WAIT=%~1"
+set "ZIP_PATH=%~2"
+set "INSTALL_DIR=%~3"
+set "UPDATE_DIR=%~4"
+set "VERSION_VALUE=%~5"
+set "STAGE_DIR=%UPDATE_DIR%\stage"
+set "RUN_EXE=%INSTALL_DIR%\Nexus.exe"
+set "NEW_EXE=%INSTALL_DIR%\Nexus.exe.new"
+
+if not "%PID_TO_WAIT%"=="0" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Wait-Process -Id %PID_TO_WAIT% -Timeout 45 -ErrorAction SilentlyContinue } catch {}" >nul 2>&1
+)
+
+timeout /t 1 /nobreak >nul
+
+if not exist "%ZIP_PATH%" goto :fail
+
+if exist "%STAGE_DIR%" rmdir /s /q "%STAGE_DIR%"
+mkdir "%STAGE_DIR%" || goto :fail
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath $env:ZIP_PATH -DestinationPath $env:STAGE_DIR -Force" >nul 2>&1
+if errorlevel 1 goto :fail
+
+set "EXE_PATH=%STAGE_DIR%\Nexus.exe"
+if not exist "%EXE_PATH%" (
+    for /r "%STAGE_DIR%" %%F in (Nexus.exe) do (
+        set "EXE_PATH=%%~fF"
+        goto :found_exe
+    )
+)
+:found_exe
+if not exist "%EXE_PATH%" goto :fail
+
+if exist "%NEW_EXE%" del /f /q "%NEW_EXE%"
+copy /y "%EXE_PATH%" "%NEW_EXE%" >nul 2>&1 || goto :fail
+
+move /y "%NEW_EXE%" "%RUN_EXE%" >nul 2>&1 || (
+    if exist "%NEW_EXE%" del /f /q "%NEW_EXE%"
+    goto :fail
+)
+
+> "%INSTALL_DIR%\VERSION" echo %VERSION_VALUE%
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem \"$env:TEMP\_MEI*\" -Directory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue" >nul 2>&1
+
+start "" /d "%INSTALL_DIR%" "%RUN_EXE%"
+
+timeout /t 1 /nobreak >nul
+if exist "%UPDATE_DIR%" rmdir /s /q "%UPDATE_DIR%"
+del /f /q "%~f0"
+exit /b 0
+
+:fail
+if exist "%NEW_EXE%" del /f /q "%NEW_EXE%"
+if exist "%RUN_EXE%" start "" /d "%INSTALL_DIR%" "%RUN_EXE%"
+del /f /q "%~f0"
+exit /b 1
+'''
+    with open(script_path, "w", encoding="utf-8") as f:
+        f.write(script)
+
+    command = [
+        "cmd.exe",
+        "/d",
+        "/c",
+        "call",
+        script_path,
+        str(wait_pid),
+        update_zip,
+        install_dir,
+        update_dir,
+        str(version).lstrip("v"),
+    ]
+    if not getattr(sys, "frozen", False):
+        subprocess.check_call(command, cwd=install_dir)
+        return {
+            "state": "done",
+            "message": "Đã giải nén gói cập nhật và chạy lại Nexus.exe.",
+        }
+
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    creationflags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    creationflags |= getattr(subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen(command, cwd=install_dir, creationflags=creationflags, close_fds=True)
+
+    def _exit_for_update():
+        os._exit(0)
+
+    threading.Timer(1.2, _exit_for_update).start()
+    return {
+        "state": "restart",
+        "message": "Đã tải bản cập nhật. Ứng dụng sẽ tự giải nén, xóa gói tải về và chạy lại Nexus.exe.",
+    }
 
 
 def _friend_now_ms():
@@ -3057,6 +3302,62 @@ def devices_dashboard():
 
 
 # ─── Ensure UTF-8 encoding for all responses ──────────────────────────────────
+@app.route("/api/updater/version", methods=["GET"])
+def api_updater_version():
+    return jsonify({
+        "success": True,
+        "message": "OK",
+    })
+
+
+@app.route("/api/updater/check", methods=["GET", "POST"])
+def api_updater_check():
+    try:
+        current = _read_app_version()
+        release = _fetch_latest_release()
+        has_update = _is_newer_version(release["version"], current)
+        return jsonify({
+            "success": True,
+            "state": "ready" if has_update else "none",
+            "message": "Có bản cập nhật mới." if has_update else "Bạn đang dùng phiên bản mới nhất.",
+        })
+    except Exception as e:
+        print("[updater] check error=", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/updater/apply", methods=["POST"])
+def api_updater_apply():
+    try:
+        current = _read_app_version()
+        release = _fetch_latest_release()
+        if not _is_newer_version(release["version"], current):
+            return jsonify({
+                "success": True,
+                "state": "none",
+                "message": "Bạn đang dùng phiên bản mới nhất.",
+            })
+
+        update_dir = _get_update_dir()
+        if os.path.isdir(update_dir):
+            shutil.rmtree(update_dir, ignore_errors=True)
+        os.makedirs(update_dir, exist_ok=True)
+        zip_path = os.path.join(update_dir, UPDATE_ASSET_NAME)
+        _download_update_zip(release["downloadUrl"], zip_path)
+        _validate_update_zip(zip_path, release.get("size") or 0)
+        _verify_update_hash(zip_path, release)
+        install_result = _install_zip_update(zip_path, release["version"])
+
+        return jsonify({
+            "success": True,
+            "state": install_result.get("state") or "done",
+            "message": install_result.get("message") or "Đã cập nhật.",
+        })
+    except Exception as e:
+        print("[updater] apply error=", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.after_request
 def after_request(response):
     """Ensure all responses use UTF-8 encoding."""
@@ -3241,7 +3542,23 @@ def _start_backend_server():
         traceback.print_exc()
 
 
+def _cleanup_update_script():
+    try:
+        candidates = []
+        candidates.append(os.path.join(tempfile.gettempdir(), "_nexus_apply_update.bat"))
+        if getattr(sys, "frozen", False):
+            candidates.append(os.path.join(os.path.dirname(sys.executable), "_nexus_apply_update.bat"))
+        else:
+            candidates.append(os.path.join(app_root, "_nexus_apply_update.bat"))
+        for path in candidates:
+            if os.path.exists(path):
+                os.remove(path)
+    except Exception:
+        pass
+
+
 def _launch_log_window():
+    _cleanup_update_script()
     """Mở cửa sổ Tkinter hiển thị log và nút mở giao diện."""
     import webbrowser
     import tkinter as tk
@@ -3380,4 +3697,3 @@ def _launch_log_window():
 
 if __name__ == "__main__":
     _launch_log_window()
-

@@ -5026,3 +5026,673 @@ body.guide-page .page { max-width: none !important; }
     .page-hero,
     .guide-hero-v2 { padding: 22px !important; border-radius: 22px !important; }
 }
+
+/* ===== NEXUS_GLASS_REFERENCE_WITH_UPDATER_20260709 ===== */
+:root {
+    --bg: #142334;
+    --surface: rgba(31, 46, 62, .70);
+    --surface2: rgba(22, 34, 49, .76);
+    --surface3: rgba(46, 60, 77, .70);
+    --border: rgba(191, 213, 235, .16);
+    --border-soft: rgba(191, 213, 235, .10);
+    --accent: #4bd8ff;
+    --accent-hover: #87e6ff;
+    --accent-2: #7f57ff;
+    --accent-3: #2a63ff;
+    --text: #f2f7fb;
+    --text-muted: #aab9c7;
+    --green: #63e6a1;
+    --red: #ff7886;
+    --yellow: #ffd166;
+    --input-bg: rgba(13, 23, 34, .60);
+    --shadow-soft: 0 18px 45px rgba(3, 8, 14, .28);
+    --shadow-lg: 0 28px 80px rgba(3, 8, 14, .46);
+    --radius-lg: 8px;
+    --radius-md: 8px;
+    --radius-sm: 7px;
+}
+
+html,
+body {
+    min-height: 100%;
+    background:
+        linear-gradient(rgba(123, 170, 205, .045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(123, 170, 205, .045) 1px, transparent 1px),
+        radial-gradient(circle at 18% 10%, rgba(75, 216, 255, .18), transparent 28%),
+        radial-gradient(circle at 86% 18%, rgba(127, 87, 255, .16), transparent 28%),
+        linear-gradient(135deg, #1d3447 0%, #132233 42%, #12192a 100%) !important;
+    background-size: 46px 46px, 46px 46px, auto, auto, auto !important;
+    color: var(--text) !important;
+}
+
+body::before {
+    background:
+        linear-gradient(120deg, rgba(255,255,255,.04), transparent 30%, rgba(255,255,255,.025) 63%, transparent),
+        radial-gradient(circle at 58% 40%, rgba(255,255,255,.05), transparent 32%) !important;
+    opacity: .9 !important;
+    mask-image: none !important;
+}
+
+.app-sidebar.header,
+.header {
+    width: 184px !important;
+    padding: 14px 10px !important;
+    background: linear-gradient(180deg, rgba(47, 64, 82, .70), rgba(23, 33, 48, .78)) !important;
+    border-right: 1px solid rgba(220, 235, 250, .14) !important;
+    box-shadow: inset -1px 0 0 rgba(255,255,255,.05), 12px 0 42px rgba(0, 0, 0, .20) !important;
+    backdrop-filter: blur(18px) saturate(130%) !important;
+}
+
+.header-content {
+    padding: 0 !important;
+    margin-bottom: 12px !important;
+}
+
+.header-content .brand {
+    min-height: 56px !important;
+    padding: 8px 9px !important;
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.045)) !important;
+    border: 1px solid rgba(220, 235, 250, .18) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 10px 24px rgba(0,0,0,.20) !important;
+}
+
+.brand-logo {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 0 18px rgba(75, 216, 255, .28) !important;
+}
+
+.header-content .brand h1 {
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0 !important;
+}
+
+.brand-subtitle {
+    max-width: 96px !important;
+    color: rgba(226, 239, 250, .62) !important;
+    font-size: 7px !important;
+    line-height: 1.25 !important;
+}
+
+.header-nav {
+    gap: 8px !important;
+    padding: 0 !important;
+}
+
+.nav-section-label {
+    margin: 10px 0 0 !important;
+    padding: 8px 10px 3px !important;
+    color: #a6d8ef !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    letter-spacing: .08em !important;
+    border: 1px solid rgba(220, 235, 250, .13) !important;
+    border-bottom: 0 !important;
+    border-radius: 8px 8px 0 0 !important;
+    background: rgba(20, 33, 47, .46) !important;
+}
+
+.header-nav a {
+    min-height: 34px !important;
+    padding: 8px 9px !important;
+    border-radius: 7px !important;
+    color: #f0f6fb !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
+    background: rgba(17, 29, 43, .38) !important;
+    border: 1px solid rgba(220, 235, 250, .12) !important;
+}
+
+.header-nav a:hover {
+    transform: none !important;
+    color: #ffffff !important;
+    background: rgba(55, 76, 98, .54) !important;
+    border-color: rgba(75, 216, 255, .30) !important;
+}
+
+.header-nav a.active {
+    color: #eaffff !important;
+    background: linear-gradient(90deg, rgba(39, 221, 242, .30), rgba(104, 69, 255, .58)) !important;
+    border-color: rgba(141, 117, 255, .52) !important;
+    box-shadow: 0 0 24px rgba(115, 71, 255, .30), inset 0 1px 0 rgba(255,255,255,.14) !important;
+}
+
+.sidebar-updater,
+.sidebar-footer {
+    margin: 10px 0 0 !important;
+    padding: 10px !important;
+    border-radius: 8px !important;
+    background: rgba(255,255,255,.045) !important;
+    border: 1px solid rgba(220, 235, 250, .12) !important;
+    color: rgba(226, 239, 250, .70) !important;
+}
+
+.sidebar-updater {
+    display: grid;
+    gap: 8px;
+    margin-top: auto !important;
+}
+
+.sidebar-updater span {
+    display: block;
+    font-size: 9px;
+    color: rgba(226, 239, 250, .56);
+}
+
+.sidebar-updater strong {
+    display: block;
+    margin-top: 2px;
+    color: #f8fbff;
+    font-size: 12px;
+}
+
+.sidebar-updater button {
+    width: 100%;
+    padding: 8px 9px;
+    color: #ffffff;
+    cursor: pointer;
+    background: linear-gradient(135deg, #1eb7ff 0%, #275dff 52%, #7347ff 100%);
+    border: 1px solid rgba(133, 166, 255, .42);
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 800;
+    box-shadow: 0 0 18px rgba(39, 93, 255, .22);
+}
+
+.sidebar-updater button:disabled {
+    opacity: .65;
+    cursor: wait;
+}
+
+.sidebar-footer {
+    margin-top: 8px !important;
+    font-size: 9px !important;
+}
+
+.page {
+    margin-left: 184px !important;
+    width: calc(100% - 184px) !important;
+    padding: 22px 26px !important;
+}
+
+.page > .card,
+.card,
+.sched-panel,
+.sched-results-panel,
+.schedule-card,
+.account-card,
+.group-item,
+.groups-list-item,
+.guide-tile-v2,
+.guide-feature-row,
+.guide-flow-card,
+.guide-trouble-card,
+.guide-note-panel,
+.guide-card,
+.module-list a,
+.table-scroll,
+.sched-table-wrap,
+.personal-groups-table-wrap {
+    background: linear-gradient(180deg, rgba(55, 70, 88, .60), rgba(20, 30, 44, .58)) !important;
+    border: 1px solid rgba(220, 235, 250, .15) !important;
+    border-radius: 8px !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 18px 42px rgba(0, 0, 0, .20) !important;
+    backdrop-filter: blur(16px) saturate(125%) !important;
+}
+
+.card,
+.sched-panel,
+.sched-results-panel {
+    padding: 16px !important;
+}
+
+.page > .card {
+    padding: 14px !important;
+}
+
+.page-hero,
+.guide-hero-v2 {
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, rgba(75, 216, 255, .14), rgba(127, 87, 255, .12), rgba(20, 30, 44, .62)) !important;
+}
+
+.page-hero::after,
+.guide-hero-v2::after {
+    display: none !important;
+}
+
+.card:hover,
+.sched-panel:hover,
+.schedule-card:hover,
+.account-card:hover,
+.guide-tile-v2:hover,
+.guide-feature-row:hover,
+.guide-flow-card:hover,
+.guide-trouble-card:hover {
+    transform: none !important;
+    border-color: rgba(75, 216, 255, .28) !important;
+}
+
+.card-title,
+.sched-panel-head h3,
+.results-header h3,
+.sched-list-toolbar h3 {
+    color: #f9fbff !important;
+    font-size: 15px !important;
+    font-weight: 760 !important;
+    letter-spacing: 0 !important;
+}
+
+.sched-panel-head p,
+.sched-list-toolbar p,
+.results-subtitle,
+.page-hero p,
+.guide-hero-v2 p {
+    color: rgba(226, 239, 250, .68) !important;
+}
+
+.tab-nav {
+    gap: 6px !important;
+    margin-bottom: 16px !important;
+    padding: 4px !important;
+    border: 1px solid rgba(220, 235, 250, .12) !important;
+    border-radius: 8px !important;
+    background: rgba(7, 16, 27, .34) !important;
+}
+
+.tab-btn {
+    margin: 0 !important;
+    padding: 9px 12px !important;
+    border-radius: 7px !important;
+    border-bottom: 0 !important;
+    color: rgba(226, 239, 250, .68) !important;
+    font-weight: 700 !important;
+}
+
+.tab-nav button.active,
+.tab-btn.active {
+    color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(39, 221, 242, .20), rgba(104, 69, 255, .50)) !important;
+    box-shadow: 0 0 18px rgba(104, 69, 255, .22) !important;
+}
+
+.sched-compose-grid,
+.form-grid {
+    gap: 12px !important;
+}
+
+.form-group label {
+    color: rgba(244, 248, 252, .86) !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select,
+.search-box,
+.account-dropdown-button,
+.overlay-textarea,
+.af-input,
+.ig-search,
+input,
+textarea,
+select {
+    background: rgba(8, 15, 25, .54) !important;
+    border: 1px solid rgba(220, 235, 250, .16) !important;
+    border-radius: 7px !important;
+    color: #f7fbff !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    padding: 9px 11px !important;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus,
+.search-box:focus-within,
+.account-dropdown-button:focus,
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: rgba(75, 216, 255, .66) !important;
+    box-shadow: 0 0 0 3px rgba(75, 216, 255, .10), inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+.btn,
+.action-btn,
+.view-btn,
+button {
+    border-radius: 7px !important;
+    font-weight: 720 !important;
+    letter-spacing: 0 !important;
+    box-shadow: none !important;
+}
+
+.btn:hover,
+.action-btn:hover {
+    transform: none !important;
+}
+
+.btn-primary,
+.btn-info,
+.btn-success,
+.view-btn {
+    color: #ffffff !important;
+    background: linear-gradient(135deg, #1eb7ff 0%, #275dff 52%, #7347ff 100%) !important;
+    border: 1px solid rgba(133, 166, 255, .42) !important;
+    box-shadow: 0 0 18px rgba(39, 93, 255, .22) !important;
+}
+
+.btn-ghost,
+.btn-secondary,
+.action-btn {
+    color: #d6e5f2 !important;
+    background: rgba(12, 23, 37, .54) !important;
+    border: 1px solid rgba(220, 235, 250, .16) !important;
+}
+
+.btn-ghost:hover,
+.btn-secondary:hover,
+.action-btn:hover {
+    color: #ffffff !important;
+    border-color: rgba(75, 216, 255, .32) !important;
+    background: rgba(42, 61, 84, .60) !important;
+}
+
+.btn-warning {
+    color: #1f1600 !important;
+    background: linear-gradient(135deg, #ffe08a, #f7a52b) !important;
+}
+
+.btn-danger {
+    color: #ffeef1 !important;
+    background: linear-gradient(135deg, rgba(255, 89, 107, .36), rgba(121, 27, 42, .44)) !important;
+}
+
+.sched-list-toolbar,
+.results-header,
+.results-toolbar,
+.schedule-filter-bar,
+.member-bar {
+    gap: 10px !important;
+}
+
+.search-box {
+    min-height: 34px !important;
+    padding: 6px 10px !important;
+    max-width: 300px !important;
+}
+
+.table-scroll,
+.sched-table-wrap {
+    border-radius: 8px !important;
+    background: rgba(8, 13, 23, .34) !important;
+    max-height: calc(100vh - 330px) !important;
+}
+
+table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+thead th {
+    padding: 11px 12px !important;
+    background: rgba(16, 25, 39, .82) !important;
+    color: #f2f6fb !important;
+    border-bottom: 1px solid rgba(220, 235, 250, .14) !important;
+    font-size: 11px !important;
+    font-weight: 850 !important;
+    letter-spacing: 0 !important;
+}
+
+tbody td {
+    padding: 8px 12px !important;
+    border-bottom: 1px solid rgba(220, 235, 250, .10) !important;
+    color: rgba(248, 251, 255, .90) !important;
+}
+
+tbody tr {
+    background: rgba(8, 15, 26, .22) !important;
+}
+
+tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, .035) !important;
+}
+
+tbody tr:hover {
+    background: rgba(255, 255, 255, .10) !important;
+}
+
+.recipient-avatar,
+.avatar-small,
+.av,
+.account-dropdown-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 50% !important;
+    border: 1px solid rgba(75, 216, 255, .38) !important;
+    box-shadow: 0 0 0 2px rgba(255,255,255,.04), 0 0 14px rgba(75, 216, 255, .14) !important;
+}
+
+.group-avatar,
+.detail-avatar-large,
+.pf-avatar-large {
+    border-radius: 8px !important;
+}
+
+.global-id,
+.mono,
+.account-card-id,
+.group-card-id {
+    color: #71cfff !important;
+}
+
+.schedule-status,
+.schedule-status-badge,
+.sched-check-pill,
+.recipient-count,
+.status-bar,
+.sched-inline-status,
+.groups-inline-status,
+.empty-state,
+.accounts-empty,
+.sched-empty {
+    border-radius: 8px !important;
+    background: rgba(8, 15, 25, .46) !important;
+    border: 1px solid rgba(220, 235, 250, .14) !important;
+}
+
+.overlay-card,
+.af-schedule-card,
+.invite-group-card,
+.notification-card,
+.detail-modal-content,
+.member-status-card,
+.clear-confirm-card,
+.nexus-update-modal {
+    border-radius: 8px !important;
+    background: linear-gradient(180deg, rgba(38, 51, 68, .92), rgba(14, 22, 34, .96)) !important;
+    border: 1px solid rgba(220, 235, 250, .18) !important;
+    box-shadow: var(--shadow-lg) !important;
+    backdrop-filter: blur(18px) saturate(125%) !important;
+}
+
+.overlay-header,
+.overlay-footer,
+.af-schedule-card .overlay-footer,
+.notification-card,
+.nexus-update-head,
+.nexus-update-actions {
+    background: rgba(10, 18, 30, .52) !important;
+    border-color: rgba(220, 235, 250, .12) !important;
+}
+
+.nexus-update-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(2, 8, 15, .70);
+    backdrop-filter: blur(8px);
+}
+
+.nexus-update-backdrop.show {
+    display: flex;
+}
+
+.nexus-update-modal {
+    width: min(460px, 100%);
+    overflow: hidden;
+}
+
+.nexus-update-head,
+.nexus-update-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid rgba(220, 235, 250, .12);
+}
+
+.nexus-update-head h3 {
+    margin: 0 0 4px;
+    color: #f8fbff;
+    font-size: 16px;
+}
+
+.nexus-update-head p {
+    margin: 0;
+    color: rgba(226, 239, 250, .66);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.nexus-update-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: #d6e5f2;
+    cursor: pointer;
+    background: rgba(12, 23, 37, .54);
+    border: 1px solid rgba(220, 235, 250, .16);
+    border-radius: 7px;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.nexus-update-body {
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+}
+
+.nexus-update-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(8, 15, 25, .46);
+    border: 1px solid rgba(220, 235, 250, .12);
+}
+
+.nexus-update-row span {
+    color: rgba(226, 239, 250, .64);
+    font-size: 12px;
+}
+
+.nexus-update-row strong {
+    color: #f8fbff;
+    font-size: 13px;
+}
+
+.nexus-update-status {
+    min-height: 42px;
+    padding: 11px 12px;
+    border-radius: 8px;
+    color: rgba(226, 239, 250, .76);
+    background: rgba(8, 15, 25, .46);
+    border: 1px solid rgba(220, 235, 250, .12);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.nexus-update-status.loading {
+    color: #8ee8ff;
+    border-color: rgba(75, 216, 255, .30);
+}
+
+.nexus-update-status.success {
+    color: #92f2bd;
+    border-color: rgba(99, 230, 161, .30);
+}
+
+.nexus-update-status.error {
+    color: #ffb4bc;
+    border-color: rgba(255, 120, 134, .34);
+}
+
+.nexus-update-actions {
+    border-top: 1px solid rgba(220, 235, 250, .12);
+    border-bottom: 0;
+    flex-wrap: wrap;
+}
+
+.nexus-update-actions a {
+    margin-right: auto;
+    color: #8ee8ff;
+    font-size: 12px;
+    text-decoration: none;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(198, 216, 232, .24) !important;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(75, 216, 255, .38) !important;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+@media (max-width: 900px) {
+    .app-sidebar.header,
+    .header {
+        width: 100% !important;
+    }
+
+    .page {
+        margin-left: 0 !important;
+        width: 100% !important;
+        padding: 14px !important;
+    }
+
+    .header-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .sidebar-updater {
+        margin-top: 10px !important;
+    }
+}
