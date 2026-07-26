@@ -491,10 +491,14 @@ function sendMsgFromProfile() {
     setTimeout(function() { openOverlay(uid, name, avatar); }, 150);
 }
 
-document.getElementById('pfCloseBtn').addEventListener('click', closeProfileOverlay);
-document.getElementById('profileBackdrop').addEventListener('click', function(e) {
-    if (e.target === this) closeProfileOverlay();
-});
+if (document.getElementById('pfCloseBtn')) {
+    document.getElementById('pfCloseBtn').addEventListener('click', closeProfileOverlay);
+}
+if (document.getElementById('profileBackdrop')) {
+    document.getElementById('profileBackdrop').addEventListener('click', function(e) {
+        if (e.target === this) closeProfileOverlay();
+    });
+}
 document.addEventListener('keydown', function(e) {
     if (e.key !== 'Escape') return;
     if (typeof AvatarPreview !== 'undefined' && AvatarPreview.isOpen()) {
@@ -510,6 +514,7 @@ document.addEventListener('keydown', function(e) {
 
 // ─── Send SMS ───────────────────────────────────────────────────────────────
 
+if (document.getElementById('overlaySendBtn')) {
 document.getElementById('overlaySendBtn').addEventListener('click', function() {
     var uid    = document.getElementById('overlayUid').textContent.trim();
     var name   = document.getElementById('overlayName').textContent.trim();
@@ -573,6 +578,7 @@ document.getElementById('overlaySendBtn').addEventListener('click', function() {
             btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Gửi tin nhắn';
         });
 });
+}
 
 // ─── Filter results by name ─────────────────────────────────────────────────
 

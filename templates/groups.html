@@ -6,6 +6,7 @@
     <title>Quản lý nhóm - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=groups-profile-sync-1">
 </head>
 <body>
 
@@ -27,9 +28,20 @@
         <aside class="groups-sidebar-card">
             <div class="groups-control-block">
                 <label>Tài khoản quản lý</label>
-                <select id="groupsAccountSelect" onchange="groupsOnAccountChange()">
-                    <option value="">Đang tải tài khoản...</option>
-                </select>
+                <div id="groupsAccountPicker" class="groups-account-picker">
+                    <input id="groupsAccountSelect" type="hidden" value="">
+                    <button id="groupsAccountTrigger" class="groups-account-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="groupsAccountAvatar" class="groups-account-avatar">
+                            <span>?</span>
+                        </span>
+                        <span class="groups-account-selected">
+                            <strong id="groupsAccountName">Đang tải tài khoản...</strong>
+                            <small id="groupsAccountState">Vui lòng chờ</small>
+                        </span>
+                        <span class="groups-account-chevron" aria-hidden="true">⌄</span>
+                    </button>
+                    <div id="groupsAccountMenu" class="groups-account-menu" role="listbox" hidden></div>
+                </div>
             </div>
             <div class="groups-control-block">
                 <label>Tìm nhóm</label>
@@ -144,12 +156,17 @@
 </div>
 
 
+<!-- Avatar Preview Layer (state riêng, phủ trên popup hồ sơ) -->
+<div id="groupsAvatarPreviewBackdrop" class="avatar-preview-backdrop" hidden aria-hidden="true">
+    <img id="groupsAvatarPreviewImg" class="avatar-preview-img" src="" alt="Xem avatar">
+</div>
+
 <!-- Profile Detail Overlay cho tab Quản lý nhóm -->
 <div class="overlay-backdrop" id="groupsProfileBackdrop" onclick="if(event.target===this) groupsCloseMemberProfile()">
     <div class="overlay-card profile-card" onclick="event.stopPropagation()">
         <div class="pf-header">
             <div class="pf-avatar-wrapper">
-                <img id="groupsPfAvatar" class="pf-avatar-large" src="" alt="Avatar" style="display:none">
+                <img id="groupsPfAvatar" class="pf-avatar-large" src="" alt="Avatar" style="display:none" title="Nhấn để xem ảnh full size">
                 <div class="pf-avatar-placeholder-large" id="groupsPfAvatarPlaceholder" style="display:none">
                     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
@@ -178,7 +195,7 @@
 
 <div id="groupsToast" class="groups-toast" style="display:none"></div>
 
-<script src="{{ url_for('static', filename='js/app.js') }}?v=9999"></script>
-<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-manager-6"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
+<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-profile-sync-1"></script>
 </body>
 </html>

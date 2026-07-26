@@ -51,6 +51,192 @@ _monitors = {}
 _request_meta = {}
 _pending_group_bodies = {}
 
+# ─── Fingerprint guard: ẩn rò rỉ IP thật qua WebRTC + chỉnh timezone khớp proxy ──
+_fingerprint_guards = {}
+_geoip_timezone_cache = {}
+FINGERPRINT_RETRY_SEC = 2
+
+# Không tắt hẳn RTCPeerConnection (Zalo có gọi thoại/video) — chỉ lọc bỏ các
+# ICE candidate loại "host"/"srflx" (mang IP thật/local) trước khi JS của
+# trang web kịp đọc, kết hợp với cờ Chrome
+# --force-webrtc-ip-handling-policy=disable_non_proxied_udp đã bật sẵn ở
+# account_manager._launch_chrome().
+WEBRTC_GUARD_JS = r"""
+(function() {
+    try {
+        var OrigPC = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+        if (!OrigPC) return;
+
+        var isLeaky = function(candidateStr) {
+            return !!candidateStr && /typ (host|srflx)/.test(candidateStr);
+        };
+
+        var PatchedPC = function(config) {
+            var pc = new OrigPC(config);
+            var origAdd = pc.addEventListener.bind(pc);
+            pc.addEventListener = function(type, listener, opts) {
+                if (type === 'icecandidate' && typeof listener === 'function') {
+                    var wrapped = function(ev) {
+                        if (ev && ev.candidate && isLeaky(ev.candidate.candidate)) return;
+                        listener(ev);
+                    };
+                    return origAdd(type, wrapped, opts);
+                }
+                return origAdd(type, listener, opts);
+            };
+            var onIceHandler = null;
+            Object.defineProperty(pc, 'onicecandidate', {
+                get: function() { return onIceHandler; },
+                set: function(fn) {
+                    onIceHandler = fn;
+                    origAdd('icecandidate', function(ev) {
+                        if (ev && ev.candidate && isLeaky(ev.candidate.candidate)) return;
+                        if (typeof fn === 'function') fn(ev);
+                    });
+                }
+            });
+            return pc;
+        };
+        PatchedPC.prototype = OrigPC.prototype;
+        window.RTCPeerConnection = PatchedPC;
+        if (window.webkitRTCPeerConnection) window.webkitRTCPeerConnection = PatchedPC;
+    } catch (e) {}
+})();
+"""
+
+
+def _extract_proxy_host(proxy_string: str) -> str:
+    p = (proxy_string or "").strip()
+    if not p:
+        return ""
+    if p.startswith("http://"):
+        p = p[len("http://"):]
+    elif p.startswith("https://"):
+        p = p[len("https://"):]
+    if "@" in p:
+        p = p.split("@", 1)[1]
+    return p.split(":")[0].strip()
+
+
+def _lookup_timezone_for_host(host: str):
+    """Tra timezone theo IP của proxy (geoip công khai, gọi trực tiếp không qua proxy)."""
+    if not host:
+        return None
+    if host in _geoip_timezone_cache:
+        return _geoip_timezone_cache[host]
+
+    tz = None
+    try:
+        resp = requests.get(
+            f"http://ip-api.com/json/{host}",
+            params={"fields": "status,timezone"},
+            timeout=5,
+        )
+        data = resp.json()
+        if data.get("status") == "success" and data.get("timezone"):
+            tz = data["timezone"]
+    except Exception as e:
+        _log(f"Không tra được timezone cho proxy host={host}: {e}")
+
+    _geoip_timezone_cache[host] = tz
+    return tz
+
+
+def start_fingerprint_guard(account_id: str, debug_port: int, proxy: str = ""):
+    """Giữ 1 kết nối CDP sống suốt phiên Chrome để ẩn WebRTC leak + set timezone
+    khớp proxy — khác với monitor bắt cookie (chỉ chạy vài phút rồi dừng)."""
+    if websocket is None:
+        return
+    stop_fingerprint_guard(account_id)
+
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_fingerprint_guard_worker,
+        args=(account_id, int(debug_port), proxy, stop_event),
+        daemon=True,
+        name=f"zalo-fpguard-{account_id[:8]}",
+    )
+    _fingerprint_guards[account_id] = {"thread": thread, "stop": stop_event, "ws": None}
+    thread.start()
+
+
+def stop_fingerprint_guard(account_id: str):
+    entry = _fingerprint_guards.pop(account_id, None)
+    if not entry:
+        return
+    entry["stop"].set()
+    ws = entry.get("ws")
+    if ws:
+        try:
+            ws.close()
+        except Exception:
+            pass
+
+
+def _fingerprint_guard_worker(account_id: str, debug_port: int, proxy: str, stop_event: threading.Event):
+    proxy_host = _extract_proxy_host(proxy)
+    timezone_id = _lookup_timezone_for_host(proxy_host) if proxy_host else None
+    if timezone_id:
+        _log(f"Timezone theo proxy account={account_id}: {timezone_id}")
+
+    msg_id = [0]
+
+    def next_id():
+        msg_id[0] += 1
+        return msg_id[0]
+
+    while not stop_event.is_set():
+        ws_url = _get_zalo_ws_url(debug_port, time.time() + 15)
+        if not ws_url:
+            if stop_event.wait(FINGERPRINT_RETRY_SEC):
+                return
+            continue
+
+        ws = None
+        try:
+            ws = websocket.create_connection(ws_url, timeout=10)
+            ws.settimeout(1.0)
+            entry = _fingerprint_guards.get(account_id)
+            if entry is not None:
+                entry["ws"] = ws
+
+            ws.send(json.dumps({
+                "id": next_id(),
+                "method": "Page.addScriptToEvaluateOnNewDocument",
+                "params": {"source": WEBRTC_GUARD_JS},
+            }))
+
+            if timezone_id:
+                ws.send(json.dumps({
+                    "id": next_id(),
+                    "method": "Emulation.setTimezoneOverride",
+                    "params": {"timezoneId": timezone_id},
+                }))
+
+            # Giữ kết nối sống để override không bị Chrome reset — không cần
+            # xử lý message nào, chỉ phát hiện khi tab đóng/crash để attach lại.
+            while not stop_event.is_set():
+                try:
+                    raw = ws.recv()
+                    if raw == "":
+                        break
+                except websocket.WebSocketTimeoutException:
+                    continue
+                except Exception:
+                    break
+        except Exception as e:
+            _log(f"Fingerprint guard lỗi account={account_id}: {e}")
+        finally:
+            try:
+                if ws:
+                    ws.close()
+            except Exception:
+                pass
+
+        if stop_event.is_set():
+            return
+        stop_event.wait(FINGERPRINT_RETRY_SEC)
+
 
 def _log(msg):
     print(f"[AccountMonitor] {msg}")

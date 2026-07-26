@@ -31,7 +31,7 @@ def zalo_decode(ciphertext_b64: str, zpw_enk: str):
 if __name__ == "__main__":
     import os
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    ZPW_ENK = "EPe7D/wgReydBNJsUYSCow=="
+    ZPW_ENK = "miIvnDDleNQI11rNYxjQUw=="
 
     cipher_path = os.path.join(script_dir, "CIPHER.txt")
     with open(cipher_path, "r", encoding="utf-8") as f:

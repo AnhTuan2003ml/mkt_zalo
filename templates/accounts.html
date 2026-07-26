@@ -5,41 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tài khoản Zalo - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=accounts-v7-editmodal">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accounts.css') }}?v=accounts-v7-editmodal">
 </head>
 <body>
 
 {% set active_page = 'accounts' %}
 {% include '_nav.html' %}
 
-<div class="page">
-    <div class="card">
-        <div class="card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-            </svg>
-            Danh sách tài khoản
+<div class="page accounts-shell">
+    <header class="acc-topbar">
+        <div class="acc-topbar-title">
+            <span class="acc-topbar-dot" aria-hidden="true"></span>
+            <div>
+                <strong>Quản lý tài khoản Zalo</strong>
+                <small>Mở, đăng nhập và theo dõi trạng thái từng tài khoản trong một màn hình</small>
+            </div>
         </div>
-
-        <div class="btn-row">
-            <button class="btn btn-primary" id="btnAddAccount" onclick="addAccount()">
+        <div class="acc-topbar-stats">
+            <div class="acc-stat"><span>Tổng tài khoản</span><strong id="accStatTotal">0</strong></div>
+            <div class="acc-stat"><span>Đang chạy</span><strong id="accStatRunning">0</strong></div>
+            <div class="acc-stat"><span>Sẵn sàng</span><strong id="accStatReady">0</strong></div>
+        </div>
+        <div class="acc-topbar-actions">
+            <div class="acc-topbar-actions-bulk">
+                <button class="btn btn-ghost btn-sm" type="button" id="btnStopAll" onclick="stopAllAccounts()">Dừng tất cả</button>
+                <button class="btn btn-ghost btn-sm" type="button" id="btnStartAll" onclick="startAllAccounts()">Chạy tất cả</button>
+                <button class="btn btn-ghost btn-icon" type="button" id="btnRefreshAccounts" onclick="loadAccountsList()" title="Làm mới" aria-label="Làm mới">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16"/></svg>
+                </button>
+            </div>
+            <button class="btn btn-primary" id="btnAddAccount" onclick="openNewAccountModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                 </svg>
                 Thêm tài khoản
             </button>
         </div>
+    </header>
 
+    <div id="accountsStatus" class="status-bar" hidden></div>
+
+    <div class="card">
         <div id="accountsEmpty" class="accounts-empty">
             <p>Chưa có tài khoản nào.</p>
-            <p class="hint">Nhấn «Thêm tài khoản» để tạo profile Chrome mới và mở Zalo Web.</p>
+            <p class="hint">Nhấn «Thêm tài khoản» để thiết lập tên và proxy trước khi khởi chạy.</p>
         </div>
 
         <div id="accountsList" class="accounts-list"></div>
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/app.js') }}?v=9999"></script>
-<script src="{{ url_for('static', filename='js/accounts.js') }}?v=proxy1"></script>
+<div class="overlay-backdrop" id="newAccountModalBackdrop" aria-hidden="true">
+    <div class="overlay-card">
+        <div class="overlay-header">
+            <h3>Thiết lập tài khoản mới</h3>
+            <button class="overlay-close" onclick="closeNewAccountModal()" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="overlay-body">
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); text-transform: none;">Tên tài khoản</label>
+                <input id="newAccountName" type="text" class="overlay-input" placeholder="Ví dụ: Tài khoản 1">
+            </div>
+            <div style="margin-bottom: 6px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); text-transform: none;">Proxy (không bắt buộc)</label>
+                <textarea id="newAccountProxy" class="overlay-textarea" placeholder="Định dạng hỗ trợ:&#10;ip:port&#10;ip:port:user:pass&#10;http://user:pass@ip:port&#10;&#10;Để trống nếu chưa cần proxy."></textarea>
+            </div>
+            <p style="margin: 6px 0 16px; color: var(--text-muted); font-size: 11px; line-height: 1.6;">Chrome sẽ chưa mở ngay. Sau khi lưu, bấm «Khởi chạy» trên thẻ tài khoản khi bạn đã sẵn sàng đăng nhập — proxy đã thiết lập ở đây sẽ được áp dụng ngay từ lần mở đầu tiên.</p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-ghost btn-sm" onclick="closeNewAccountModal()">Hủy</button>
+                <button class="btn btn-primary btn-sm" id="btnSaveNewAccount" onclick="submitNewAccount()">Tạo tài khoản</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}?v=accounts-v7-editmodal"></script>
+<script src="{{ url_for('static', filename='js/accounts.js') }}?v=accounts-v7-editmodal"></script>
 </body>
 </html>

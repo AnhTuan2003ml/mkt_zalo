@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tổng quan - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <script src="{{ url_for('static', filename='js/theme.js') }}?v=dashboard-compact-v3-restore"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=dashboard-compact-v3-restore">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=dashboard-compact-v3-restore">
+</head>
+<body class="dashboard-page">
+{% include '_nav.html' %}
+
+<main class="page dash-shell">
+    <header class="dash-topbar">
+        <div class="dash-topbar-title">
+            <span class="dash-topbar-dot" aria-hidden="true"></span>
+            <div>
+                <strong>Chào bạn, hôm nay cần xử lý việc gì?</strong>
+                <small>Theo dõi tài khoản, chiến dịch và dữ liệu cần chú ý trong một màn hình</small>
+            </div>
+        </div>
+        <div class="dash-topbar-stats">
+            <a class="dash-stat" href="{{ url_for('accounts_page') }}">
+                <span>Tài khoản sẵn sàng</span>
+                <strong id="metricReadyAccounts">—</strong>
+                <em id="metricAccountsHint">Đang tải...</em>
+            </a>
+            <a class="dash-stat" href="{{ url_for('marketing_schedules_page') }}">
+                <span>Chiến dịch đang chạy</span>
+                <strong id="metricActiveCampaigns">—</strong>
+                <em id="metricCampaignsHint">Đang tải...</em>
+            </a>
+            <a class="dash-stat" href="{{ url_for('marketing_schedules_page') }}">
+                <span>Lượt chạy hôm nay</span>
+                <strong id="metricTodayRuns">—</strong>
+                <em id="metricTodayHint">Theo lịch hiện tại</em>
+            </a>
+            <a class="dash-stat dash-stat-alert" href="#attentionPanel">
+                <span>Cần xử lý</span>
+                <strong id="metricAttention">—</strong>
+                <em id="metricAttentionHint">Lỗi và dữ liệu thiếu</em>
+            </a>
+        </div>
+        <a class="btn btn-primary" href="{{ url_for('marketing_group_page') }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Tạo chiến dịch mới
+        </a>
+        <button class="btn btn-ghost btn-icon" type="button" id="dashboardRefreshBtn" onclick="NexusDashboard.reload()" title="Làm mới" aria-label="Làm mới">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16"/></svg>
+        </button>
+    </header>
+
+    <div class="dash-grid">
+        <section class="card dash-activity-panel">
+            <div class="dash-panel-head">
+                <div><span class="dash-panel-label">Danh sách chính</span><h3>Hoạt động gần đây</h3></div>
+                <a href="{{ url_for('marketing_schedules_page') }}">Xem tất cả</a>
+            </div>
+            <div id="dashboardActivity" class="dash-activity-list">
+                <div class="dash-loading"><span class="spinner"></span> Đang tải hoạt động...</div>
+            </div>
+        </section>
+
+        <aside class="dash-side">
+            <section class="card dash-attention-panel" id="attentionPanel">
+                <div class="dash-panel-head">
+                    <div><span class="dash-panel-label">Ưu tiên xử lý</span><h3>Cần bạn chú ý</h3></div>
+                </div>
+                <div id="dashboardAttention" class="dash-attention-list">
+                    <div class="dash-loading"><span class="spinner"></span> Đang kiểm tra...</div>
+                </div>
+            </section>
+
+            <section class="card dash-quick-panel">
+                <div class="dash-panel-head">
+                    <div><span class="dash-panel-label">Một chạm</span><h3>Thao tác nhanh</h3></div>
+                </div>
+                <div class="dash-quick-grid">
+                    <a href="{{ url_for('accounts_page') }}"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M19 5v6M16 8h6"/></svg><span>Thêm tài khoản</span></a>
+                    <a href="{{ url_for('groups_page') }}"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span>Đồng bộ nhóm</span></a>
+                    <a href="{{ url_for('members_page') }}"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M11 8v6M8 11h6"/></svg><span>Lấy thành viên</span></a>
+                    <a href="{{ url_for('messages_page') }}"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg><span>Mở hộp thư</span></a>
+                </div>
+            </section>
+        </aside>
+    </div>
+
+    <div id="dashboardStatus" class="dash-status" aria-live="polite"></div>
+</main>
+
+<script src="{{ url_for('static', filename='js/app.js') }}?v=dashboard-compact-v3-restore"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}?v=dashboard-compact-v3-restore"></script>
+</body>
+</html>

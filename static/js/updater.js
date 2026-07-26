@@ -104,13 +104,89 @@
         }
     }
 
+    // ─── Tự động kiểm tra + thông báo (không tự tải/áp dụng bản cập nhật) ────
+    var AUTO_CHECK_MIN_INTERVAL_MS = 30 * 60 * 1000; // tối đa 1 lần / 30 phút, tránh gọi GitHub API quá nhiều
+    var LAST_CHECK_KEY = 'nexus_update_last_autocheck';
+    var DISMISSED_KEY = 'nexus_update_dismissed_version';
+
+    function storageGet(key) {
+        try { return window.localStorage ? window.localStorage.getItem(key) : null; }
+        catch (e) { return null; }
+    }
+    function storageSet(key, value) {
+        try { if (window.localStorage) window.localStorage.setItem(key, value); }
+        catch (e) { /* bỏ qua nếu trình duyệt chặn storage */ }
+    }
+
+    function showUpdateToast(latestVersion, message) {
+        var toast = $('nexusUpdateToast');
+        if (!toast) return;
+        toast.dataset.latestVersion = latestVersion || '';
+        setText('nexusUpdateToastText', message || ('Đã có bản cập nhật mới' + (latestVersion ? ' v' + latestVersion : '') + '.'));
+        toast.hidden = false;
+        toast.classList.add('show');
+    }
+
+    function hideUpdateToast() {
+        var toast = $('nexusUpdateToast');
+        if (!toast) return;
+        toast.classList.remove('show');
+        window.setTimeout(function () { toast.hidden = true; }, 200);
+    }
+
+    function dismissUpdateToast() {
+        var toast = $('nexusUpdateToast');
+        var latestVersion = toast ? toast.dataset.latestVersion : '';
+        if (latestVersion) storageSet(DISMISSED_KEY, latestVersion);
+        hideUpdateToast();
+    }
+
+    async function autoCheck(force) {
+        if (!force) {
+            var last = Number(storageGet(LAST_CHECK_KEY) || 0);
+            if (Date.now() - last < AUTO_CHECK_MIN_INTERVAL_MS) return;
+        }
+        storageSet(LAST_CHECK_KEY, String(Date.now()));
+
+        try {
+            var res = await fetch('/api/updater/check', { method: 'GET' });
+            var data = await res.json();
+            if (!data.success) return;
+
+            var hasUpdate = data.state === 'ready';
+            setText('nexusUpdateHint', hasUpdate ? 'Có bản mới' : 'Đã mới nhất');
+            state.canApply = hasUpdate;
+
+            if (!hasUpdate) return;
+            var latestVersion = data.latestVersion || '';
+            var alreadyDismissed = latestVersion && storageGet(DISMISSED_KEY) === latestVersion;
+            if (alreadyDismissed) return;
+
+            showUpdateToast(latestVersion, data.message);
+        } catch (err) {
+            // Kiểm tra tự động thất bại (mất mạng, GitHub lỗi...): im lặng, không làm phiền người dùng.
+            console.warn('[updater] auto check lỗi:', err.message || err);
+        }
+    }
+
     window.NexusUpdater = {
         checkAndOpen: checkAndOpen,
         apply: applyUpdate,
-        close: closeModal
+        close: closeModal,
+        autoCheck: autoCheck,
+        openFromToast: function () {
+            hideUpdateToast();
+            checkAndOpen();
+        },
+        dismissToast: dismissUpdateToast
     };
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeModal();
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Kiểm tra tự động ngay khi tải trang (có giới hạn tần suất ở autoCheck).
+        autoCheck(false);
     });
 })();

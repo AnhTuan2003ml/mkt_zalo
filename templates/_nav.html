@@ -1,50 +1,102 @@
-<div class="header app-sidebar">
-    <div class="header-content">
-        <div class="brand">
-            <div class="brand-logo" aria-hidden="true">
-                <img src="{{ url_for('static', filename='img/app-logo.svg') }}" alt="">
-            </div>
-            <div>
-                <h1>Nexus</h1>
-                <div class="brand-subtitle">Trung tâm chiến dịch & dữ liệu</div>
-            </div>
-        </div>
-    </div>
-    <nav class="header-nav">
-        <a href="{{ url_for('activation_page') }}" class="{% if active_page == 'activation' %}active{% endif %}">🔐 <span>Kích hoạt</span></a>
-        <a href="{{ url_for('guide_page') }}" class="{% if active_page == 'guide' %}active{% endif %}">📘 <span>Hướng dẫn sử dụng</span></a>
-        <div class="nav-section-label">Quản lý</div>
-        <a href="{{ url_for('accounts_page') }}" class="{% if active_page == 'accounts' %}active{% endif %}">👤 <span>Quản lý tài khoản</span></a>
-        <a href="{{ url_for('groups_page') }}" class="{% if active_page == 'groups' %}active{% endif %}">👥 <span>Quản lý nhóm</span></a>
-        <a href="{{ url_for('members_page') }}" class="{% if active_page == 'members' %}active{% endif %}">🔎 <span>Lấy thành viên nhóm</span></a>
-        <a href="{{ url_for('messages_page') }}" class="{% if active_page == 'messages' %}active{% endif %}">💬 <span>Quản lý tin nhắn</span></a>
-        <div class="nav-section-label">Chiến dịch</div>
-        <a href="{{ url_for('marketing_group_page') }}" class="{% if active_page == 'marketing_group' %}active{% endif %}">📣 <span>Gửi theo nhóm</span></a>
-        <a href="{{ url_for('marketing_phone_page') }}" class="{% if active_page == 'marketing_phone' %}active{% endif %}">☎️ <span>Gửi theo SĐT</span></a>
-        <a href="{{ url_for('marketing_schedules_page') }}" class="{% if active_page == 'schedules' %}active{% endif %}">📅 <span>Lịch gửi</span></a>
-    </nav>
-    <div class="sidebar-updater">
-        <div>
-            <span>Cập nhật</span>
-            <strong id="nexusUpdateHint">Kiểm tra bản mới</strong>
-        </div>
-        <button type="button" id="nexusUpdateBtn" onclick="NexusUpdater.checkAndOpen()">Cập nhật</button>
-    </div>
-    <div class="sidebar-footer">Trung tâm chiến dịch &amp; dữ liệu</div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-ux.css') }}?v=20260726-merged-tabs">
+<script src="{{ url_for('static', filename='js/theme.js') }}?v=20260726-merged-tabs"></script>
+
+<div class="nexus-mobile-bar" aria-label="Điều hướng di động">
+    <button type="button" class="nexus-mobile-menu-btn" data-sidebar-toggle aria-label="Mở menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <a class="nexus-mobile-brand" href="{{ url_for('dashboard_page') }}">
+        <img src="{{ url_for('static', filename='img/app-logo.svg') }}" alt="">
+        <span><strong>Nexus</strong><small>Trung tâm vận hành</small></span>
+    </a>
 </div>
+<div class="nexus-sidebar-scrim" data-sidebar-close aria-hidden="true"></div>
+
+<aside class="header app-sidebar" aria-label="Menu chính">
+    <div class="header-content">
+        <a class="brand" href="{{ url_for('dashboard_page') }}" aria-label="Về trang tổng quan">
+            <span class="brand-logo" aria-hidden="true">
+                <img src="{{ url_for('static', filename='img/app-logo.svg') }}" alt="">
+            </span>
+            <span class="brand-copy">
+                <h1>Nexus</h1>
+                <span class="brand-subtitle">Quản lý nhóm &amp; marketing</span>
+            </span>
+        </a>
+    </div>
+
+    <nav class="header-nav">
+        <div class="nav-section-label">Không gian làm việc</div>
+        <a href="{{ url_for('dashboard_page') }}" data-nav-color="blue" class="{% if active_page == 'dashboard' %}active{% endif %}" {% if active_page == 'dashboard' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>
+            <span class="nav-copy"><strong>Tổng quan</strong><small>Việc cần làm hôm nay</small></span>
+        </a>
+
+        <div class="nav-section-label">Quản lý dữ liệu</div>
+        <a href="{{ url_for('accounts_page') }}" data-nav-color="violet" class="{% if active_page == 'accounts' %}active{% endif %}" {% if active_page == 'accounts' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
+            <span class="nav-copy"><strong>Tài khoản</strong><small>Đăng nhập và hồ sơ</small></span>
+        </a>
+        <a href="{{ url_for('groups_page') }}" data-nav-color="green" class="{% if active_page == 'groups' %}active{% endif %}" {% if active_page == 'groups' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M14 15.5a5 5 0 0 1 7 4.5"/></svg></span>
+            <span class="nav-copy"><strong>Quản lý nhóm</strong><small>Nhóm hiện có và thành viên</small></span>
+        </a>
+        <a href="{{ url_for('members_page') }}" data-nav-color="amber" class="{% if active_page == 'members' %}active{% endif %}" {% if active_page == 'members' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M8 11h6"/></svg></span>
+            <span class="nav-copy"><strong>Lấy thành viên</strong><small>Quét và tổ chức dữ liệu</small></span>
+        </a>
+        <a href="{{ url_for('messages_page') }}" data-nav-color="rose" class="{% if active_page == 'messages' %}active{% endif %}" {% if active_page == 'messages' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></span>
+            <span class="nav-copy"><strong>Tin nhắn <span class="nav-beta-tag" title="Tính năng đang trong giai đoạn phát triển">Beta</span></strong><small>Hội thoại và phản hồi</small></span>
+        </a>
+
+        <div class="nav-section-label">Chiến dịch</div>
+        <a href="{{ url_for('marketing_group_page') }}" data-nav-color="cyan" class="{% if active_page in ['marketing_group', 'marketing_phone'] %}active{% endif %}" {% if active_page in ['marketing_group', 'marketing_phone'] %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 13.5V10a2 2 0 0 1 2-2h2l9-4v15l-9-4H6a2 2 0 0 1-2-1.5Z"/><path d="M8 15v4a2 2 0 0 0 2 2h1"/></svg></span>
+            <span class="nav-copy"><strong>Chiến dịch</strong><small>Thiết lập gửi theo nhóm, SĐT</small></span>
+        </a>
+        <a href="{{ url_for('marketing_group_copy_page') }}" data-nav-color="teal" class="{% if active_page == 'group_copy' %}active{% endif %}" {% if active_page == 'group_copy' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></span>
+            <span class="nav-copy"><strong>Sao chép nhóm</strong><small>Tạo nhóm và mời thành viên</small></span>
+        </a>
+        <a href="{{ url_for('marketing_schedules_page') }}" data-nav-color="indigo" class="{% if active_page == 'schedules' %}active{% endif %}" {% if active_page == 'schedules' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3M8 18h6"/></svg></span>
+            <span class="nav-copy"><strong>Lịch gửi</strong><small>Theo dõi chiến dịch đã lập</small></span>
+        </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+        <div class="sidebar-support-links">
+            <a class="sidebar-mini-link {% if active_page == 'guide' %}active{% endif %}" href="{{ url_for('guide_page') }}">
+                <span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg></span>
+                <div><strong>Hướng dẫn</strong><small>Quy trình sử dụng</small></div>
+            </a>
+            <a class="sidebar-mini-link {% if active_page == 'activation' %}active{% endif %}" href="{{ url_for('activation_page') }}">
+                <span><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4M12 15v2"/></svg></span>
+                <div><strong>Kích hoạt</strong><small>Trạng thái bản quyền</small></div>
+            </a>
+        </div>
+
+        <a class="sidebar-policy-link" href="{{ url_for('policy_page') }}">
+            <span><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <div><strong>Chính sách sử dụng</strong><small>Xem điều khoản đã xác nhận</small></div>
+        </a>
+
+        <div class="sidebar-updater">
+            <div><span>Cập nhật ứng dụng</span><strong id="nexusUpdateHint">Kiểm tra bản mới</strong></div>
+            <button type="button" id="nexusUpdateBtn" onclick="NexusUpdater.checkAndOpen()">Kiểm tra</button>
+        </div>
+        <div class="sidebar-footer">Nexus · Group &amp; Marketing Center</div>
+    </div>
+</aside>
 
 <div class="nexus-update-backdrop" id="nexusUpdateBackdrop" aria-hidden="true">
     <div class="nexus-update-modal" role="dialog" aria-modal="true" aria-labelledby="nexusUpdateTitle">
         <div class="nexus-update-head">
-            <div>
-                <h3 id="nexusUpdateTitle">Cập nhật Nexus</h3>
-                <p id="nexusUpdateSubtitle">Kiểm tra bản phát hành mới nhất từ GitHub.</p>
-            </div>
+            <div><h3 id="nexusUpdateTitle">Cập nhật Nexus</h3><p id="nexusUpdateSubtitle">Kiểm tra bản phát hành mới nhất từ GitHub.</p></div>
             <button type="button" class="nexus-update-close" onclick="NexusUpdater.close()" aria-label="Đóng">×</button>
         </div>
-        <div class="nexus-update-body">
-            <div class="nexus-update-status" id="nexusUpdateStatus">Sẵn sàng kiểm tra cập nhật.</div>
-        </div>
+        <div class="nexus-update-body"><div class="nexus-update-status" id="nexusUpdateStatus">Sẵn sàng kiểm tra cập nhật.</div></div>
         <div class="nexus-update-actions">
             <button type="button" class="btn btn-secondary" onclick="NexusUpdater.close()">Đóng</button>
             <button type="button" class="btn btn-primary" id="nexusApplyUpdateBtn" onclick="NexusUpdater.apply()" disabled>Tải và cập nhật</button>
@@ -52,4 +104,15 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/updater.js') }}?v=nexus-updater-20260709"></script>
+<!-- Thông báo tự động khi phát hiện bản cập nhật mới (chỉ báo, không tự tải) -->
+<div class="nexus-update-toast" id="nexusUpdateToast" hidden role="status" aria-live="polite">
+    <span class="nexus-update-toast-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8v4M12 15h.01"/></svg>
+    </span>
+    <span class="nexus-update-toast-text" id="nexusUpdateToastText">Đã có bản cập nhật mới.</span>
+    <button type="button" class="nexus-update-toast-btn" onclick="NexusUpdater.openFromToast()">Xem</button>
+    <button type="button" class="nexus-update-toast-close" onclick="NexusUpdater.dismissToast()" aria-label="Bỏ qua thông báo">×</button>
+</div>
+
+<script src="{{ url_for('static', filename='js/updater.js') }}?v=20260726-merged-tabs"></script>
+<script src="{{ url_for('static', filename='js/nexus-interactions.js') }}?v=20260726-merged-tabs"></script>

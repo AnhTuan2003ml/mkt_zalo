@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sao chép nhóm - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=group-copy-v19-confirm">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-v19-confirm">
+</head>
+<body>
+{% include '_nav.html' %}
+
+<div class="page group-copy-page">
+    <header class="gc-topbar">
+        <div class="gc-topbar-title">
+            <span class="gc-topbar-dot" aria-hidden="true"></span>
+            <div>
+                <strong>Sao chép thành viên nhóm</strong>
+                <small>Hệ thống sẵn sàng · thêm bạn bè có sẵn trước, phần còn lại tự gửi kết bạn và kiểm tra lại theo chu kỳ</small>
+            </div>
+        </div>
+        <div class="gc-topbar-stats">
+            <div class="gc-stat">
+                <span>Tài khoản</span>
+                <strong id="groupCopyTopAccount">-</strong>
+            </div>
+            <div class="gc-stat">
+                <span>Đang chạy</span>
+                <strong id="groupCopyStatActive">0</strong>
+            </div>
+            <div class="gc-stat">
+                <span>Tổng tác vụ</span>
+                <strong id="groupCopyStatTotal">0</strong>
+            </div>
+            <div class="gc-stat">
+                <span>Đã vào nhóm</span>
+                <strong id="groupCopyStatMembers">0</strong>
+            </div>
+            <div class="gc-stat">
+                <span>Chuyển đổi</span>
+                <strong id="groupCopyStatWaiting">0%</strong>
+            </div>
+        </div>
+        <button id="groupCopyReloadBtn" class="btn btn-ghost btn-icon" type="button" title="Làm mới tài khoản và nhóm" aria-label="Làm mới">↻</button>
+    </header>
+
+    <div class="group-copy-workspace">
+        <aside class="card group-copy-form-card">
+            <div class="group-copy-panel-head">
+                <div>
+                    <div class="group-copy-panel-label">Thiết lập tác vụ</div>
+                    <div class="card-title">Cấu hình sao chép</div>
+                    <p>Điền lần lượt từ trên xuống dưới.</p>
+                </div>
+            </div>
+
+            <div class="group-copy-form-body">
+                <div class="group-copy-compact-form">
+                    <section class="group-copy-form-section">
+                        <div class="group-copy-form-section-head"><span>01</span><div><strong>Tài khoản thực hiện</strong><small>Tài khoản tạo hoặc mời vào nhóm</small></div></div>
+                        <div class="form-group">
+                            <div id="groupCopyAccountPicker" class="group-copy-account-picker">
+                                <input id="groupCopyAccount" type="hidden" value="">
+                                <button id="groupCopyAccountTrigger" class="group-copy-account-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                                    <span id="groupCopyAccountAvatar" class="group-copy-account-avatar">?</span>
+                                    <span class="group-copy-account-selected">
+                                        <strong id="groupCopyAccountName">Đang tải tài khoản...</strong>
+                                        <small id="groupCopyAccountState">Vui lòng chờ</small>
+                                    </span>
+                                    <span class="group-copy-account-chevron">⌄</span>
+                                </button>
+                                <div id="groupCopyAccountMenu" class="group-copy-account-menu" role="listbox" hidden></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="group-copy-form-section">
+                        <div class="group-copy-form-section-head"><span>02</span><div><strong>Nhóm nguồn</strong><small>Nhóm cần lấy danh sách thành viên</small></div></div>
+                        <div class="form-group">
+                            <label for="groupCopySource">Link hoặc ID nhóm</label>
+                            <input id="groupCopySource" type="text" placeholder="Dán link Zalo hoặc Group ID">
+                        </div>
+                    </section>
+
+                    <section class="group-copy-form-section">
+                        <div class="group-copy-form-section-head"><span>03</span><div><strong>Nhóm nhận thành viên</strong><small>Chọn một trong hai cách bên dưới</small></div></div>
+                        <div class="group-copy-mode-switch" role="group" aria-label="Chọn cách thiết lập nhóm đích">
+                            <button type="button" class="active" data-target-mode="new"><span>＋</span><div><strong>Tạo nhóm mới</strong><small>Nhập tên nhóm mới</small></div></button>
+                            <button type="button" data-target-mode="existing"><span>👥</span><div><strong>Nhóm hiện tại</strong><small>Chọn trong danh sách</small></div></button>
+                        </div>
+
+                        <div class="form-group group-copy-target-field" id="groupCopyNewTargetWrap">
+                            <label for="groupCopyNewGroupName">Tên nhóm mới</label>
+                            <input id="groupCopyNewGroupName" type="text" maxlength="120" placeholder="Ví dụ: Cộng đồng khách hàng 2026">
+                        </div>
+
+                        <div class="form-group group-copy-target-field" id="groupCopyExistingTargetWrap" hidden>
+                            <label for="groupCopyExistingGroup">Nhóm hiện tại</label>
+                            <select id="groupCopyExistingGroup">
+                                <option value="">Chọn tài khoản trước</option>
+                            </select>
+                        </div>
+                    </section>
+
+                    <section class="group-copy-form-section">
+                        <div class="group-copy-form-section-head"><span>04</span><div><strong>Lịch và chu kỳ kiểm tra</strong><small>Mỗi ngày gửi một đợt, định kỳ thử add lại</small></div></div>
+                        <div class="group-copy-schedule-row">
+                            <div class="form-group">
+                                <label for="groupCopyStartAt">Bắt đầu từ</label>
+                                <input id="groupCopyStartAt" type="datetime-local">
+                            </div>
+                            <div class="form-group">
+                                <label for="groupCopyDailyLimit">Kết bạn / ngày</label>
+                                <input id="groupCopyDailyLimit" type="number" min="1" max="100" value="20">
+                            </div>
+                        </div>
+                        <div class="group-copy-campaign-row">
+                            <div class="form-group">
+                                <label for="groupCopyCampaignDays">Thời gian chạy chiến dịch</label>
+                                <div class="group-copy-input-suffix">
+                                    <input id="groupCopyCampaignDays" type="number" min="1" max="365" value="30">
+                                    <span>ngày</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="groupCopyVerifyMinutes">Thử add lại mỗi</label>
+                                <div class="group-copy-input-suffix">
+                                    <input id="groupCopyVerifyMinutes" type="number" min="1" max="1440" step="1" value="30">
+                                    <span>phút</span>
+                                </div>
+                            </div>
+                            <label class="group-copy-toggle-card" for="groupCopyRemoveFriend">
+                                <span class="group-copy-toggle-copy">
+                                    <strong>Xóa kết bạn sau khi vào nhóm</strong>
+                                    <small>Chỉ xóa người được chính chiến dịch này gửi kết bạn</small>
+                                </span>
+                                <span class="group-copy-switch">
+                                    <input id="groupCopyRemoveFriend" type="checkbox">
+                                    <span></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="group-copy-daily-hint"><span>💡</span><p>Sau khi quét, hệ thống thêm toàn bộ bạn bè vào nhóm trước. Người còn lại được gửi kết bạn theo hạn mức mỗi ngày, sau đó được thử add lại theo chu kỳ đã chọn. Không gửi tin nhắn riêng. Tác vụ dừng khi đủ thành viên hoặc hết hạn chiến dịch.</p></div>
+                    </section>
+                </div>
+
+                <label class="group-copy-consent">
+                    <input id="groupCopyConsent" type="checkbox">
+                    <span>Tôi xác nhận có quyền quản lý nhóm và được phép gửi lời mời đến các thành viên này.</span>
+                </label>
+
+                <div id="groupCopyStatus" class="group-copy-status" hidden></div>
+            </div>
+
+            <div class="group-copy-form-footer">
+                <button id="groupCopyStartBtn" class="btn btn-primary group-copy-start-btn" type="button"><span>▶</span> Tạo nhóm và lập lịch</button>
+            </div>
+        </aside>
+
+        <main class="card group-copy-jobs-card">
+            <div class="group-copy-list-head">
+                <div>
+                    <div class="group-copy-panel-label">Trung tâm theo dõi</div>
+                    <div class="card-title">Danh sách tác vụ sao chép</div>
+                    <p><span id="groupCopyJobsCount">0 tác vụ</span> · Chọn một tác vụ để xem chi tiết ở cột bên phải.</p>
+                </div>
+                <button id="groupCopyRefreshJobsBtn" class="btn btn-ghost btn-sm" type="button"><span>↻</span> Làm mới</button>
+            </div>
+            <div id="groupCopyJobs" class="group-copy-jobs"></div>
+        </main>
+
+        <aside class="card group-copy-detail-card">
+            <div class="group-copy-detail-head">
+                <div>
+                    <span class="group-copy-panel-label">Thông tin tác vụ</span>
+                    <strong id="groupCopyDetailTitle">Chưa chọn tác vụ</strong>
+                    <small id="groupCopyDetailSubtitle">Chọn một chiến dịch ở cột giữa để xem thành viên và tiến độ thực tế.</small>
+                </div>
+                <button id="groupCopyDetailClose" type="button" class="btn btn-ghost btn-icon" title="Bỏ chọn" aria-label="Bỏ chọn tác vụ">×</button>
+            </div>
+            <div id="groupCopyDetailBody" class="group-copy-detail-body">
+                <div class="group-copy-detail-empty"><span aria-hidden="true">◎</span><strong>Chi tiết sẽ hiển thị tại đây</strong><p>Không có popup che màn hình. Bạn có thể vừa xem tiến độ, vừa điều chỉnh chiến dịch mới.</p></div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+    <script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-v19-confirm"></script>
+</body>
+</html>

@@ -64,11 +64,11 @@ if auth_path not in sys.path:
     sys.path.insert(0, auth_path)
 
 from features.members.group_member_service import fetch_group_members_by_input, format_group_info
-from features.profiles.profile_service import fetch_profiles_with_single_fallback, build_member_rows_from_uids
+from features.profiles.profile_service import fetch_profiles_with_single_fallback, build_member_rows_from_uids, fetch_friend_relations
 from features.messaging.send_sms import send_sms
 from features.messaging.add_friend import send_friend_request
 from features.groups.add_group import create_group as _create_group
-from features.groups.invite_group import invite_group as _invite_group
+from features.groups.invite_group import invite_members_to_group as _invite_members_to_group
 from features.groups.group_join_leave import join_group_by_link as _join_group_by_link, leave_group as _leave_group
 from features.profiles.get_single_profile import get_single_profile, ProfileRateLimitError
 from features.accounts.account_manager import (
@@ -76,7 +76,6 @@ from features.accounts.account_manager import (
     create_account,
     open_account,
     delete_account,
-    rename_account,
     update_account,
     get_account,
     _ensure_dirs,
@@ -96,6 +95,16 @@ from features.schedules.schedule_manager import (
     get_all_schedules,
 )
 from features.schedules.schedule_worker import start_schedule_worker
+from features.groups.group_copy_manager import (
+    create_job as create_group_copy_job,
+    list_jobs as list_group_copy_jobs,
+    get_job as get_group_copy_job,
+    cancel_job as cancel_group_copy_job,
+    resume_job as resume_group_copy_job,
+    request_verification as request_group_copy_verification,
+    delete_job as delete_group_copy_job,
+)
+from features.groups.group_copy_worker import start_group_copy_worker
 from features.tasks.task_manager import (
     create_task,
     get_task,
@@ -121,6 +130,8 @@ from core.zalo.zalo_config import get_zpw_ver
 # ─── Friend request planning storage ─────────────────────────────────────────
 FRIEND_PLANS_FILE = os.path.join(app_root, "data", "friend_invite_plans.json")
 INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.json")
+USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
+USER_POLICY_VERSION = "2026-07-22-group-marketing-v4-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
@@ -251,8 +262,6 @@ def _validate_update_zip(update_zip, expected_size=0):
             raise ValueError("Nexus.zip không chứa Nexus.exe.")
 
 def _install_zip_update(update_zip, version):
-    import tempfile
-
     install_dir = app_root
     if getattr(sys, "frozen", False):
         install_dir = os.path.dirname(sys.executable)
@@ -309,9 +318,7 @@ move /y "%NEW_EXE%" "%RUN_EXE%" >nul 2>&1 || (
 )
 
 > "%INSTALL_DIR%\VERSION" echo %VERSION_VALUE%
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem \"$env:TEMP\_MEI*\" -Directory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue" >nul 2>&1
-
+set "PYINSTALLER_RESET_ENVIRONMENT=1"
 start "" /d "%INSTALL_DIR%" "%RUN_EXE%"
 
 timeout /t 1 /nobreak >nul
@@ -321,7 +328,10 @@ exit /b 0
 
 :fail
 if exist "%NEW_EXE%" del /f /q "%NEW_EXE%"
-if exist "%RUN_EXE%" start "" /d "%INSTALL_DIR%" "%RUN_EXE%"
+if exist "%RUN_EXE%" (
+    set "PYINSTALLER_RESET_ENVIRONMENT=1"
+    start "" /d "%INSTALL_DIR%" "%RUN_EXE%"
+)
 del /f /q "%~f0"
 exit /b 1
 '''
@@ -744,20 +754,58 @@ set_sse_broadcast_func(sse_broadcast)
 # ─── Ensure data directories exist on startup ─────────────────────────────────
 _ensure_dirs()
 
-# ─── Activation Gate ──────────────────────────────────────────────────────────
+# ─── User policy + activation gates ───────────────────────────────────────────
 SCHEDULE_WORKER_STARTED = False
 SCHEDULE_WORKER_LOCK = threading.Lock()
+POLICY_ACCEPTED_THIS_SESSION = False
+
+
+def _load_policy_acceptance():
+    try:
+        if not os.path.isfile(USER_POLICY_FILE):
+            return {}
+        with open(USER_POLICY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _policy_is_accepted():
+    # Bắt buộc xác nhận lại sau mỗi lần mở ứng dụng. File chỉ lưu lịch sử
+    # phiên bản/thời điểm đã đồng ý, không được dùng để bỏ qua màn chính sách.
+    return bool(POLICY_ACCEPTED_THIS_SESSION)
+
+
+def _save_policy_acceptance():
+    global POLICY_ACCEPTED_THIS_SESSION
+    os.makedirs(os.path.dirname(USER_POLICY_FILE), exist_ok=True)
+    payload = {
+        "accepted": True,
+        "version": USER_POLICY_VERSION,
+        "acceptedAt": datetime.now().isoformat(timespec="seconds"),
+    }
+    temp_path = USER_POLICY_FILE + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(temp_path, USER_POLICY_FILE)
+    POLICY_ACCEPTED_THIS_SESSION = True
+    return payload
 
 
 def ensure_schedule_worker_started():
-    """Start schedule worker once, only after activation is valid."""
+    """Khởi động các worker một lần sau khi đã đồng ý chính sách và kích hoạt."""
     global SCHEDULE_WORKER_STARTED
+    if not _policy_is_accepted():
+        print("📜 Chưa đồng ý chính sách người dùng, worker chưa được khởi động.", flush=True)
+        return False
     with SCHEDULE_WORKER_LOCK:
         if SCHEDULE_WORKER_STARTED:
             return False
         start_schedule_worker()
+        start_group_copy_worker()
         SCHEDULE_WORKER_STARTED = True
-        print("✅ Schedule worker đã khởi động", flush=True)
+        print("✅ Schedule worker và group-copy worker đã khởi động", flush=True)
         return True
 
 
@@ -776,12 +824,27 @@ def _activation_status_payload():
 
 @app.before_request
 def require_activation_before_use():
-    """Block normal pages/APIs until a valid activation code is saved."""
-    if not DEVICE_TRACKING_ENABLED:
-        return None
-
+    """Chặn giao diện/API cho đến khi đồng ý chính sách và kích hoạt hợp lệ."""
     path = request.path or ""
     endpoint = request.endpoint or ""
+    policy_endpoints = {"policy_page", "api_policy_status", "api_policy_accept", "static"}
+
+    if endpoint in policy_endpoints or path.startswith("/static/") or path.startswith("/api/policy/"):
+        return None
+
+    if not _policy_is_accepted():
+        if path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+            return jsonify({
+                "success": False,
+                "policy_required": True,
+                "error": "Bạn cần đồng ý chính sách người dùng trước khi tiếp tục.",
+            }), 403
+        return redirect(url_for("policy_page"))
+
+    if not DEVICE_TRACKING_ENABLED:
+        ensure_schedule_worker_started()
+        return None
+
     allowed_endpoints = {
         "activation_page",
         "api_activation_status",
@@ -792,11 +855,12 @@ def require_activation_before_use():
         "static",
     }
 
-    if endpoint in allowed_endpoints or path.startswith("/static/") or path.startswith("/api/activation/"):
+    if endpoint in allowed_endpoints or path.startswith("/api/activation/"):
         return None
 
     status = _activation_status_payload()
     if status.get("activated"):
+        ensure_schedule_worker_started()
         return None
 
     if path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
@@ -808,6 +872,50 @@ def require_activation_before_use():
         }), 403
 
     return redirect(url_for("activation_page"))
+
+
+@app.route("/policy", methods=["GET"])
+def policy_page():
+    accepted = _policy_is_accepted()
+    return render_template(
+        "policy.html",
+        policy_version=USER_POLICY_VERSION,
+        accepted=accepted,
+    )
+
+
+@app.route("/api/policy/status", methods=["GET"])
+def api_policy_status():
+    data = _load_policy_acceptance()
+    return jsonify({
+        "success": True,
+        "accepted": _policy_is_accepted(),
+        "version": USER_POLICY_VERSION,
+        "acceptedAt": data.get("acceptedAt", ""),
+    })
+
+
+@app.route("/api/policy/accept", methods=["POST"])
+def api_policy_accept():
+    data = request.get_json(silent=True) or request.form or {}
+    confirmed = bool(data.get("confirmed") or data.get("accepted") or data.get("agree"))
+    if not confirmed:
+        return jsonify({
+            "success": False,
+            "error": "Vui lòng tích xác nhận đã đọc và đồng ý chính sách.",
+        }), 400
+
+    acceptance = _save_policy_acceptance()
+    activation = _activation_status_payload() if DEVICE_TRACKING_ENABLED else {"activated": True}
+    if activation.get("activated"):
+        ensure_schedule_worker_started()
+    next_url = url_for("guide_page") if activation.get("activated") else url_for("activation_page")
+    return jsonify({
+        "success": True,
+        "message": "Đã ghi nhận đồng ý chính sách người dùng.",
+        "acceptance": acceptance,
+        "nextUrl": next_url,
+    })
 
 
 @app.route("/activation", methods=["GET"])
@@ -885,7 +993,12 @@ def api_activation_resend():
 @app.route("/")
 def index():
     from flask import redirect
-    return redirect("/guide")
+    return redirect(url_for("dashboard_page"))
+
+
+@app.route("/dashboard")
+def dashboard_page():
+    return render_template("dashboard.html", active_page="dashboard")
 
 
 @app.route("/members")
@@ -940,8 +1053,12 @@ def marketing_personal_groups_page():
 
 @app.route("/marketing/schedules")
 def marketing_schedules_page():
-    return render_template("schedules.html", active_page="schedules", initial_tab="schedules-list", page_title="Quản lý lịch chạy")
+    return render_template("schedule_monitor.html", active_page="schedules", page_title="Lịch gửi")
 
+
+@app.route("/marketing/group-copy")
+def marketing_group_copy_page():
+    return render_template("group_copy.html", active_page="group_copy")
 
 
 @app.route("/api/messages/conversations", methods=["GET"])
@@ -1058,9 +1175,13 @@ def api_list_accounts():
 
 @app.route("/api/accounts", methods=["POST"])
 def api_create_account():
-    """API: Thêm tài khoản mới + mở Chrome."""
+    """API: Thêm tài khoản mới. Chỉ mở Chrome khi autoLaunch=true (mặc định false)."""
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or "").strip()
+    proxy = str(data.get("proxy") or "").strip()
+    auto_launch = bool(data.get("autoLaunch", False))
     try:
-        account = create_account()
+        account = create_account(name=name or None, proxy=proxy, auto_launch=auto_launch)
         return jsonify({"success": True, "account": account})
     except FileNotFoundError as e:
         return jsonify({"error": str(e)}), 400
@@ -1107,23 +1228,24 @@ def api_update_account(account_id):
     data = request.get_json(silent=True) or {}
 
     try:
-        # Đổi tên tài khoản
+        fields = {}
+
         if "name" in data:
             name = str(data.get("name") or "").strip()
             if not name:
                 return jsonify({"error": "Tên không được để trống."}), 400
-            account = rename_account(account_id, name)
-            return jsonify({"success": True, "account": account})
+            fields["name"] = name
 
-        # Cập nhật proxy
         if "proxy" in data:
-            proxy = str(data.get("proxy") or "").strip()
-            account = update_account(account_id, proxy=proxy)
-            if not account:
-                return jsonify({"error": "Không tìm thấy tài khoản."}), 404
-            return jsonify({"success": True, "account": account})
+            fields["proxy"] = str(data.get("proxy") or "").strip()
 
-        return jsonify({"error": "Không có dữ liệu hợp lệ để cập nhật."}), 400
+        if not fields:
+            return jsonify({"error": "Không có dữ liệu hợp lệ để cập nhật."}), 400
+
+        account = update_account(account_id, **fields)
+        if not account:
+            return jsonify({"error": "Không tìm thấy tài khoản."}), 404
+        return jsonify({"success": True, "account": account})
 
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -2178,6 +2300,272 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str, auto_jo
         raise
 
 
+def _prepare_group_copy_job_worker(task, payload: dict):
+    """Lấy thành viên nhóm nguồn và lưu tác vụ sao chép theo hạn mức mỗi ngày."""
+    account_id = str(payload.get("accountId") or "").strip()
+    source_input = str(payload.get("sourceInput") or "").strip()
+    account = get_account(account_id)
+    if not account:
+        raise ValueError("Không tìm thấy tài khoản thực hiện.")
+
+    cookies = str(account.get("cookies") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or "").strip()
+    imei = str(account.get("imei") or "").strip()
+    if not cookies or not zpw_enk:
+        raise ValueError("Tài khoản chưa có cookies hoặc zpwEnk.")
+
+    task.set_progress(10)
+    task.log("Đang đọc thông tin và danh sách thành viên nhóm nguồn...")
+    member_payload = fetch_group_members_by_input(
+        source_input,
+        zpw_enk,
+        cookies,
+        callback=lambda msg, typ="info": task.log(msg, typ),
+        zpw_ver=get_zpw_ver(),
+        imei=imei,
+        auto_join_when_not_member=True,
+        leave_after_auto_join=True,
+    )
+    uid_list = member_payload.get("uidList") or []
+    member_map = member_payload.get("memberMap") or {}
+    source_group_id = str(member_payload.get("groupId") or "").strip()
+    source_group = format_group_info(
+        member_payload.get("groupInfo") or {},
+        group_id=source_group_id,
+        fallback_total=len(uid_list),
+    )
+
+    target_group_id = str(payload.get("targetGroupId") or "").strip()
+    if payload.get("targetMode") == "existing" and target_group_id == source_group_id:
+        raise ValueError("Nhóm nguồn và nhóm đích không được trùng nhau.")
+
+    task.set_progress(40)
+    task.log(f"Đã lấy {len(uid_list)} UID. Đang bổ sung tên và ảnh đại diện...")
+    profiles = fetch_profiles_with_single_fallback(
+        uid_list,
+        zpw_enk,
+        cookies,
+        imei=imei,
+        log_func=lambda msg, typ="info": task.log(msg, typ),
+        zpw_ver=get_zpw_ver(),
+    )
+    members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
+
+    task.set_progress(58)
+    task.log("Đang xác định thành viên đã là bạn bè để ưu tiên thêm vào nhóm trước...")
+    friend_relations = fetch_friend_relations(
+        uid_list,
+        zpw_enk,
+        cookies,
+        imei=imei,
+        log_func=lambda msg, typ="info": task.log(msg, typ),
+        zpw_ver=get_zpw_ver(),
+    )
+
+    account_uid = str(
+        account.get("uid")
+        or account.get("userId")
+        or account.get("zaloId")
+        or account.get("profileId")
+        or ""
+    ).strip()
+    clean_members = []
+    seen = set()
+    for member in members:
+        uid = str(member.get("userId") or member.get("id") or "").strip()
+        if not uid or uid == account_uid or uid in seen:
+            continue
+        seen.add(uid)
+        relation_value = friend_relations.get(uid)
+        raw_friend = relation_value if relation_value is not None else member.get("isFr", member.get("isFriend"))
+        friend_text = str(raw_friend).strip().lower()
+        is_friend = True if raw_friend is True or friend_text in {"1", "true", "yes"} else (
+            False if raw_friend is False or friend_text in {"0", "false", "no"} else None
+        )
+        clean_members.append({
+            "userId": uid,
+            "zaloName": member.get("zaloName") or member.get("displayName") or uid,
+            "avatar": member.get("avatar") or "",
+            # Quan hệ được dùng để ưu tiên thêm toàn bộ bạn bè trước.
+            "isFriend": is_friend,
+            "isFr": 1 if is_friend is True else (0 if is_friend is False else None),
+        })
+
+    if not clean_members:
+        raise ValueError("Không tìm thấy thành viên hợp lệ trong nhóm nguồn.")
+
+    task.set_progress(85)
+    account_name = account.get("name") or account.get("displayName") or account_id
+    account_avatar = account.get("avatarUrl") or account.get("avatar") or ""
+    job = create_group_copy_job(
+        payload,
+        clean_members,
+        source_group,
+        account_name,
+        account_avatar=account_avatar,
+    )
+    task.log(
+        f"Đã lập lịch {job.get('totalMembers', 0)} thành viên. "
+        f"Hệ thống ưu tiên thêm toàn bộ bạn bè trước, chỉ gửi tối đa "
+        f"{job.get('friendRequestDailyLimit', job.get('dailyLimit'))} lời mời kết bạn/ngày cho người chưa thêm được, "
+        f"sau đó thử add lại và kiểm tra nhóm đích mỗi {job.get('verifyIntervalMinutes', 30)} phút "
+        f"cho đến khi đủ thành viên hoặc hết {job.get('campaignDurationDays', 30)} ngày."
+    )
+    return {
+        "job": {key: value for key, value in job.items() if key != "members"},
+        "sourceGroup": source_group,
+        "totalMembers": job.get("totalMembers", 0),
+        "friendCount": job.get("friendCount", 0),
+        "pendingInviteCount": job.get("pendingInviteCount", 0),
+        "verifyIntervalMinutes": job.get("verifyIntervalMinutes", 30),
+        "campaignDurationDays": job.get("campaignDurationDays", 30),
+        "campaignEndAt": job.get("campaignEndAt", ""),
+    }
+
+
+@app.route("/api/group-copy/jobs", methods=["GET"])
+def api_group_copy_jobs():
+    try:
+        return jsonify({"success": True, "jobs": list_group_copy_jobs(include_members=False)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "jobs": []}), 500
+
+
+@app.route("/api/group-copy/jobs/<job_id>", methods=["GET", "DELETE"])
+def api_group_copy_job_detail(job_id):
+    try:
+        if request.method == "DELETE":
+            delete_group_copy_job(job_id)
+            return jsonify({"success": True, "message": "Đã xóa tác vụ sao chép nhóm."})
+        job = get_group_copy_job(job_id)
+        if not job:
+            return jsonify({"success": False, "error": "Không tìm thấy tác vụ."}), 404
+        return jsonify({"success": True, "job": job})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/group-copy/jobs/<job_id>/cancel", methods=["POST"])
+def api_group_copy_job_cancel(job_id):
+    try:
+        job = cancel_group_copy_job(job_id)
+        return jsonify({"success": True, "message": "Đã hủy tác vụ.", "job": job})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/group-copy/jobs/<job_id>/resume", methods=["POST"])
+def api_group_copy_job_resume(job_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        job = resume_group_copy_job(job_id, str(data.get("nextRunAt") or "").strip())
+        return jsonify({"success": True, "message": "Đã tiếp tục tác vụ.", "job": job})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/group-copy/jobs/<job_id>/verify", methods=["POST"])
+def api_group_copy_job_verify(job_id):
+    try:
+        job = request_group_copy_verification(job_id)
+        return jsonify({
+            "success": True,
+            "message": "Đã đưa yêu cầu kiểm tra nhóm đích vào hàng đợi.",
+            "job": job,
+        })
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/group-copy/start", methods=["POST"])
+def api_group_copy_start():
+    data = request.get_json(silent=True) or {}
+    account_id = str(data.get("accountId") or "").strip()
+    source_input = str(data.get("sourceInput") or data.get("sourceGroup") or "").strip()
+    target_mode = str(data.get("targetMode") or "existing").strip().lower()
+    target_group_id = str(data.get("targetGroupId") or "").strip()
+    target_group_name = str(data.get("targetGroupName") or "").strip()
+    new_group_name = str(data.get("newGroupName") or "").strip()
+    start_at = str(data.get("startAt") or "").strip()
+    consent = bool(data.get("consentConfirmed") or data.get("confirmConsent"))
+
+    try:
+        daily_limit = max(1, min(int(data.get("friendRequestDailyLimit") or data.get("dailyLimit") or data.get("batchSize") or 10), 100))
+    except Exception:
+        return jsonify({"success": False, "error": "Số lời mời kết bạn mỗi ngày không hợp lệ."}), 400
+    try:
+        verify_minutes = max(1, min(int(data.get("verifyIntervalMinutes") or 30), 1440))
+    except Exception:
+        return jsonify({"success": False, "error": "Chu kỳ kiểm tra không hợp lệ."}), 400
+    try:
+        campaign_days = max(1, min(int(data.get("campaignDurationDays") or 30), 365))
+    except Exception:
+        return jsonify({"success": False, "error": "Số ngày chạy chiến dịch không hợp lệ."}), 400
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Vui lòng chọn tài khoản thực hiện."}), 400
+    if not source_input:
+        return jsonify({"success": False, "error": "Vui lòng dán link hoặc ID nhóm nguồn."}), 400
+    if target_mode not in {"existing", "new"}:
+        return jsonify({"success": False, "error": "Kiểu nhóm đích không hợp lệ."}), 400
+    if target_mode == "existing" and not target_group_id:
+        return jsonify({"success": False, "error": "Vui lòng chọn nhóm đích có sẵn."}), 400
+    if target_mode == "new" and not new_group_name:
+        return jsonify({"success": False, "error": "Vui lòng nhập tên nhóm mới."}), 400
+    if not start_at:
+        return jsonify({"success": False, "error": "Vui lòng chọn thời gian bắt đầu."}), 400
+    try:
+        parsed_start = datetime.fromisoformat(start_at)
+        if parsed_start < datetime.now() - timedelta(minutes=1):
+            start_at = datetime.now().isoformat(timespec="minutes")
+    except ValueError:
+        return jsonify({"success": False, "error": "Thời gian bắt đầu không hợp lệ."}), 400
+    if not consent:
+        return jsonify({
+            "success": False,
+            "error": "Cần xác nhận bạn có quyền mời các thành viên này và tuân thủ chính sách nền tảng.",
+        }), 400
+
+    account = get_account(account_id)
+    if not account:
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+
+    payload = {
+        "title": str(data.get("title") or "Sao chép thành viên nhóm").strip(),
+        "accountId": account_id,
+        "sourceInput": source_input,
+        "targetMode": target_mode,
+        "targetGroupId": target_group_id,
+        "targetGroupName": target_group_name,
+        "newGroupName": new_group_name,
+        "dailyLimit": daily_limit,
+        "batchSize": daily_limit,
+        "friendRequestDailyLimit": daily_limit,
+        "verifyIntervalMinutes": verify_minutes,
+        "campaignDurationDays": campaign_days,
+        "removeFriendAfterJoin": bool(data.get("removeFriendAfterJoin")),
+        "startAt": start_at,
+        "consentConfirmed": True,
+    }
+
+    task = run_task_in_background(
+        _prepare_group_copy_job_worker,
+        "Lập lịch sao chép nhóm",
+        f"Đọc thành viên từ {source_input}, thêm bạn bè trực tiếp, gửi kết bạn và kiểm tra add lại trong {campaign_days} ngày",
+        payload,
+    )
+    return jsonify({
+        "success": True,
+        "taskId": task.task_id,
+        "status": task.status,
+        "message": f"Đang đọc nhóm nguồn và lập lịch thêm bạn bè trực tiếp, gửi kết bạn và kiểm tra add lại mỗi {verify_minutes} phút.",
+    }), 202
+
+
 @app.route("/api/schedules/group-members", methods=["POST"])
 def api_schedules_group_members():
     """API: Lấy thành viên nhóm cho lập lịch gửi tin (chạy async, không block)."""
@@ -2644,93 +3032,66 @@ def api_invite_members_to_groups():
         _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
         zpw_ver = get_zpw_ver()
 
-        def _chunks(items, size):
-            for i in range(0, len(items), size):
-                yield items[i:i + size]
-
         results = []
+        total_accepted = 0
         total_invited = 0
+        total_joined = 0
+        total_inbox = 0
         total_failed = 0
 
         for group_id in clean_group_ids:
+            invite_result = _invite_members_to_group(
+                group_id,
+                clean_user_ids,
+                imei,
+                zpw_enk,
+                cookies,
+                zpw_ver=zpw_ver,
+                batch_size=batch_size,
+            )
             group_result = {
                 "groupId": group_id,
-                "success": True,
-                "invited": 0,
-                "failed": 0,
-                "errorMembers": [],
-                "batches": [],
+                "success": bool(invite_result.get("success")),
+                "partial": bool(invite_result.get("partial")),
+                "accepted": int(invite_result.get("acceptedCount") or 0),
+                "invited": int(invite_result.get("invitedCount") or 0),
+                "joined": int(invite_result.get("joinedCount") or 0),
+                "inbox": int(invite_result.get("inboxCount") or 0),
+                "failed": int(invite_result.get("failedCount") or 0),
+                "errorMembers": [
+                    item.get("userId")
+                    for item in (invite_result.get("members") or [])
+                    if item.get("status") == "failed"
+                ],
+                "members": invite_result.get("members") or [],
+                "batches": invite_result.get("batches") or [],
             }
-
-            for batch_index, member_batch in enumerate(_chunks(clean_user_ids, batch_size), start=1):
-                response_json, decoded = _invite_group(
-                    group_id,
-                    member_batch,
-                    imei,
-                    zpw_enk,
-                    cookies,
-                    zpw_ver=zpw_ver,
-                )
-
-                if isinstance(decoded, str):
-                    try:
-                        decoded = json.loads(decoded)
-                    except Exception:
-                        decoded = {"raw": decoded}
-
-                decoded = decoded if isinstance(decoded, dict) else {}
-                data_obj = decoded.get("data") if isinstance(decoded.get("data"), dict) else {}
-                error_code = decoded.get("error_code", response_json.get("error_code", -1))
-                error_message = decoded.get("error_message", response_json.get("error_message", ""))
-                error_members = data_obj.get("errorMembers") or []
-                if not isinstance(error_members, list):
-                    error_members = [error_members]
-
-                try:
-                    error_code_int = int(error_code or 0)
-                except Exception:
-                    error_code_int = -1
-
-                ok = error_code_int == 0
-                batch_failed = len(error_members) if ok else len(member_batch)
-                batch_invited = max(0, len(member_batch) - batch_failed) if ok else 0
-
-                if (not ok) or batch_failed:
-                    group_result["success"] = False
-
-                group_result["invited"] += batch_invited
-                group_result["failed"] += batch_failed
-                group_result["errorMembers"].extend([str(x) for x in error_members])
-                group_result["batches"].append({
-                    "batch": batch_index,
-                    "total": len(member_batch),
-                    "success": ok and batch_failed == 0,
-                    "errorCode": error_code,
-                    "errorMessage": error_message,
-                    "invited": batch_invited,
-                    "failed": batch_failed,
-                    "errorMembers": error_members,
-                })
-
+            total_accepted += group_result["accepted"]
             total_invited += group_result["invited"]
+            total_joined += group_result["joined"]
+            total_inbox += group_result["inbox"]
             total_failed += group_result["failed"]
             results.append(group_result)
 
-        all_success = all(r.get("success") for r in results)
+        all_success = total_failed == 0
+        message = (
+            f"Zalo đã nhận {total_accepted} lượt mời"
+            + (f", trong đó {total_inbox} lượt vào tin nhắn chờ" if total_inbox else "")
+            + (f"; lỗi {total_failed} lượt." if total_failed else ".")
+        )
         return jsonify({
             "success": all_success,
-            "partial": not all_success and total_invited > 0,
-            "message": (
-                f"Mời thành công {total_invited} lượt."
-                if all_success else
-                f"Đã mời {total_invited} lượt, lỗi {total_failed} lượt."
-            ),
+            "partial": not all_success and total_accepted > 0,
+            "message": message,
             "totalGroups": len(clean_group_ids),
             "totalMembers": len(clean_user_ids),
+            "totalAccepted": total_accepted,
             "totalInvited": total_invited,
+            "totalJoined": total_joined,
+            "totalInbox": total_inbox,
             "totalFailed": total_failed,
             "results": results,
-        }), 200 if total_invited > 0 or all_success else 400
+        }), 200 if total_accepted > 0 or all_success else 400
 
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -3320,6 +3681,8 @@ def api_updater_check():
             "success": True,
             "state": "ready" if has_update else "none",
             "message": "Có bản cập nhật mới." if has_update else "Bạn đang dùng phiên bản mới nhất.",
+            "currentVersion": current,
+            "latestVersion": release["version"],
         })
     except Exception as e:
         print("[updater] check error=", e)
@@ -3533,7 +3896,7 @@ def _start_backend_server():
             ensure_schedule_worker_started()
 
         print("✅ Backend đã sẵn sàng", flush=True)
-        print("🌐 Giao diện: http://127.0.0.1:5000/guide", flush=True)
+        print("🌐 Giao diện: http://127.0.0.1:5000/policy", flush=True)
         print("👉 Bấm nút 'Mở giao diện' để mở trình duyệt.", flush=True)
         app.run(debug=False, port=5000, host="127.0.0.1", use_reloader=False, threaded=True)
     except Exception as e:
@@ -3639,8 +4002,8 @@ def _launch_log_window():
     buttons.pack(fill="x")
 
     def open_ui():
-        webbrowser.open("http://127.0.0.1:5000/guide")
-        print("🌐 Đã mở giao diện: http://127.0.0.1:5000/guide", flush=True)
+        webbrowser.open("http://127.0.0.1:5000/policy")
+        print("🌐 Đã mở giao diện chính sách: http://127.0.0.1:5000/policy", flush=True)
 
     def clear_log():
         log_box.configure(state="normal")

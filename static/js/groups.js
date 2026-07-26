@@ -34,6 +34,55 @@
         return url;
     }
 
+    function getAccountId(account) {
+        return String((account && (account.accountId || account.id || account.account_id)) || '').trim();
+    }
+
+    function getAccountName(account) {
+        return String((account && (account.name || account.displayName || account.zaloName || account.phoneNumber)) || getAccountId(account) || 'Tài khoản').trim();
+    }
+
+    function getAccountAvatar(account) {
+        return normalizeAvatar(account && (account.avatarUrl || account.avatar || account.profileAvatar));
+    }
+
+    function accountReady(account) {
+        return !!(account && account.cookies && account.zpwEnk && account.imei);
+    }
+
+    function accountStateText(account) {
+        if (!account) return state.accounts.length ? 'Nhấn để chọn tài khoản' : 'Hãy thêm tài khoản trước';
+        if (account.remoteDebugPort) return 'Đang chạy · Sẵn sàng quản lý nhóm';
+        if (accountReady(account)) return 'Sẵn sàng quản lý nhóm';
+        return 'Chưa mở hoặc thiếu dữ liệu đăng nhập';
+    }
+
+    function initials(name) {
+        var parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return '?';
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    function setGroupsAccountAvatar(element, account) {
+        if (!element) return;
+        var name = getAccountName(account);
+        var avatarUrl = getAccountAvatar(account);
+        element.innerHTML = '';
+
+        var fallback = document.createElement('span');
+        fallback.textContent = initials(name);
+        element.appendChild(fallback);
+
+        if (!avatarUrl) return;
+        var image = document.createElement('img');
+        image.src = avatarUrl;
+        image.alt = '';
+        image.loading = 'lazy';
+        image.addEventListener('error', function () { image.remove(); });
+        element.appendChild(image);
+    }
+
     function getGroupId(g) {
         return String((g && (g.groupId || g.gridId || g.id || g.gid)) || '').trim();
     }
@@ -131,9 +180,110 @@
         return data;
     }
 
+    function renderGroupsAccountSelected() {
+        var account = state.accounts.find(function (item) { return getAccountId(item) === state.accountId; });
+        var nameEl = $('groupsAccountName');
+        var stateEl = $('groupsAccountState');
+        var trigger = $('groupsAccountTrigger');
+        var hidden = $('groupsAccountSelect');
+
+        if (hidden) hidden.value = state.accountId || '';
+        if (trigger) trigger.disabled = !state.accounts.length;
+        if (!account) {
+            if (nameEl) nameEl.textContent = state.accounts.length ? 'Chọn tài khoản' : 'Chưa có tài khoản';
+            if (stateEl) stateEl.textContent = state.accounts.length ? 'Nhấn để chọn tài khoản' : 'Hãy thêm tài khoản trước';
+            setGroupsAccountAvatar($('groupsAccountAvatar'), null);
+            return;
+        }
+
+        if (nameEl) nameEl.textContent = getAccountName(account);
+        if (stateEl) stateEl.textContent = accountStateText(account);
+        setGroupsAccountAvatar($('groupsAccountAvatar'), account);
+    }
+
+    function renderGroupsAccountMenu() {
+        var menu = $('groupsAccountMenu');
+        if (!menu) return;
+        menu.innerHTML = '';
+
+        if (!state.accounts.length) {
+            var empty = document.createElement('div');
+            empty.className = 'groups-account-empty';
+            empty.textContent = 'Chưa có tài khoản để lựa chọn.';
+            menu.appendChild(empty);
+            return;
+        }
+
+        state.accounts.forEach(function (account) {
+            var id = getAccountId(account);
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'groups-account-option' + (id === state.accountId ? ' active' : '');
+            button.setAttribute('role', 'option');
+            button.setAttribute('aria-selected', id === state.accountId ? 'true' : 'false');
+
+            var avatar = document.createElement('span');
+            avatar.className = 'groups-account-avatar';
+            setGroupsAccountAvatar(avatar, account);
+
+            var info = document.createElement('span');
+            info.className = 'groups-account-option-info';
+            var strong = document.createElement('strong');
+            strong.textContent = getAccountName(account);
+            var small = document.createElement('small');
+            small.textContent = accountStateText(account);
+            info.appendChild(strong);
+            info.appendChild(small);
+
+            var mark = document.createElement('span');
+            mark.className = 'groups-account-option-mark';
+            mark.textContent = id === state.accountId ? '✓' : '';
+
+            button.appendChild(avatar);
+            button.appendChild(info);
+            button.appendChild(mark);
+            button.addEventListener('click', function () { selectGroupsAccount(id); });
+            menu.appendChild(button);
+        });
+    }
+
+    function setGroupsAccountMenu(open) {
+        var picker = $('groupsAccountPicker');
+        var menu = $('groupsAccountMenu');
+        var trigger = $('groupsAccountTrigger');
+        if (!picker || !menu || !trigger) return;
+        var shouldOpen = !!open && state.accounts.length > 0;
+        menu.hidden = !shouldOpen;
+        trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        picker.classList.toggle('open', shouldOpen);
+    }
+
+    function selectGroupsAccount(accountId) {
+        accountId = String(accountId || '').trim();
+        if (accountId === state.accountId) {
+            setGroupsAccountMenu(false);
+            return;
+        }
+        state.accountId = accountId;
+        localStorage.setItem('zmkt_groups_account_id', state.accountId || '');
+        renderGroupsAccountSelected();
+        renderGroupsAccountMenu();
+        setGroupsAccountMenu(false);
+
+        state.selectedGroupId = '';
+        state.selectedGroup = null;
+        state.members = [];
+        state.selectedMembers.clear();
+        groupsLoadGroups();
+        renderDetailEmpty();
+    }
+
     async function groupsReloadAccounts() {
-        var select = $('groupsAccountSelect');
-        if (select) select.innerHTML = '<option value="">Đang tải tài khoản...</option>';
+        var nameEl = $('groupsAccountName');
+        var stateEl = $('groupsAccountState');
+        if (nameEl) nameEl.textContent = 'Đang tải tài khoản...';
+        if (stateEl) stateEl.textContent = 'Vui lòng chờ';
+        setGroupsAccountMenu(false);
         try {
             var res = await fetch('/api/accounts');
             var data = await res.json();
@@ -141,39 +291,36 @@
             state.accounts = data.accounts || [];
             renderAccounts();
         } catch (err) {
-            if (select) select.innerHTML = '<option value="">Lỗi tải tài khoản</option>';
+            state.accounts = [];
+            state.accountId = '';
+            renderGroupsAccountSelected();
+            renderGroupsAccountMenu();
             showToast('Lỗi tải tài khoản: ' + err.message, 'error');
         }
     }
 
     function renderAccounts() {
-        var select = $('groupsAccountSelect');
-        if (!select) return;
-        if (!state.accounts.length) {
-            select.innerHTML = '<option value="">Chưa có tài khoản</option>';
-            return;
-        }
         var last = localStorage.getItem('zmkt_groups_account_id') || '';
-        var first = state.accounts[0] && state.accounts[0].accountId;
-        state.accountId = state.accounts.some(function (a) { return String(a.accountId) === last; }) ? last : (first || '');
-        select.innerHTML = state.accounts.map(function (acc) {
-            var aid = String(acc.accountId || '');
-            var label = (acc.name || 'Tài khoản') + (acc.remoteDebugPort ? ' · Đang chạy' : '');
-            return '<option value="' + esc(aid) + '" ' + (aid === state.accountId ? 'selected' : '') + '>' + esc(label) + '</option>';
-        }).join('');
-        if (state.accountId) groupsLoadGroups();
+        var currentValid = state.accounts.some(function (a) { return getAccountId(a) === state.accountId; });
+        var savedValid = state.accounts.some(function (a) { return getAccountId(a) === last; });
+        var first = state.accounts[0] ? getAccountId(state.accounts[0]) : '';
+        state.accountId = currentValid ? state.accountId : (savedValid ? last : first);
+
+        renderGroupsAccountSelected();
+        renderGroupsAccountMenu();
+        if (state.accountId) {
+            localStorage.setItem('zmkt_groups_account_id', state.accountId);
+            groupsLoadGroups();
+        } else {
+            groupsRenderList();
+            renderDetailEmpty();
+            setStatus('Vui lòng thêm tài khoản để xem nhóm.', 'warn');
+        }
     }
 
     function groupsOnAccountChange() {
-        var select = $('groupsAccountSelect');
-        state.accountId = select ? String(select.value || '').trim() : '';
-        localStorage.setItem('zmkt_groups_account_id', state.accountId || '');
-        state.selectedGroupId = '';
-        state.selectedGroup = null;
-        state.members = [];
-        state.selectedMembers.clear();
-        groupsLoadGroups();
-        renderDetailEmpty();
+        var hidden = $('groupsAccountSelect');
+        selectGroupsAccount(hidden ? hidden.value : '');
     }
 
     async function groupsLoadGroups() {
@@ -679,6 +826,7 @@
             ['Username', profile.username || profile.globalId || '-'],
             ['User ID', uid || '-'],
             ['Số điện thoại', profile.phoneNumber || profile.phone || '-'],
+            ['Trạng thái', profile.status || '-'],
             ['Giới tính', getMemberGenderText(profile)],
             ['Ngày sinh', getMemberDobText(profile)],
             ['Kết bạn', isMemberFriend(profile) ? 'Đã kết bạn' : 'Chưa kết bạn']
@@ -711,8 +859,19 @@
             });
             var data = await res.json();
             if (data.profile) {
-                groupsPopulateMemberProfile(data.profile);
+                // Gộp dữ liệu chi tiết vừa lấy vào bản ghi hiện có (giữ nguyên trường cũ
+                // nếu API mới không trả về), giống cơ chế đồng bộ ở trang Lấy thành viên.
+                var detailed = Object.assign({}, local || {}, data.profile || {});
+                detailed.userId = detailed.userId || userId;
+                groupsPopulateMemberProfile(detailed);
                 if ($('groupsPfStatus')) $('groupsPfStatus').textContent = '';
+
+                var idx = (state.members || []).findIndex(function (m) { return getMemberId(m) === userId; });
+                if (idx >= 0) {
+                    state.members[idx] = Object.assign({}, state.members[idx], detailed);
+                    window._groupsLastFetchedData = state.members;
+                    groupsRenderMembers();
+                }
             } else if (data.error) {
                 if ($('groupsPfStatus')) $('groupsPfStatus').textContent = data.error;
             }
@@ -729,7 +888,92 @@
         }
     }
 
+    // ─── Xem ảnh full size (đồng bộ với trang Lấy thành viên) ─────────────────
+
+    function groupsOpenAvatarPreview(url) {
+        var backdrop = $('groupsAvatarPreviewBackdrop');
+        var img = $('groupsAvatarPreviewImg');
+        if (!backdrop || !img || !url) return;
+        img.src = url;
+        backdrop.hidden = false;
+        backdrop.setAttribute('aria-hidden', 'false');
+        backdrop.classList.add('is-open');
+    }
+
+    function groupsCloseAvatarPreview() {
+        var backdrop = $('groupsAvatarPreviewBackdrop');
+        var img = $('groupsAvatarPreviewImg');
+        if (!backdrop) return;
+        backdrop.classList.remove('is-open');
+        backdrop.hidden = true;
+        backdrop.setAttribute('aria-hidden', 'true');
+        if (img) img.removeAttribute('src');
+    }
+
+    async function groupsHandlePfAvatarClick(event) {
+        event.stopPropagation();
+        var avatar = $('groupsPfAvatar');
+        if (!avatar || !avatar.src || avatar.style.display === 'none') return;
+        var uidText = ($('groupsPfUid') || {}).textContent || '';
+        var uid = uidText.replace(/^ID:\s*/i, '').trim();
+        if (!uid || !state.accountId) { groupsOpenAvatarPreview(avatar.src); return; }
+
+        var oldTitle = avatar.title || '';
+        avatar.title = 'Đang lấy ảnh full size...';
+        try {
+            var res = await fetch('/api/get-avatar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fid: uid, uid: uid, userId: uid, accountId: state.accountId, account_id: state.accountId })
+            });
+            var data = await res.json();
+            var fullUrl = normalizeAvatar(data.bk_full_avatar || data.avatar_url || data.full_avatar || '');
+            groupsOpenAvatarPreview(fullUrl || avatar.src);
+        } catch (err) {
+            groupsOpenAvatarPreview(avatar.src);
+        } finally {
+            avatar.title = oldTitle || 'Nhấn để xem ảnh full size';
+        }
+    }
+
+    function groupsBindAvatarPreview() {
+        var backdrop = $('groupsAvatarPreviewBackdrop');
+        var img = $('groupsAvatarPreviewImg');
+        var avatar = $('groupsPfAvatar');
+        if (avatar) {
+            avatar.style.cursor = 'zoom-in';
+            avatar.addEventListener('click', groupsHandlePfAvatarClick);
+        }
+        if (backdrop) {
+            backdrop.addEventListener('click', function (event) {
+                if (event.target === backdrop) groupsCloseAvatarPreview();
+            });
+        }
+        if (img) {
+            img.addEventListener('click', function (event) {
+                event.stopPropagation();
+                groupsCloseAvatarPreview();
+            });
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        var trigger = $('groupsAccountTrigger');
+        var picker = $('groupsAccountPicker');
+        if (trigger) {
+            trigger.addEventListener('click', function () {
+                var isOpen = picker && picker.classList.contains('open');
+                setGroupsAccountMenu(!isOpen);
+            });
+        }
+        if (picker) picker.addEventListener('click', function (event) { event.stopPropagation(); });
+        document.addEventListener('click', function () { setGroupsAccountMenu(false); });
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape') return;
+            setGroupsAccountMenu(false);
+            groupsCloseAvatarPreview();
+        });
+        groupsBindAvatarPreview();
         groupsReloadAccounts();
     });
 

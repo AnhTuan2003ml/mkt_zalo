@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chính sách sử dụng - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <style>
+        :root {
+            --policy-bg: #07101d;
+            --policy-panel: rgba(14, 27, 44, .92);
+            --policy-panel-soft: rgba(20, 37, 58, .72);
+            --policy-line: rgba(174, 207, 236, .16);
+            --policy-text: #f4f8fc;
+            --policy-muted: #9db0c4;
+            --policy-blue: #48b8ff;
+            --policy-violet: #806bff;
+            --policy-green: #69dfa4;
+            --policy-red: #ff8e9d;
+        }
+        * { box-sizing: border-box; }
+        html, body { min-height: 100%; }
+        body {
+            margin: 0;
+            color: var(--policy-text);
+            font-family: "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+            background:
+                radial-gradient(circle at 10% 12%, rgba(42, 143, 255, .22), transparent 34%),
+                radial-gradient(circle at 88% 16%, rgba(128, 107, 255, .18), transparent 30%),
+                linear-gradient(145deg, #07111f 0%, #0c1929 52%, #081321 100%);
+            padding: 24px;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: .42;
+            background-image:
+                linear-gradient(rgba(164, 204, 237, .045) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(164, 204, 237, .045) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(to bottom, #000, transparent 86%);
+        }
+        button, input { font: inherit; }
+        .policy-layout {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: minmax(270px, .76fr) minmax(540px, 1.6fr);
+            width: min(1180px, 100%);
+            min-height: calc(100vh - 48px);
+            margin: 0 auto;
+            overflow: hidden;
+            border: 1px solid var(--policy-line);
+            border-radius: 26px;
+            background: rgba(8, 18, 31, .78);
+            box-shadow: 0 34px 100px rgba(0, 0, 0, .42);
+            backdrop-filter: blur(24px) saturate(130%);
+        }
+        .policy-aside {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            padding: 34px;
+            overflow: hidden;
+            border-right: 1px solid var(--policy-line);
+            background:
+                radial-gradient(circle at 18% 8%, rgba(72, 184, 255, .20), transparent 34%),
+                linear-gradient(160deg, rgba(37, 76, 120, .44), rgba(16, 28, 45, .82));
+        }
+        .policy-aside::after {
+            content: "";
+            position: absolute;
+            right: -110px;
+            bottom: -110px;
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            border: 44px solid rgba(128, 107, 255, .08);
+        }
+        .policy-brand {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+        .policy-brand img {
+            width: 48px;
+            height: 48px;
+            padding: 5px;
+            border: 1px solid rgba(255, 255, 255, .14);
+            border-radius: 15px;
+            background: rgba(255, 255, 255, .08);
+            box-shadow: 0 14px 34px rgba(34, 128, 255, .24);
+        }
+        .policy-brand strong { display: block; font-size: 18px; letter-spacing: -.02em; }
+        .policy-brand span { display: block; margin-top: 3px; color: var(--policy-muted); font-size: 11px; }
+        .policy-aside-copy { position: relative; z-index: 1; margin: auto 0; padding: 42px 0; }
+        .policy-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 11px;
+            border: 1px solid rgba(72, 184, 255, .24);
+            border-radius: 999px;
+            color: #8bd6ff;
+            background: rgba(72, 184, 255, .08);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .policy-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--policy-green); box-shadow: 0 0 12px var(--policy-green); }
+        .policy-aside h1 { margin: 18px 0 12px; font-size: clamp(30px, 4vw, 46px); line-height: 1.08; letter-spacing: -.04em; }
+        .policy-aside p { margin: 0; color: #b7c7d7; font-size: 14px; line-height: 1.72; }
+        .policy-pill-list { position: relative; z-index: 1; display: grid; gap: 9px; }
+        .policy-pill {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 12px;
+            border: 1px solid rgba(255, 255, 255, .09);
+            border-radius: 13px;
+            color: #dce9f4;
+            background: rgba(5, 13, 24, .28);
+            font-size: 12px;
+        }
+        .policy-pill i { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: #9fe5ff; background: rgba(72, 184, 255, .11); font-style: normal; }
+        .policy-version { position: relative; z-index: 1; margin-top: 20px; color: #7e93a7; font-size: 10px; }
+        .policy-main { min-width: 0; display: flex; flex-direction: column; background: var(--policy-panel); }
+        .policy-main-head { padding: 28px 32px 20px; border-bottom: 1px solid var(--policy-line); }
+        .policy-main-head h2 { margin: 0 0 7px; font-size: 22px; letter-spacing: -.02em; }
+        .policy-main-head p { margin: 0; color: var(--policy-muted); font-size: 12px; line-height: 1.6; }
+        .policy-scroll { flex: 1; min-height: 0; max-height: calc(100vh - 260px); overflow-y: auto; padding: 22px 32px 10px; }
+        .policy-section {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            gap: 14px;
+            padding: 17px 0;
+            border-bottom: 1px solid rgba(174, 207, 236, .10);
+        }
+        .policy-section:last-child { border-bottom: 0; }
+        .policy-number {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            place-items: center;
+            border: 1px solid rgba(72, 184, 255, .20);
+            border-radius: 11px;
+            color: #8bd6ff;
+            background: rgba(72, 184, 255, .08);
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .policy-section h3 { margin: 1px 0 7px; font-size: 14px; }
+        .policy-section p { margin: 0; color: #b5c5d4; font-size: 12px; line-height: 1.72; }
+        .policy-section strong { color: #f7fbff; }
+        .policy-warning { margin: 10px 0 0; padding: 12px 13px; border: 1px solid rgba(255, 142, 157, .18); border-radius: 12px; color: #ffc1c9; background: rgba(255, 92, 116, .06); }
+        .policy-actions {
+            padding: 18px 32px 24px;
+            border-top: 1px solid var(--policy-line);
+            background: rgba(7, 16, 28, .70);
+        }
+        .policy-confirm {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 15px;
+            border: 1px solid rgba(174, 207, 236, .16);
+            border-radius: 14px;
+            color: #d9e6f1;
+            background: rgba(255, 255, 255, .035);
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1.58;
+            transition: border-color .18s ease, background .18s ease;
+        }
+        .policy-confirm:hover { border-color: rgba(72, 184, 255, .34); background: rgba(72, 184, 255, .055); }
+        .policy-confirm input { width: 19px; height: 19px; margin: 0; flex: 0 0 auto; accent-color: var(--policy-blue); }
+        .policy-action-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 15px; }
+        .policy-status { min-height: 18px; color: var(--policy-muted); font-size: 11px; line-height: 1.5; }
+        .policy-status.error { color: var(--policy-red); }
+        .policy-status.success { color: var(--policy-green); }
+        .policy-button {
+            min-width: 205px;
+            min-height: 44px;
+            border: 1px solid rgba(141, 185, 255, .42);
+            border-radius: 13px;
+            color: #fff;
+            background: linear-gradient(135deg, #27b9ff 0%, #2869ff 52%, #806bff 100%);
+            box-shadow: 0 14px 34px rgba(41, 105, 255, .28);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 800;
+            transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease;
+        }
+        .policy-button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 18px 40px rgba(41, 105, 255, .36); }
+        .policy-button:disabled { opacity: .38; cursor: not-allowed; box-shadow: none; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: rgba(177, 205, 229, .24); background-clip: padding-box; }
+        @media (max-width: 860px) {
+            body { padding: 12px; }
+            .policy-layout { grid-template-columns: 1fr; min-height: calc(100vh - 24px); }
+            .policy-aside { padding: 24px; border-right: 0; border-bottom: 1px solid var(--policy-line); }
+            .policy-aside-copy { padding: 30px 0 22px; }
+            .policy-pill-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .policy-version { display: none; }
+            .policy-scroll { max-height: none; }
+        }
+        @media (max-width: 580px) {
+            .policy-pill-list { grid-template-columns: 1fr; }
+            .policy-main-head, .policy-scroll, .policy-actions { padding-left: 18px; padding-right: 18px; }
+            .policy-section { grid-template-columns: 34px minmax(0, 1fr); gap: 10px; }
+            .policy-number { width: 30px; height: 30px; border-radius: 9px; }
+            .policy-action-row { align-items: stretch; flex-direction: column; }
+            .policy-button { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<main class="policy-layout">
+    <aside class="policy-aside">
+        <div class="policy-brand">
+            <img src="{{ url_for('static', filename='img/app-logo.svg') }}" alt="Nexus">
+            <div><strong>Nexus</strong><span>Quản lý nhóm &amp; chiến dịch marketing</span></div>
+        </div>
+
+        <div class="policy-aside-copy">
+            <span class="policy-label">Xác nhận trước khi sử dụng</span>
+            <h1>Sử dụng đúng quyền, đúng mục đích.</h1>
+            <p>Ứng dụng được xây dựng để hỗ trợ quản lý nhóm, tổ chức thành viên và triển khai hoạt động marketing có trách nhiệm.</p>
+        </div>
+
+        <div class="policy-pill-list">
+            <div class="policy-pill"><i>01</i><span>Quản lý nhóm được ủy quyền</span></div>
+            <div class="policy-pill"><i>02</i><span>Marketing minh bạch, phù hợp</span></div>
+            <div class="policy-pill"><i>03</i><span>Tôn trọng dữ liệu và quyền riêng tư</span></div>
+        </div>
+        <div class="policy-version">Phiên bản chính sách: {{ policy_version }}</div>
+    </aside>
+
+    <section class="policy-main">
+        <header class="policy-main-head">
+            <h2>Chính sách người dùng</h2>
+            <p>Vui lòng đọc các điều khoản dưới đây. Bạn chỉ được vào giao diện làm việc sau khi xác nhận đồng ý.</p>
+        </header>
+
+        <div class="policy-scroll" aria-label="Nội dung chính sách">
+            <article class="policy-section">
+                <span class="policy-number">01</span>
+                <div>
+                    <h3>Mục đích của ứng dụng</h3>
+                    <p>Sản phẩm được phát triển nhằm hỗ trợ <strong>quản lý tài khoản, quản lý nhóm, tổ chức danh sách thành viên, lập lịch công việc và thực hiện các hoạt động marketing hợp pháp</strong>. Ứng dụng không được thiết kế để truy cập trái phép, quấy rối người dùng hoặc phát tán nội dung hàng loạt không mong muốn.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">02</span>
+                <div>
+                    <h3>Quyền quản lý và sự cho phép</h3>
+                    <p>Người dùng chỉ được thao tác với tài khoản, nhóm, dữ liệu thành viên và nội dung mà mình sở hữu, quản lý hợp pháp hoặc đã được chủ sở hữu cho phép. Người dùng tự chịu trách nhiệm kiểm tra quyền quản trị trước khi tạo nhóm, mời thành viên, gửi nội dung hoặc lập lịch chiến dịch.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">03</span>
+                <div>
+                    <h3>Marketing có trách nhiệm</h3>
+                    <p>Nội dung marketing phải trung thực, phù hợp với đối tượng nhận, không gây hiểu nhầm và không vi phạm quy định quảng cáo. Người dùng cần tôn trọng lựa chọn từ chối nhận thông tin, giới hạn tần suất hợp lý và tuân thủ Điều khoản dịch vụ, Nguyên tắc cộng đồng cùng giới hạn kỹ thuật của nền tảng liên quan.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">04</span>
+                <div>
+                    <h3>Bảo vệ dữ liệu và quyền riêng tư</h3>
+                    <p>Người dùng phải bảo mật thông tin đăng nhập, cookies, mã xác thực, dữ liệu thành viên và dữ liệu khách hàng. Không được thu thập, lưu trữ, mua bán, chia sẻ hoặc sử dụng dữ liệu cá nhân ngoài mục đích hợp pháp đã được thông báo và cho phép.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">05</span>
+                <div>
+                    <h3>Các hành vi bị nghiêm cấm</h3>
+                    <p class="policy-warning"><strong>Nghiêm cấm:</strong> truy cập trái phép tài khoản hoặc nhóm; sử dụng tài khoản không rõ nguồn gốc; giả mạo danh tính; gửi spam, nội dung lừa đảo hoặc quấy rối; vượt qua cơ chế bảo mật; khai thác dữ liệu trái phép; xâm phạm bản quyền, nhãn hiệu, quyền riêng tư hoặc quyền và lợi ích hợp pháp của tổ chức, cá nhân khác.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">06</span>
+                <div>
+                    <h3>Trách nhiệm của người dùng</h3>
+                    <p>Người dùng hoàn toàn chịu trách nhiệm đối với cấu hình, nội dung, danh sách người nhận, lịch chạy, kết quả và mọi hậu quả phát sinh từ việc sử dụng sản phẩm. Người dùng có nghĩa vụ tuân thủ pháp luật hiện hành, chính sách nền tảng và các quy định có liên quan tại khu vực mình hoạt động.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">07</span>
+                <div>
+                    <h3>Giới hạn trách nhiệm</h3>
+                    <p>Đội ngũ phát triển không chịu trách nhiệm đối với hành vi lạm dụng, sử dụng sai mục đích, vi phạm pháp luật, vi phạm chính sách nền tảng, khóa hoặc hạn chế tài khoản, thất thoát dữ liệu hay thiệt hại phát sinh từ quyết định và cách sử dụng của người dùng.</p>
+                </div>
+            </article>
+
+            <article class="policy-section">
+                <span class="policy-number">08</span>
+                <div>
+                    <h3>Thông tin từ bên thứ ba</h3>
+                    <p>Đội ngũ phát triển không chịu trách nhiệm đối với tư vấn, quảng cáo, cam kết, bảo đảm hoặc thỏa thuận riêng do cá nhân, đại lý, cộng tác viên hay đơn vị kinh doanh đưa ra ngoài phạm vi thông tin chính thức của sản phẩm. Người dùng cần tự kiểm tra thông tin trước khi đăng ký, giao dịch hoặc triển khai chiến dịch.</p>
+                </div>
+            </article>
+        </div>
+
+        <footer class="policy-actions">
+            <label class="policy-confirm">
+                <input id="policyAgree" type="checkbox" {% if accepted %}checked{% endif %}>
+                <span>Tôi đã đọc, hiểu và đồng ý với toàn bộ chính sách; tôi xác nhận chỉ sử dụng ứng dụng cho hoạt động quản lý nhóm và marketing hợp pháp, đúng quyền được phép.</span>
+            </label>
+            <div class="policy-action-row">
+                <div id="policyStatus" class="policy-status">{% if accepted %}Thiết bị này đã đồng ý phiên bản chính sách hiện tại.{% else %}Tích ô xác nhận để tiếp tục vào ứng dụng.{% endif %}</div>
+                <button id="policyContinue" class="policy-button" type="button" {% if not accepted %}disabled{% endif %}>Đồng ý và tiếp tục</button>
+            </div>
+        </footer>
+    </section>
+</main>
+<script>
+(function () {
+    'use strict';
+    var agree = document.getElementById('policyAgree');
+    var button = document.getElementById('policyContinue');
+    var status = document.getElementById('policyStatus');
+
+    function updateButton() {
+        button.disabled = !agree.checked;
+        if (!agree.checked) {
+            status.className = 'policy-status';
+            status.textContent = 'Tích ô xác nhận để tiếp tục vào ứng dụng.';
+        }
+    }
+
+    agree.addEventListener('change', updateButton);
+    button.addEventListener('click', async function () {
+        if (!agree.checked || button.disabled) return;
+        button.disabled = true;
+        button.textContent = 'Đang ghi nhận...';
+        status.className = 'policy-status';
+        status.textContent = 'Đang lưu xác nhận chính sách trên thiết bị.';
+        try {
+            var response = await fetch('/api/policy/accept', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirmed: true })
+            });
+            var data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Không lưu được xác nhận chính sách.');
+            status.className = 'policy-status success';
+            status.textContent = data.message || 'Đã ghi nhận đồng ý chính sách.';
+            window.location.href = data.nextUrl || '/guide';
+        } catch (error) {
+            status.className = 'policy-status error';
+            status.textContent = error.message || String(error);
+            button.disabled = false;
+            button.textContent = 'Đồng ý và tiếp tục';
+        }
+    });
+    updateButton();
+}());
+</script>
+</body>
+</html>

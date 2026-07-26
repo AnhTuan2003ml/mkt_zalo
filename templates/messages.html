@@ -6,7 +6,7 @@
     <title>Quản lý tin nhắn - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-2-beta">
 </head>
 <body>
 {% set active_page = 'messages' %}
@@ -16,7 +16,7 @@
     <div class="page-hero messages-hero">
         <div>
             <div class="eyebrow">Hộp thư Zalo</div>
-            <h2>Quản lý tin nhắn</h2>
+            <h2>Quản lý tin nhắn <span class="beta-badge" title="Tính năng đang trong giai đoạn phát triển">Beta</span></h2>
             <p>Theo dõi hội thoại, phân loại khách cần phản hồi, ghi chú nội dung và chuẩn bị khung tự động check/lưu/phản hồi tin nhắn ở giai đoạn sau.</p>
         </div>
         <div class="hero-actions">
@@ -187,7 +187,7 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/app.js') }}?v=9999"></script>
-<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-1"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
+<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-2-beta"></script>
 </body>
 </html>

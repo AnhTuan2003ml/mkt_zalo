@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or "Chiến dịch gửi" }} - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260726-split">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}" >
     <style>
         .tab-nav { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
@@ -42,56 +42,6 @@
         input[type="datetime-local"] {
             color: white;
             accent-color: var(--accent);
-        }
-
-        /* ─── Schedule List Card Styles ─── */
-        .schedules-list-grid { display: flex; flex-direction: column; gap: 12px; }
-        .schedule-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: all 0.2s ease; }
-        .schedule-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(88,166,255,0.1); }
-        .schedule-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
-        .schedule-card-title-area { flex: 1; min-width: 0; }
-        .schedule-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; word-break: break-word; }
-        .schedule-time { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-        .schedule-message { background: var(--bg); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; color: var(--text-secondary); margin: 10px 0; max-height: 120px; overflow-y: auto; }
-        .schedule-meta-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 10px 0; }
-        .schedule-meta-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
-        .schedule-meta-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px; }
-        .schedule-meta-value { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
-        .schedule-actions-group { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
-        .schedule-status-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-        .schedule-status-badge.pending { background: rgba(255,152,0,0.12); color: #ff9800; border: 1px solid rgba(255,152,0,0.25); }
-        .schedule-status-badge.running { background: rgba(56,139,253,0.12); color: var(--accent); border: 1px solid rgba(56,139,253,0.25); }
-        .schedule-status-badge.done { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
-        .schedule-status-badge.partial { background: rgba(255,152,0,0.12); color: #ff9800; border: 1px solid rgba(255,152,0,0.25); }
-        .schedule-status-badge.failed { background: rgba(244,68,60,0.12); color: var(--red); border: 1px solid rgba(244,68,60,0.25); }
-        .schedule-status-badge.cancelled { background: rgba(128,128,128,0.08); color: var(--text-secondary); border: 1px solid rgba(128,128,128,0.2); }
-        .sched-empty { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
-        .sched-empty svg { margin-bottom: 12px; opacity: 0.4; }
-        .sched-loading { text-align: center; padding: 30px; }
-        .schedule-filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-        .schedule-filter-bar input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--surface); color: var(--text); }
-        .schedule-filter-bar select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--surface); color: var(--text); }
-        .schedule-filter-bar span { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
-
-        .schedule-kind-badge { display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(88,166,255,0.24);background:rgba(88,166,255,0.10);color:var(--accent);white-space:nowrap; }
-        .schedule-kind-badge.friend { color:#4ade80;background:rgba(74,222,128,0.10);border-color:rgba(74,222,128,0.24); }
-        .schedule-kind-badge.group_invite { color:#fbbf24;background:rgba(251,191,36,0.10);border-color:rgba(251,191,36,0.24); }
-        .schedule-progress-wrap { margin: 10px 0 4px; }
-        .schedule-progress-line { height: 8px; border-radius: 999px; overflow: hidden; background: rgba(148,163,184,0.18); border:1px solid rgba(148,163,184,0.18); }
-        .schedule-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #4ade80); border-radius: 999px; }
-        .schedule-progress-text { font-size: 12px; color: var(--text-secondary); margin-top: 5px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-        .action-plan-batches { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
-        .action-plan-batch { border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--bg); }
-        .action-plan-batch-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
-        .action-plan-batch-title { font-weight:700; color:var(--text); font-size:13px; }
-        .action-plan-batch-meta { color:var(--text-secondary); font-size:12px; margin-top:3px; }
-        .action-plan-batch-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-        .action-plan-mini-list { max-height:140px; overflow:auto; margin-top:8px; border-top:1px solid var(--border); padding-top:8px; color:var(--text-secondary); font-size:12px; }
-
-        @media (max-width: 768px) {
-            .schedule-meta-row { grid-template-columns: 1fr 1fr; }
-            .schedule-actions-group { justify-content: stretch; }
-            .schedule-actions-group .btn { flex: 1; }
         }
 
         /* Group Card Styles */
@@ -214,10 +164,9 @@
 
         <!-- Tabs -->
         <div class="tab-nav">
-            <button class="tab-btn active" data-tab="tab-group" onclick="schedSwitchTab('group')">Từ nhóm</button>
+            <button class="tab-btn active" data-tab="tab-group" onclick="schedSwitchTab('group')">Gửi riêng cho thành viên trong nhóm</button>
             <button class="tab-btn" data-tab="tab-phone" onclick="schedSwitchTab('phone')">Từ số điện thoại</button>
-            <button class="tab-btn" data-tab="tab-personal-groups" onclick="schedSwitchTab('personal-groups')">📱 Nhóm cá nhân</button>
-            <button class="tab-btn" data-tab="tab-schedules-list" onclick="schedSwitchTab('schedules-list')">📅 Danh sách lịch</button>
+            <button class="tab-btn" data-tab="tab-personal-groups" onclick="schedSwitchTab('personal-groups')">Gửi vào nhóm</button>
         </div>
 
         <!-- Tab: Từ nhóm -->
@@ -228,9 +177,6 @@
 
         <!-- Tab: Nhóm cá nhân -->
         {% include 'tab_personal_groups.html' %}
-
-        <!-- Tab: Danh sách lịch -->
-        {% include 'tab_schedules_list.html' %}
 
     </div>
 
@@ -534,6 +480,6 @@
 </div>
 
 <script>window.ZALO_INITIAL_TAB = "{{ initial_tab or 'group' }}";</script>
-<script src="{{ url_for('static', filename='js/schedules.js') }}?v=1779633057-action-plans-in-list"></script>
+<script src="{{ url_for('static', filename='js/schedules.js') }}?v=1779633057-split-schedmon"></script>
 </body>
 </html>

@@ -1,0 +1,211 @@
+/* Lịch gửi — trang riêng chỉ để theo dõi: đang chạy lịch nào, tiếp theo là lịch nào. */
+
+.schedmon-shell { max-width: 1480px; }
+
+/* ─── Topbar ─────────────────────────────────────────────────────────── */
+.schedmon-topbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 18px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(56, 189, 248, .14), rgba(14, 25, 39, .58));
+}
+.schedmon-topbar-title { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 0; }
+.schedmon-live-dot {
+    flex: 0 0 auto;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, .55);
+    animation: schedmonPulse 2s infinite;
+}
+.schedmon-live-dot.idle { background: var(--text-muted); animation: none; box-shadow: none; }
+@keyframes schedmonPulse {
+    0% { box-shadow: 0 0 0 0 rgba(88, 166, 255, .55); }
+    70% { box-shadow: 0 0 0 8px rgba(88, 166, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0); }
+}
+.schedmon-topbar-title strong { display: block; font-size: 16px; color: var(--text); }
+.schedmon-topbar-title small { display: block; margin-top: 2px; color: var(--text-muted); font-size: 12px; }
+
+.schedmon-topbar-stats { display: flex; flex: 2 1 420px; gap: 8px; overflow-x: auto; }
+.schedmon-stat {
+    flex: 1 1 110px;
+    min-width: 100px;
+    padding: 8px 12px;
+    border: 1px solid rgba(174, 205, 232, .1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .025);
+}
+.schedmon-stat span { display: block; color: var(--text-muted); font-size: 10px; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+.schedmon-stat strong { display: block; margin-top: 3px; color: var(--text); font-size: 18px; }
+.schedmon-stat.running strong { color: var(--accent); }
+.schedmon-stat.error strong { color: var(--red); }
+.schedmon-stat.done strong { color: var(--green); }
+
+.schedmon-topbar-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+
+/* ─── Panels ─────────────────────────────────────────────────────────── */
+.schedmon-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.schedmon-panel-head h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.schedmon-panel-head p { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; }
+.schedmon-panel-head a { color: var(--accent-hover); font-size: 12px; font-weight: 700; text-decoration: none; }
+.schedmon-panel-head a:hover { text-decoration: underline; }
+.schedmon-count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; padding: 2px 8px; border-radius: 999px; background: rgba(88, 166, 255, .14); color: var(--accent); font-size: 12px; font-weight: 700; }
+
+/* ─── Running now ────────────────────────────────────────────────────── */
+.schedmon-running-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.schedmon-running-card {
+    position: relative;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px;
+    background: var(--surface2);
+}
+.schedmon-running-card .schedmon-run-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 6px; animation: schedmonPulse 1.6s infinite; }
+.schedmon-running-title { font-size: 14px; font-weight: 700; color: var(--text); margin: 8px 0 4px; word-break: break-word; }
+.schedmon-running-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+.schedmon-running-card .schedule-progress-wrap { margin: 6px 0 2px; }
+.schedmon-running-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; }
+
+/* ─── Upcoming (next-up queue) ───────────────────────────────────────── */
+.schedmon-upcoming-list { display: flex; flex-direction: column; gap: 8px; }
+.schedmon-upcoming-item {
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2);
+    transition: border-color .16s ease;
+}
+.schedmon-upcoming-item:hover { border-color: rgba(88, 166, 255, .4); }
+.schedmon-upcoming-item:first-child { border-color: rgba(88, 166, 255, .45); box-shadow: 0 0 0 1px rgba(88, 166, 255, .12); }
+.schedmon-countdown-chip { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; text-align: center; white-space: nowrap; background: rgba(148, 163, 184, .12); color: var(--text-muted); }
+.schedmon-countdown-chip.soon { background: rgba(255, 152, 0, .14); color: #ff9800; }
+.schedmon-countdown-chip.overdue { background: rgba(244, 68, 60, .14); color: var(--red); }
+.schedmon-upcoming-copy { min-width: 0; }
+.schedmon-upcoming-copy .schedmon-up-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedmon-upcoming-copy .schedmon-up-meta { margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); }
+.schedmon-upcoming-actions { display: flex; gap: 6px; }
+
+/* ─── Empty state ────────────────────────────────────────────────────── */
+.schedmon-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; color: var(--text-muted); text-align: center; }
+.schedmon-empty svg { width: 34px; height: 34px; opacity: .4; }
+.schedmon-empty b { color: var(--text); font-size: 13px; }
+.schedmon-empty p { margin: 0; font-size: 12px; }
+.schedmon-loading { display: flex; align-items: center; gap: 10px; padding: 24px 8px; color: var(--text-muted); font-size: 12.5px; }
+
+/* ─── Kind badges (loại chiến dịch) ──────────────────────────────────── */
+.schedule-kind-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; border: 1px solid rgba(88, 166, 255, .24); background: rgba(88, 166, 255, .10); color: var(--accent); white-space: nowrap; }
+.schedule-kind-badge.friend { color: #4ade80; background: rgba(74, 222, 128, .10); border-color: rgba(74, 222, 128, .24); }
+.schedule-kind-badge.group_invite { color: #fbbf24; background: rgba(251, 191, 36, .10); border-color: rgba(251, 191, 36, .24); }
+.schedule-kind-badge.kind-ingroup { color: #4ade80; background: rgba(74, 222, 128, .10); border-color: rgba(74, 222, 128, .24); }
+.schedule-kind-badge.kind-permember { color: var(--accent); background: rgba(88, 166, 255, .10); border-color: rgba(88, 166, 255, .24); }
+.schedule-kind-badge.kind-phone { color: #c084fc; background: rgba(192, 132, 252, .10); border-color: rgba(192, 132, 252, .24); }
+
+/* ─── Status badges ──────────────────────────────────────────────────── */
+.schedule-status-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.schedule-status-badge.pending { background: rgba(255, 152, 0, .12); color: #ff9800; border: 1px solid rgba(255, 152, 0, .25); }
+.schedule-status-badge.running { background: rgba(56, 139, 253, .12); color: var(--accent); border: 1px solid rgba(56, 139, 253, .25); }
+.schedule-status-badge.done { background: rgba(63, 185, 80, .12); color: var(--green); border: 1px solid rgba(63, 185, 80, .25); }
+.schedule-status-badge.partial { background: rgba(255, 152, 0, .12); color: #ff9800; border: 1px solid rgba(255, 152, 0, .25); }
+.schedule-status-badge.failed { background: rgba(244, 68, 60, .12); color: var(--red); border: 1px solid rgba(244, 68, 60, .25); }
+.schedule-status-badge.cancelled { background: rgba(128, 128, 128, .08); color: var(--text-muted); border: 1px solid rgba(128, 128, 128, .2); }
+
+/* ─── Progress bar (dùng lại cho kế hoạch kết bạn / mời nhóm) ───────────── */
+.schedule-progress-wrap { margin: 10px 0 4px; }
+.schedule-progress-line { height: 8px; border-radius: 999px; overflow: hidden; background: rgba(148, 163, 184, .18); border: 1px solid rgba(148, 163, 184, .18); }
+.schedule-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #4ade80); border-radius: 999px; }
+.schedule-progress-text { font-size: 12px; color: var(--text-muted); margin-top: 5px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+/* ─── All schedules (danh sách đầy đủ) ───────────────────────────────── */
+.schedule-filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.schedule-filter-bar input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--surface); color: var(--text); }
+.schedule-filter-bar select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--surface); color: var(--text); }
+.schedule-filter-bar span { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+.schedules-list-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 620px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    scrollbar-width: thin;
+}
+.schedules-list-grid::-webkit-scrollbar { width: 8px; }
+.schedules-list-grid::-webkit-scrollbar-track { background: transparent; }
+.schedules-list-grid::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .28); border-radius: 999px; }
+.schedules-list-grid::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .45); }
+.schedule-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: all .2s ease; }
+.schedule-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(88, 166, 255, .1); }
+.schedule-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.schedule-card-title-area { flex: 1; min-width: 0; }
+.schedule-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; word-break: break-word; }
+.schedule-time { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.schedule-message { background: var(--bg); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; color: var(--text-muted); margin: 10px 0; max-height: 120px; overflow-y: auto; }
+.schedule-meta-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 10px 0; }
+.schedule-meta-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.schedule-meta-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+.schedule-meta-value { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
+.schedule-actions-group { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+
+.action-plan-batches { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.action-plan-batch { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg); }
+.action-plan-batch-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.action-plan-batch-title { font-weight: 700; color: var(--text); font-size: 13px; }
+.action-plan-batch-meta { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
+.action-plan-batch-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.action-plan-mini-list { max-height: 140px; overflow: auto; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; color: var(--text-muted); font-size: 12px; }
+
+/* ─── Detail / edit modal (tối giản, tách riêng khỏi trang chiến dịch) ── */
+.detail-modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, .5); }
+.detail-modal.show { display: flex; align-items: center; justify-content: center; }
+.detail-modal-content { background: var(--surface); border-radius: 12px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0, 0, 0, .3); }
+.detail-modal-header { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: var(--text); display: flex; justify-content: space-between; align-items: center; }
+.detail-modal-close { font-size: 28px; font-weight: bold; color: var(--text-muted); cursor: pointer; border: none; background: none; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+.detail-modal-close:hover { color: var(--text); }
+.detail-item { margin-bottom: 14px; display: flex; gap: 12px; }
+.detail-label { font-weight: 600; color: var(--text-muted); min-width: 100px; font-size: 12px; text-transform: uppercase; }
+.detail-value { color: var(--text); word-break: break-all; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--surface); color: var(--text); }
+.form-group textarea { resize: vertical; min-height: 100px; }
+.spinner { border: 3px solid var(--border); border-top: 3px solid var(--accent); border-radius: 50%; width: 32px; height: 32px; animation: spin .8s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* ─── Notification overlay ───────────────────────────────────────────── */
+.notification-overlay { position: fixed; top: 20px; right: 20px; z-index: 9998; opacity: 0; pointer-events: none; transform: translateX(400px); transition: all .3s ease; }
+.notification-overlay.show { opacity: 1; pointer-events: auto; transform: translateX(0); }
+.notification-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; gap: 12px; align-items: start; min-width: 300px; max-width: 400px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); }
+.notification-icon { flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; font-weight: bold; }
+.notification-card.success .notification-icon { background: rgba(63, 185, 80, .2); color: var(--green); }
+.notification-card.error .notification-icon { background: rgba(248, 113, 73, .2); color: var(--red); }
+.notification-card.info .notification-icon { background: rgba(88, 166, 255, .2); color: var(--accent); }
+.notification-content { flex: 1; min-width: 0; }
+.notification-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.notification-message { font-size: 12px; color: var(--text-muted); line-height: 1.4; word-break: break-word; }
+.notification-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.notification-close:hover { color: var(--text); }
+
+@media (max-width: 900px) {
+    .schedmon-topbar { flex-wrap: wrap; }
+    .schedmon-topbar-stats { flex-basis: 100%; }
+    .schedmon-upcoming-item { grid-template-columns: 88px minmax(0, 1fr); }
+    .schedmon-upcoming-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+@media (max-width: 640px) {
+    .schedmon-topbar { align-items: flex-start; }
+    .schedmon-running-grid { grid-template-columns: 1fr; }
+}

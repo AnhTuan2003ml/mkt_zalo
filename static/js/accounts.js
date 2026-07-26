@@ -1,7 +1,8 @@
-﻿// Quản lý danh sách tài khoản Zalo
+// Quản lý danh sách tài khoản Zalo
 
 var _accountsPollTimer = null;
 var _pollEndTime = 0;
+var _bulkActionRunning = false;
 
 function setAccountsStatus(msg, type) {
     var el = document.getElementById('accountsStatus');
@@ -19,13 +20,26 @@ function accountStatusLabel(acc) {
     return { text: 'Chưa chạy', cls: 'wait' };
 }
 
+function accountReady(acc) {
+    return !!(acc && acc.zpwEnk && acc.cookies && acc.loginCaptured && acc.userinfoCaptured);
+}
+
+function renderAccountsStats(accounts) {
+    var total = document.getElementById('accStatTotal');
+    var running = document.getElementById('accStatRunning');
+    var ready = document.getElementById('accStatReady');
+    if (total) total.textContent = accounts.length;
+    if (running) running.textContent = accounts.filter(function (a) { return !!a.remoteDebugPort; }).length;
+    if (ready) ready.textContent = accounts.filter(accountReady).length;
+}
+
 function startAccountsPolling(durationSec) {
     if (_accountsPollTimer) return;
-    
+
     // Polling trong khoảng thời gian định (mặc định 10 giây)
     var duration = (durationSec || 10) * 1000;
     _pollEndTime = Date.now() + duration;
-    
+
     _accountsPollTimer = setInterval(function() {
         if (Date.now() > _pollEndTime) {
             stopAccountsPolling();
@@ -41,6 +55,18 @@ function stopAccountsPolling() {
         _accountsPollTimer = null;
         _pollEndTime = 0;
     }
+}
+
+// ─── Heartbeat: tự đồng bộ trạng thái nền, phát hiện khi người dùng đóng
+// cửa sổ Chrome trực tiếp (không qua nút trong app) mà không cần tải lại trang.
+var _accountsHeartbeatTimer = null;
+
+function startAccountsHeartbeat() {
+    if (_accountsHeartbeatTimer) return;
+    _accountsHeartbeatTimer = setInterval(function () {
+        if (document.hidden) return;
+        loadAccountsList(true);
+    }, 5000);
 }
 
 function renderAccountCard(acc) {
@@ -64,41 +90,41 @@ function renderAccountCard(acc) {
         avatarWrap.appendChild(defaultAvatarEl(acc.name));
     }
 
-    var info = document.createElement('div');
-    info.className = 'account-card-info';
     var st = accountStatusLabel(acc);
-    info.innerHTML =
+
+    var nameCell = document.createElement('div');
+    nameCell.className = 'account-card-name-cell';
+    nameCell.innerHTML =
         '<div class="account-card-name">' + escHtml(acc.name || 'Tài khoản') + '</div>' +
-        '<div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">' +
-            '<div class="account-card-status ' + st.cls + '" style="flex: 0 0 auto;">' + escHtml(st.text) + '</div>' +
-            '<div class="account-card-proxy-inline mono" style="flex: 1; min-width: 0;">Proxy: ' + escHtml(acc.proxy ? acc.proxy.split('@').pop() : 'Chưa cấu hình') + '</div>' +
-        '</div>' +
-        '<div class="account-card-id mono" style="margin-top: 4px;">' + escHtml(acc.accountId) + '</div>';
+        '<div class="account-card-id mono">' + escHtml(acc.accountId) + '</div>';
+
+    var statusCell = document.createElement('div');
+    statusCell.className = 'account-card-status-cell';
+    statusCell.innerHTML = '<span class="account-card-status ' + st.cls + '">' + escHtml(st.text) + '</span>';
+
+    var proxyCell = document.createElement('div');
+    proxyCell.className = 'account-card-proxy-cell mono';
+    proxyCell.textContent = acc.proxy ? ('Proxy: ' + acc.proxy.split('@').pop()) : 'Chưa cấu hình proxy';
 
     var actions = document.createElement('div');
     actions.className = 'account-card-actions';
 
     var btnOpen = document.createElement('button');
     btnOpen.className = 'btn btn-primary btn-sm';
-    
-    // Nếu đang chạy, hiển thị "Đóng", ngược lại "Mở"
+
+    // Nếu đang chạy, hiển thị "Dừng", ngược lại "Khởi chạy"
     if (acc.remoteDebugPort) {
-        btnOpen.textContent = 'Đóng';
+        btnOpen.textContent = 'Dừng';
         btnOpen.onclick = function() { closeAccount(acc.accountId); };
     } else {
-        btnOpen.textContent = 'Mở';
+        btnOpen.textContent = 'Khởi chạy';
         btnOpen.onclick = function() { openAccount(acc.accountId); };
     }
 
-    var btnProxy = document.createElement('button');
-    btnProxy.className = 'btn btn-ghost btn-sm';
-    btnProxy.textContent = 'Proxy';
-    btnProxy.onclick = function() { setAccountProxy(acc.accountId, acc.proxy || '', !!acc.remoteDebugPort); };
-
     var btnEdit = document.createElement('button');
     btnEdit.className = 'btn btn-ghost btn-sm';
-    btnEdit.textContent = 'Sửa tên';
-    btnEdit.onclick = function() { renameAccount(acc.accountId, acc.name); };
+    btnEdit.textContent = 'Sửa';
+    btnEdit.onclick = function() { editAccount(acc.accountId, acc.name, acc.proxy || '', !!acc.remoteDebugPort); };
 
     var btnDelete = document.createElement('button');
     btnDelete.className = 'btn btn-danger btn-sm';
@@ -106,12 +132,13 @@ function renderAccountCard(acc) {
     btnDelete.onclick = function() { deleteAccount(acc.accountId, acc.name); };
 
     actions.appendChild(btnOpen);
-    actions.appendChild(btnProxy);
     actions.appendChild(btnEdit);
     actions.appendChild(btnDelete);
 
     card.appendChild(avatarWrap);
-    card.appendChild(info);
+    card.appendChild(nameCell);
+    card.appendChild(statusCell);
+    card.appendChild(proxyCell);
     card.appendChild(actions);
     return card;
 }
@@ -123,6 +150,8 @@ function defaultAvatarEl(name) {
     el.textContent = letter;
     return el;
 }
+
+var _lastAccountsSnapshot = [];
 
 async function loadAccountsList(silent) {
     var listEl = document.getElementById('accountsList');
@@ -138,7 +167,9 @@ async function loadAccountsList(silent) {
         }
 
         var accounts = json.accounts || [];
+        _lastAccountsSnapshot = accounts;
         listEl.innerHTML = '';
+        renderAccountsStats(accounts);
 
         if (accounts.length === 0) {
             if (emptyEl) emptyEl.style.display = 'block';
@@ -164,43 +195,123 @@ async function loadAccountsList(silent) {
     }
 }
 
-async function addAccount() {
-    var btn = document.getElementById('btnAddAccount');
+// ─── Thêm tài khoản: setup tên + proxy trước, không mở Chrome ngay ─────────
+
+function openNewAccountModal() {
+    var backdrop = document.getElementById('newAccountModalBackdrop');
+    var nameInput = document.getElementById('newAccountName');
+    var proxyInput = document.getElementById('newAccountProxy');
+    if (nameInput) nameInput.value = '';
+    if (proxyInput) proxyInput.value = '';
+    backdrop.classList.add('show');
+    setTimeout(function() { if (nameInput) nameInput.focus(); }, 50);
+}
+
+function closeNewAccountModal() {
+    var backdrop = document.getElementById('newAccountModalBackdrop');
+    if (backdrop) backdrop.classList.remove('show');
+}
+
+async function submitNewAccount() {
+    var name = (document.getElementById('newAccountName').value || '').trim();
+    var proxy = (document.getElementById('newAccountProxy').value || '').trim();
+    var btn = document.getElementById('btnSaveNewAccount');
+
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> Đang tạo...';
     }
-    setAccountsStatus('⏳ Đang tạo tài khoản và mở Chrome...', 'loading');
+    setAccountsStatus('Đang tạo tài khoản...', 'loading');
 
     try {
-        var resp = await fetch('/api/accounts', { method: 'POST' });
+        var resp = await fetch('/api/accounts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, proxy: proxy, autoLaunch: false })
+        });
         var json = await resp.json();
         if (json.error) {
             setAccountsStatus(json.error, 'error');
             return;
         }
         setAccountsStatus(
-            '✅ Đã tạo ' + (json.account && json.account.name) +
-            '. Đăng nhập Zalo trên Chrome.',
+            '✓ Đã tạo ' + (json.account && json.account.name) + '. Bấm «Khởi chạy» trên thẻ tài khoản khi bạn sẵn sàng đăng nhập.',
             'success'
         );
+        closeNewAccountModal();
         await loadAccountsList();
-        // Poll for 60 seconds to capture all data through reload
-        startAccountsPolling(60);
     } catch (err) {
-        setAccountsStatus('❌ Lỗi: ' + err.message, 'error');
+        setAccountsStatus('Lỗi: ' + err.message, 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML =
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-                '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Thêm tài khoản';
+            btn.textContent = 'Tạo tài khoản';
         }
     }
 }
 
+// ─── Chạy tất cả / Dừng tất cả ──────────────────────────────────────────────
+
+function _delay(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+async function startAllAccounts() {
+    if (_bulkActionRunning) return;
+    var targets = (_lastAccountsSnapshot || []).filter(function (a) { return !a.remoteDebugPort; });
+    if (!targets.length) {
+        setAccountsStatus('Không có tài khoản nào đang chờ khởi chạy.', 'success');
+        return;
+    }
+    _bulkActionRunning = true;
+    var btn = document.getElementById('btnStartAll');
+    if (btn) btn.disabled = true;
+    try {
+        for (var i = 0; i < targets.length; i++) {
+            setAccountsStatus('Đang khởi chạy ' + (i + 1) + '/' + targets.length + ': ' + (targets[i].name || targets[i].accountId) + '...', 'loading');
+            try {
+                await fetch('/api/accounts/' + encodeURIComponent(targets[i].accountId) + '/open', { method: 'POST' });
+            } catch (err) { /* tiếp tục với tài khoản kế tiếp */ }
+            await loadAccountsList(true);
+            if (i < targets.length - 1) await _delay(700);
+        }
+        setAccountsStatus('✓ Đã khởi chạy ' + targets.length + ' tài khoản.', 'success');
+        startAccountsPolling(60);
+    } finally {
+        _bulkActionRunning = false;
+        if (btn) btn.disabled = false;
+        await loadAccountsList();
+    }
+}
+
+async function stopAllAccounts() {
+    if (_bulkActionRunning) return;
+    var targets = (_lastAccountsSnapshot || []).filter(function (a) { return !!a.remoteDebugPort; });
+    if (!targets.length) {
+        setAccountsStatus('Không có tài khoản nào đang chạy.', 'success');
+        return;
+    }
+    if (!(await nexusConfirm('Dừng tất cả ' + targets.length + ' tài khoản đang chạy?', { title: 'Dừng tất cả' }))) return;
+    _bulkActionRunning = true;
+    var btn = document.getElementById('btnStopAll');
+    if (btn) btn.disabled = true;
+    try {
+        for (var i = 0; i < targets.length; i++) {
+            setAccountsStatus('Đang dừng ' + (i + 1) + '/' + targets.length + ': ' + (targets[i].name || targets[i].accountId) + '...', 'loading');
+            try {
+                await fetch('/api/accounts/' + encodeURIComponent(targets[i].accountId) + '/close', { method: 'POST' });
+            } catch (err) { /* tiếp tục với tài khoản kế tiếp */ }
+            await loadAccountsList(true);
+            if (i < targets.length - 1) await _delay(400);
+        }
+        setAccountsStatus('✓ Đã dừng ' + targets.length + ' tài khoản.', 'success');
+    } finally {
+        _bulkActionRunning = false;
+        if (btn) btn.disabled = false;
+        await loadAccountsList();
+    }
+}
+
 async function openAccount(accountId) {
-    setAccountsStatus('Đang mở...', 'loading');
+    setAccountsStatus('Đang khởi chạy...', 'loading');
     try {
         var resp = await fetch('/api/accounts/' + encodeURIComponent(accountId) + '/open', {
             method: 'POST'
@@ -219,8 +330,8 @@ async function openAccount(accountId) {
 }
 
 async function closeAccount(accountId) {
-    
-    setAccountsStatus('Đang đóng...', 'loading');
+
+    setAccountsStatus('Đang dừng...', 'loading');
     try {
         var resp = await fetch('/api/accounts/' + encodeURIComponent(accountId) + '/close', {
             method: 'POST'
@@ -230,7 +341,7 @@ async function closeAccount(accountId) {
             setAccountsStatus(json.error, 'error');
             return;
         }
-        setAccountsStatus('Đã đóng.');
+        setAccountsStatus('Đã dừng.');
         await loadAccountsList();
     } catch (err) {
         setAccountsStatus('❌ Lỗi: ' + err.message, 'error');
@@ -239,128 +350,107 @@ async function closeAccount(accountId) {
 
 
 
-async function renameAccount(accountId, currentName) {
-    var name = prompt('Sửa tên tài khoản:', currentName || '');
-    if (name === null) return;
-    name = name.trim();
-    if (!name) {
-        setAccountsStatus('Tên không được để trống.', 'error');
-        return;
-    }
+// ─── Sửa tài khoản: gộp Tên + Proxy trong 1 modal duy nhất (không dùng prompt()) ─
 
-    try {
-        var resp = await fetch('/api/accounts/' + encodeURIComponent(accountId), {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name })
-        });
-        var json = await resp.json();
-        if (json.error) {
-            setAccountsStatus(json.error, 'error');
-            return;
-        }
-        setAccountsStatus('Đã đổi tên.', 'success');
-        await loadAccountsList();
-    } catch (err) {
-        setAccountsStatus('Lỗi: ' + err.message, 'error');
-    }
-}
-
-async function setAccountProxy(accountId, currentProxy, isRunning) {
-    // Tạo modal overlay nếu chưa tồn tại
-    var backdrop = document.getElementById('proxyModalBackdrop');
+function editAccount(accountId, currentName, currentProxy, isRunning) {
+    var backdrop = document.getElementById('editAccountModalBackdrop');
     if (!backdrop) {
         backdrop = document.createElement('div');
-        backdrop.id = 'proxyModalBackdrop';
+        backdrop.id = 'editAccountModalBackdrop';
         backdrop.className = 'overlay-backdrop';
         backdrop.innerHTML = `
             <div class="overlay-card">
                 <div class="overlay-header">
-                    <h3>Cấu hình Proxy</h3>
-                    <button class="overlay-close" onclick="closeProxyModal()">&times;</button>
+                    <h3>Sửa tài khoản</h3>
+                    <button class="overlay-close" onclick="closeEditAccountModal()">&times;</button>
                 </div>
                 <div class="overlay-body">
                     <div style="margin-bottom: 16px;">
-                        <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); text-transform: none;">Nhập proxy</label>
-                        <textarea id="proxyInput" class="overlay-textarea" placeholder="Định dạng hỗ trợ:&#10;ip:port&#10;ip:port:user:pass&#10;http://user:pass@ip:port&#10;&#10;Để trống để xóa proxy."></textarea>
+                        <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); text-transform: none;">Tên tài khoản</label>
+                        <input id="editAccountName" type="text" class="overlay-input" placeholder="Ví dụ: Tài khoản 1">
                     </div>
+                    <div style="margin-bottom: 6px;">
+                        <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); text-transform: none;">Proxy (không bắt buộc)</label>
+                        <textarea id="editAccountProxy" class="overlay-textarea" placeholder="Định dạng hỗ trợ:&#10;ip:port&#10;ip:port:user:pass&#10;http://user:pass@ip:port&#10;&#10;Để trống để xóa proxy."></textarea>
+                    </div>
+                    <p id="editAccountProxyHint" style="margin: 6px 0 16px; color: var(--text-muted); font-size: 11px; line-height: 1.6;"></p>
                     <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                        <button class="btn btn-ghost btn-sm" onclick="closeProxyModal()">Hủy</button>
-                        <button class="btn btn-primary btn-sm" onclick="saveProxyModal()">Lưu</button>
+                        <button class="btn btn-ghost btn-sm" onclick="closeEditAccountModal()">Hủy</button>
+                        <button class="btn btn-primary btn-sm" id="btnSaveEditAccount" onclick="submitEditAccount()">Lưu</button>
                     </div>
                 </div>
             </div>
         `;
         backdrop.addEventListener('click', function(e) {
-            if (e.target === backdrop) closeProxyModal();
+            if (e.target === backdrop) closeEditAccountModal();
         });
         document.body.appendChild(backdrop);
     }
 
-    // Set giá trị input
-    var input = document.getElementById('proxyInput');
-    input.value = currentProxy || '';
+    document.getElementById('editAccountName').value = currentName || '';
+    document.getElementById('editAccountProxy').value = currentProxy || '';
+    document.getElementById('editAccountProxyHint').textContent = isRunning
+        ? 'Tài khoản đang chạy: nếu đổi proxy, cần dừng và khởi chạy lại để có hiệu lực.'
+        : 'Proxy sẽ được áp dụng ngay từ lần khởi chạy Chrome tiếp theo.';
 
-    // Store context cho save button
-    window._proxyModalContext = {
-        accountId: accountId,
-        isRunning: isRunning
-    };
+    window._editAccountContext = { accountId: accountId, isRunning: isRunning };
 
-    // Show with animation
     backdrop.classList.add('show');
     setTimeout(function() {
-        input.focus();
-        input.select();
+        document.getElementById('editAccountName').focus();
+        document.getElementById('editAccountName').select();
     }, 50);
 }
 
-function closeProxyModal() {
-    var backdrop = document.getElementById('proxyModalBackdrop');
-    if (backdrop) {
-        backdrop.classList.remove('show');
-    }
+function closeEditAccountModal() {
+    var backdrop = document.getElementById('editAccountModalBackdrop');
+    if (backdrop) backdrop.classList.remove('show');
 }
 
-async function saveProxyModal() {
-    var input = document.getElementById('proxyInput');
-    var proxy = (input.value || '').trim();
-    var ctx = window._proxyModalContext || {};
+async function submitEditAccount() {
+    var ctx = window._editAccountContext || {};
     var accountId = ctx.accountId;
-    var isRunning = ctx.isRunning;
-
     if (!accountId) return;
+
+    var name = (document.getElementById('editAccountName').value || '').trim();
+    var proxy = (document.getElementById('editAccountProxy').value || '').trim();
+
+    if (!name) {
+        setAccountsStatus('Tên không được để trống.', 'error');
+        return;
+    }
+
+    var btn = document.getElementById('btnSaveEditAccount');
+    if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
 
     try {
         var resp = await fetch('/api/accounts/' + encodeURIComponent(accountId), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proxy: proxy })
+            body: JSON.stringify({ name: name, proxy: proxy })
         });
-
         var json = await resp.json();
-
         if (json.error) {
             setAccountsStatus(json.error, 'error');
             return;
         }
-
-        if (isRunning) {
-            setAccountsStatus('✓ Đã lưu proxy. Cần đóng và mở lại profile để proxy có hiệu lực.', 'success');
-        } else {
-            setAccountsStatus(proxy ? '✓ Đã lưu proxy.' : '✓ Đã xóa proxy.', 'success');
-        }
-
-        closeProxyModal();
+        closeEditAccountModal();
+        setAccountsStatus(
+            ctx.isRunning ? '✓ Đã lưu. Cần dừng và khởi chạy lại nếu proxy thay đổi.' : '✓ Đã lưu thay đổi.',
+            'success'
+        );
         await loadAccountsList();
     } catch (err) {
-        setAccountsStatus('✗ Lỗi lưu proxy: ' + err.message, 'error');
+        setAccountsStatus('Lỗi: ' + err.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Lưu'; }
     }
 }
 
 async function deleteAccount(accountId, name) {
     var label = name || accountId;
-    if (!confirm('Xóa "' + label + '"?\n\nThư mục profile và dữ liệu đăng nhập sẽ bị xóa vĩnh viễn.')) {
+    var ok = await nexusConfirm('Xóa "' + label + '"?\n\nThư mục profile và dữ liệu đăng nhập sẽ bị xóa vĩnh viễn.', { title: 'Xóa tài khoản', confirmText: 'Xóa', danger: true });
+    if (!ok) {
         return;
     }
 
@@ -383,4 +473,11 @@ async function deleteAccount(accountId, name) {
 
 document.addEventListener('DOMContentLoaded', function() {
     loadAccountsList();
+    startAccountsHeartbeat();
+    var newAccountBackdrop = document.getElementById('newAccountModalBackdrop');
+    if (newAccountBackdrop) {
+        newAccountBackdrop.addEventListener('click', function(e) {
+            if (e.target === newAccountBackdrop) closeNewAccountModal();
+        });
+    }
 });

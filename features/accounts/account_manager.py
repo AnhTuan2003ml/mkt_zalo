@@ -1,15 +1,20 @@
 """
 Quản lý tài khoản Zalo — mỗi tài khoản một Chrome user-data-dir riêng.
 """
+import base64
+import functools
 import json
 import os
 import shutil
+import socket
+import socketserver
 import subprocess
 import sys
 import threading
 import time
 import uuid
 import winreg
+from http.server import BaseHTTPRequestHandler
 
 
 def find_chrome_executable():
@@ -53,7 +58,23 @@ ZALO_URL = "https://chat.zalo.me/index.html"
 DEBUG_PORT_START = 9333
 
 _running_chrome = {}
+_proxy_relay_servers = {}  # account_id -> ThreadingTCPServer (local proxy relay)
 _used_ports = set()
+
+# Bảo vệ chu trình đọc-sửa-ghi data/accounts.json khỏi race condition khi nhiều
+# thread ghi đồng thời (network monitor của từng tài khoản đang chạy + các request
+# Flask threaded=True) — nếu không có khóa này, "Chạy tất cả" nhiều tài khoản cùng
+# lúc có thể làm mất tài khoản khỏi accounts.json do lost-update (thread A đọc danh
+# sách cũ, ghi đè lại đúng lúc thread B vừa thêm/sửa xong).
+_accounts_file_lock = threading.RLock()
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _accounts_file_lock:
+            return fn(*args, **kwargs)
+    return wrapper
 
 
 def _base_dir():
@@ -110,6 +131,7 @@ def normalize_account(acc: dict, default_name: str = None) -> dict:
     return normalized
 
 
+@_locked
 def load_accounts():
     """Đọc danh sách tài khoản từ data/accounts.json."""
     _ensure_dirs()
@@ -127,19 +149,30 @@ def load_accounts():
         accounts = []
         global _used_ports
         _used_ports = set()
+        changed = False
         for acc in raw:
             if not acc.get("accountId"):
                 continue
             norm = normalize_account(acc)
-            accounts.append(norm)
             port = norm.get("remoteDebugPort")
             if port:
-                _used_ports.add(int(port))
+                profile_path = norm.get("profilePath") or _profile_path(norm["accountId"])
+                if _is_profile_in_use(profile_path, norm["accountId"]):
+                    _used_ports.add(int(port))
+                else:
+                    # Chrome đã bị đóng ngoài ý muốn (tắt cửa sổ trực tiếp) mà app
+                    # không kịp ghi nhận qua close_account(). Tự sửa lại trạng thái.
+                    norm["remoteDebugPort"] = None
+                    changed = True
+            accounts.append(norm)
+        if changed:
+            save_accounts(accounts)
         return accounts
     except (json.JSONDecodeError, OSError):
         return []
 
 
+@_locked
 def save_accounts(accounts):
     """Lưu danh sách tài khoản vào data/accounts.json."""
     _ensure_dirs()
@@ -159,6 +192,7 @@ def get_account(account_id: str):
     return _find_account(load_accounts(), account_id)
 
 
+@_locked
 def update_account(account_id: str, **fields):
     """Cập nhật một phần thông tin tài khoản."""
     accounts = load_accounts()
@@ -412,71 +446,162 @@ def _parse_proxy(proxy_string: str):
     }
 
 
-def _create_proxy_auth_extension(profile_path: str, proxy_info: dict) -> str:
+class _ProxyRelayHandler(BaseHTTPRequestHandler):
     """
-    Tạo Chrome extension chỉ để xử lý proxy authentication.
+    Proxy HTTP nội bộ (127.0.0.1) không yêu cầu xác thực — Chrome trỏ vào
+    đây thay vì trỏ thẳng vào proxy thật. Mọi kết nối được relay tiếp tới
+    proxy thật kèm sẵn header Proxy-Authorization, nên Chrome không bao giờ
+    thấy proxy đòi đăng nhập nữa.
 
-    Lưu ý:
-    - Proxy route được set bằng --proxy-server trong _launch_chrome()
-    - Extension này chỉ trả username/password khi Chrome hỏi proxy auth
+    Lý do dùng cách này thay vì Chrome extension (đã thử trước đó):
+    Chrome bản mới hạn chế/khóa --load-extension và Manifest V2 trên kênh
+    Stable theo từng đợt cập nhật khác nhau tùy máy, nên cách "tự trả
+    username/password qua extension" không ổn định. Local relay này không
+    phụ thuộc bất kỳ cơ chế extension nào của Chrome nên tránh được hẳn vấn đề.
     """
-    ext_dir = os.path.join(profile_path, "proxy_auth_extension")
-    os.makedirs(ext_dir, exist_ok=True)
+
+    protocol_version = "HTTP/1.1"
+    upstream_host = None
+    upstream_port = None
+    upstream_auth_header = None  # "Basic xxxx" hoặc None nếu proxy không cần auth
+
+    def log_message(self, fmt, *args):
+        pass  # im lặng, tránh log rác request ra console
+
+    def _connect_upstream(self):
+        return socket.create_connection((self.upstream_host, self.upstream_port), timeout=15)
+
+    @staticmethod
+    def _pipe(src, dst):
+        try:
+            while True:
+                data = src.recv(65536)
+                if not data:
+                    break
+                dst.sendall(data)
+        except Exception:
+            pass
+        finally:
+            for s in (src, dst):
+                try:
+                    s.shutdown(socket.SHUT_RDWR)
+                except Exception:
+                    pass
+
+    def do_CONNECT(self):
+        try:
+            upstream = self._connect_upstream()
+        except Exception:
+            self.send_error(502, "Khong ket noi duoc proxy that")
+            return
+
+        try:
+            req = f"CONNECT {self.path} HTTP/1.1\r\nHost: {self.path}\r\n"
+            if self.upstream_auth_header:
+                req += f"Proxy-Authorization: {self.upstream_auth_header}\r\n"
+            req += "Proxy-Connection: Keep-Alive\r\n\r\n"
+            upstream.sendall(req.encode("latin-1"))
+
+            resp = b""
+            upstream.settimeout(15)
+            while b"\r\n\r\n" not in resp and len(resp) < 65536:
+                chunk = upstream.recv(4096)
+                if not chunk:
+                    break
+                resp += chunk
+
+            if not (resp.startswith(b"HTTP/1.1 200") or resp.startswith(b"HTTP/1.0 200")):
+                self.send_error(502, "Proxy that tu choi ket noi (kiem tra lai user/pass)")
+                upstream.close()
+                return
+
+            self.send_response(200, "Connection Established")
+            self.end_headers()
+        except Exception:
+            try:
+                upstream.close()
+            except Exception:
+                pass
+            return
+
+        self.close_connection = True  # tunnel dùng riêng socket này, không đọc thêm request nữa
+        client = self.connection
+        client.settimeout(None)
+        upstream.settimeout(None)
+        t = threading.Thread(target=self._pipe, args=(upstream, client), daemon=True)
+        t.start()
+        self._pipe(client, upstream)
+        t.join(timeout=5)
+
+    def _forward_plain(self):
+        self.close_connection = True
+        try:
+            upstream = self._connect_upstream()
+        except Exception:
+            self.send_error(502, "Khong ket noi duoc proxy that")
+            return
+
+        try:
+            header_lines = ""
+            for k in self.headers.keys():
+                if k.lower() in ("proxy-authorization", "proxy-connection"):
+                    continue
+                header_lines += f"{k}: {self.headers[k]}\r\n"
+            if self.upstream_auth_header:
+                header_lines += f"Proxy-Authorization: {self.upstream_auth_header}\r\n"
+            raw = f"{self.command} {self.path} HTTP/1.1\r\n{header_lines}\r\n".encode("latin-1")
+            upstream.sendall(raw)
+
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length:
+                upstream.sendall(self.rfile.read(length))
+
+            self._pipe(upstream, self.connection)
+        except Exception:
+            try:
+                upstream.close()
+            except Exception:
+                pass
+
+    do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _forward_plain
+
+
+def _start_proxy_relay(account_id: str, proxy_info: dict) -> int:
+    """Khởi động local proxy relay cho 1 tài khoản, trả về port đã lắng nghe."""
+    _stop_proxy_relay(account_id)
 
     username = proxy_info.get("username", "") or ""
     password = proxy_info.get("password", "") or ""
+    auth_header = None
+    if username or password:
+        token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        auth_header = f"Basic {token}"
 
-    manifest = {
-        "version": "1.0.0",
-        "manifest_version": 2,
-        "name": "Zalo Tool Proxy Auth",
-        "permissions": [
-            "<all_urls>",
-            "webRequest",
-            "webRequestBlocking"
-        ],
-        "background": {
-            "scripts": ["background.js"]
-        },
-        "minimum_chrome_version": "22.0.0"
-    }
+    handler_cls = type("_ProxyRelayHandlerBound", (_ProxyRelayHandler,), {
+        "upstream_host": proxy_info["host"],
+        "upstream_port": int(proxy_info["port"]),
+        "upstream_auth_header": auth_header,
+    })
 
-    # Dùng json.dumps để tránh lỗi nếu user/pass có ký tự đặc biệt
-    username_js = json.dumps(username)
-    password_js = json.dumps(password)
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler_cls)
+    server.daemon_threads = True
+    port = server.server_address[1]
 
-    background_js = f"""
-console.log("Zalo Tool Proxy Auth extension loaded");
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    _proxy_relay_servers[account_id] = server
 
-chrome.webRequest.onAuthRequired.addListener(
-    function(details) {{
-        console.log("Proxy auth required:", details.url);
+    print(f"[account_manager] Proxy relay 127.0.0.1:{port} -> {proxy_info['host']}:{proxy_info['port']}")
+    return port
 
-        return {{
-            authCredentials: {{
-                username: {username_js},
-                password: {password_js}
-            }}
-        }};
-    }},
-    {{ urls: ["<all_urls>"] }},
-    ["blocking"]
-);
-"""
 
-    manifest_path = os.path.join(ext_dir, "manifest.json")
-    background_path = os.path.join(ext_dir, "background.js")
-
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-    with open(background_path, "w", encoding="utf-8") as f:
-        f.write(background_js)
-
-    print(f"[account_manager] Created proxy auth extension: {ext_dir}")
-    print(f"[account_manager] Proxy auth username exists: {bool(username)}")
-
-    return ext_dir
+def _stop_proxy_relay(account_id: str):
+    server = _proxy_relay_servers.pop(account_id, None)
+    if server:
+        try:
+            server.shutdown()
+            server.server_close()
+        except Exception:
+            pass
 
 
 def _launch_chrome(profile_path: str, account_id: str, debug_port: int, proxy: str = ""):
@@ -510,7 +635,20 @@ def _launch_chrome(profile_path: str, account_id: str, debug_port: int, proxy: s
                 f"has_auth={bool(proxy_info.get('username'))}"
             )
 
-            proxy_server = f"http://{proxy_info['host']}:{int(proxy_info['port'])}"
+            if proxy_info.get("username") or proxy_info.get("password"):
+                # Proxy cần đăng nhập: không trỏ Chrome thẳng vào proxy thật
+                # nữa (Chrome sẽ luôn tự hỏi lại username/password vì
+                # --proxy-server không mang được thông tin đăng nhập, và cách
+                # dùng extension để tự trả auth không ổn định giữa các bản
+                # Chrome). Thay vào đó chạy 1 proxy relay nội bộ không cần
+                # auth, Chrome trỏ vào đó, relay tự thêm Proxy-Authorization
+                # khi nối tiếp sang proxy thật.
+                local_port = _start_proxy_relay(account_id, proxy_info)
+                proxy_server = f"http://127.0.0.1:{local_port}"
+                print(f"[account_manager] Dung proxy relay noi bo cho proxy co auth: {proxy_server}")
+            else:
+                _stop_proxy_relay(account_id)
+                proxy_server = f"http://{proxy_info['host']}:{int(proxy_info['port'])}"
 
             args.extend([
                 f"--proxy-server={proxy_server}",
@@ -518,18 +656,7 @@ def _launch_chrome(profile_path: str, account_id: str, debug_port: int, proxy: s
                 "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
             ])
 
-            # Nếu proxy có username/password thì load extension auth
-            if proxy_info.get("username") or proxy_info.get("password"):
-                proxy_ext_dir = _create_proxy_auth_extension(profile_path, proxy_info)
-
-                args.extend([
-                    f"--load-extension={proxy_ext_dir}",
-                    f"--disable-extensions-except={proxy_ext_dir}",
-                ])
-
-                print(f"[account_manager] Chrome will load proxy auth extension: {proxy_ext_dir}")
-
-            print(f"[account_manager] Proxy server: {proxy_server}")
+            print(f"[account_manager] Proxy server (Chrome se dung): {proxy_server}")
 
         except Exception as e:
             print(f"[account_manager] ERROR setting up proxy: {e}")
@@ -576,6 +703,34 @@ def _start_network_monitor(account_id: str, debug_port: int):
     threading.Thread(target=_delayed, daemon=True).start()
 
 
+def _start_fingerprint_guard(account_id: str, debug_port: int, proxy: str = ""):
+    """Ẩn rò rỉ IP thật qua WebRTC + đặt timezone khớp proxy, sống suốt phiên Chrome."""
+    def _delayed():
+        time.sleep(0.2)
+        try:
+            try:
+                from .account_network_monitor import start_fingerprint_guard
+            except ImportError:
+                from account_network_monitor import start_fingerprint_guard
+            start_fingerprint_guard(account_id, debug_port, proxy)
+        except Exception as e:
+            print(f"[account_manager] Không start fingerprint guard: {e}")
+
+    threading.Thread(target=_delayed, daemon=True).start()
+
+
+def _stop_fingerprint_guard(account_id: str):
+    try:
+        try:
+            from .account_network_monitor import stop_fingerprint_guard
+        except ImportError:
+            from account_network_monitor import stop_fingerprint_guard
+        stop_fingerprint_guard(account_id)
+    except Exception:
+        pass
+
+
+@_locked
 def _open_chrome_for_account(account: dict, resync: bool = True, clear_groups: bool = False):
     account_id = account["accountId"]
     if resync:
@@ -597,11 +752,19 @@ def _open_chrome_for_account(account: dict, resync: bool = True, clear_groups: b
 
     _launch_chrome(profile_path, account_id, int(port), account.get("proxy", ""))
     _start_network_monitor(account_id, int(port))
+    _start_fingerprint_guard(account_id, int(port), account.get("proxy", ""))
     return get_account(account_id) or normalize_account(account)
 
 
-def create_account():
-    """Tạo tài khoản mới: accountId, profile, lưu JSON, mở Chrome + monitor."""
+@_locked
+def create_account(name: str = None, proxy: str = "", auto_launch: bool = True):
+    """
+    Tạo tài khoản mới: accountId, profile, lưu JSON.
+
+    auto_launch=False: chỉ tạo bản ghi tài khoản (áp dụng tên/proxy đã setup),
+    KHÔNG mở Chrome. Người dùng tự bấm "Khởi chạy" khi sẵn sàng — lúc đó Chrome
+    sẽ mở đúng với proxy đã lưu ngay từ đầu.
+    """
     _ensure_dirs()
     accounts = load_accounts()
 
@@ -609,7 +772,6 @@ def create_account():
     profile_path = _profile_path(account_id)
     os.makedirs(profile_path, exist_ok=True)
 
-    port = _allocate_debug_port(accounts)
     now = int(time.time() * 1000)
 
     # Generate IMEI: UUID-based format
@@ -618,9 +780,9 @@ def create_account():
     account = normalize_account(
         {
             "accountId": account_id,
-            "name": _next_account_name(accounts),
+            "name": (name or "").strip() or _next_account_name(accounts),
             "profilePath": os.path.abspath(profile_path),
-            "remoteDebugPort": port,
+            "proxy": (proxy or "").strip(),
             "imei": imei,
             "createdAt": now,
             "updatedAt": now,
@@ -630,8 +792,13 @@ def create_account():
     accounts.append(account)
     save_accounts(accounts)
 
-    _launch_chrome(profile_path, account_id, port, account.get("proxy", ""))
-    _start_network_monitor(account_id, port)
+    if auto_launch:
+        port = _allocate_debug_port(accounts)
+        update_account(account_id, remoteDebugPort=port)
+        _launch_chrome(profile_path, account_id, port, account.get("proxy", ""))
+        _start_network_monitor(account_id, port)
+        _start_fingerprint_guard(account_id, port, account.get("proxy", ""))
+
     return get_account(account_id) or account
 
 
@@ -651,6 +818,7 @@ def open_account(account_id: str, clear_groups: bool = False):
     return _open_chrome_for_account(account, clear_groups=clear_groups)
 
 
+@_locked
 def close_account(account_id: str):
     """Đóng Chrome profile của tài khoản và dừng monitor."""
     try:
@@ -677,6 +845,9 @@ def close_account(account_id: str):
         finally:
             del _running_chrome[account_id]
 
+    _stop_proxy_relay(account_id)
+    _stop_fingerprint_guard(account_id)
+
     # Clear remoteDebugPort
     accounts = load_accounts()
     account = _find_account(accounts, account_id)
@@ -688,6 +859,7 @@ def close_account(account_id: str):
         save_accounts(accounts)
 
 
+@_locked
 def delete_account(account_id: str):
     """Xóa tài khoản, dừng monitor, xóa profile."""
     try:
@@ -698,6 +870,9 @@ def delete_account(account_id: str):
         stop_account_network_monitor(account_id)
     except Exception:
         pass
+
+    _stop_proxy_relay(account_id)
+    _stop_fingerprint_guard(account_id)
 
     accounts = load_accounts()
     account = _find_account(accounts, account_id)

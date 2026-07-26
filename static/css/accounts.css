@@ -1,0 +1,160 @@
+/* Tài khoản — bảng điều khiển gọn: topbar + danh sách tài khoản dạng thẻ. */
+
+.accounts-shell { max-width: 1640px; }
+
+/* ─── Thanh điều khiển gọn (thay banner lớn) ───────────────────────────── */
+.acc-topbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(34, 80, 129, .16), rgba(14, 25, 39, .58));
+}
+.acc-topbar-title { display: flex; align-items: center; gap: 10px; min-width: 200px; flex: 1 1 260px; }
+.acc-topbar-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 10px rgba(105, 223, 164, .75);
+}
+.acc-topbar-title strong { display: block; font-size: 15px; }
+.acc-topbar-title small { display: block; margin-top: 2px; overflow: hidden; color: var(--text-muted); font-size: 10.5px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.acc-topbar-stats { display: flex; flex: 0 0 auto; gap: 8px; }
+.acc-stat {
+    flex: 0 0 96px;
+    padding: 7px 11px;
+    border: 1px solid rgba(174, 205, 232, .1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .025);
+    text-align: center;
+}
+.acc-stat span { display: block; overflow: hidden; color: var(--text-muted); font-size: 8px; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.acc-stat strong { display: block; margin-top: 3px; overflow: hidden; color: var(--text); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+
+.acc-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    padding-left: 14px;
+    border-left: 1px solid rgba(174, 205, 232, .14);
+}
+.acc-topbar-actions-bulk { display: flex; align-items: center; gap: 8px; }
+.acc-topbar-actions .btn.btn-primary { margin-left: 6px; }
+
+/* #accountsStatus reuses the shared .status-bar component (style.css / nexus-ux.css). */
+#accountsStatus { margin-bottom: 12px; margin-top: 0; }
+
+/* ─── Danh sách tài khoản: mỗi dòng là một tài khoản, trải hết chiều rộng ─ */
+.accounts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.account-card {
+    display: grid;
+    grid-template-columns: 48px minmax(160px, 280px) 112px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+    padding: 13px 18px;
+}
+.account-card-avatar {
+    position: relative;
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    overflow: hidden;
+    border-radius: 12px;
+    background: linear-gradient(145deg, rgba(58, 148, 224, .35), rgba(49, 87, 142, .4));
+}
+.account-card-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.account-avatar-default {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-hover);
+    font-size: 17px;
+    font-weight: 800;
+}
+.account-card-name-cell { min-width: 0; }
+.account-card-name { overflow: hidden; font-size: 13.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.account-card-id { margin-top: 4px; overflow: hidden; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.account-card-status-cell { min-width: 0; }
+.account-card-status {
+    display: inline-block;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.account-card-status.wait { color: #ffd070; background: rgba(255, 208, 112, .1); }
+.account-card-status.running,
+.account-card-status.ok,
+.account-card-status.pending { color: var(--green); background: rgba(105, 223, 164, .1); }
+.account-card-proxy-cell { overflow: hidden; color: var(--text-muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.account-card-actions { display: flex; flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
+.account-card-actions .btn { min-height: 30px; padding: 5px 9px !important; font-size: 10px !important; white-space: nowrap; }
+
+.accounts-empty {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 40px 20px;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    color: var(--text-muted);
+    text-align: center;
+}
+.accounts-empty p { margin: 0; font-size: 12.5px; }
+.accounts-empty .hint { color: var(--text-muted); font-size: 11px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .account-card { transition: none !important; }
+}
+
+@media (max-width: 900px) {
+    .acc-topbar-stats { flex-basis: 100%; }
+    .acc-topbar-actions {
+        flex-basis: 100%;
+        margin-left: 0;
+        padding-left: 0;
+        border-left: 0;
+        justify-content: flex-end;
+    }
+    .account-card {
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "avatar name actions"
+            "avatar status status"
+            "avatar proxy proxy";
+        row-gap: 6px;
+    }
+    .account-card-avatar { grid-area: avatar; }
+    .account-card-name-cell { grid-area: name; }
+    .account-card-status-cell { grid-area: status; }
+    .account-card-proxy-cell { grid-area: proxy; }
+    .account-card-actions { grid-area: actions; }
+}
+@media (max-width: 640px) {
+    .acc-topbar { align-items: flex-start; }
+    .acc-topbar-actions { flex-wrap: wrap; justify-content: flex-start; }
+    .account-card {
+        grid-template-columns: 44px minmax(0, 1fr);
+        grid-template-areas:
+            "avatar name"
+            "avatar status"
+            "avatar proxy"
+            "avatar actions";
+    }
+    .account-card-actions { justify-content: flex-start; flex-wrap: wrap; }
+}

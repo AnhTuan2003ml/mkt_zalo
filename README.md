@@ -1,108 +1,41 @@
-# Zalo Member Tool - Feature-based Refactor
+# Nexus – Công cụ quản lý và tự động hóa Zalo
 
-Dự án đã được refactor lại theo hướng chia module theo tính năng, không còn gom toàn bộ source vào `utils/`.
+Nexus là ứng dụng chạy trên máy tính, hỗ trợ quản lý tài khoản Zalo, nhóm, thành viên và các chiến dịch chăm sóc khách hàng theo lịch. Dữ liệu cấu hình và tiến độ được lưu tại máy đang chạy ứng dụng.
 
-## Cấu trúc chính
+## Tính năng chính
 
-```text
-.
-├── app.py
-├── core/
-│   └── zalo/
-│       ├── enc.py
-│       ├── dec.py
-│       ├── debugs.py
-│       ├── zalo_config.py
-│       └── zalo_headers.py
-├── features/
-│   ├── accounts/
-│   ├── groups/
-│   ├── members/
-│   ├── messaging/
-│   ├── profiles/
-│   ├── schedules/
-│   └── tasks/
-├── templates/
-├── static/
-├── authencation/
-├── script/
-├── ARCHITECTURE.md
-├── REFACTOR_NOTES.md
-└── ZaloMemberTool.spec
-```
+- Quản lý nhiều tài khoản Zalo và thông tin đăng nhập cần thiết.
+- Xem, tạo và quản lý các nhóm cá nhân.
+- Lấy danh sách thành viên từ link nhóm hoặc Group ID.
+- Gửi tin nhắn theo nhóm hoặc theo số điện thoại.
+- Tạo lịch chiến dịch và theo dõi tiến độ chạy nền.
+- Tự động sao chép thành viên từ nhóm nguồn sang nhóm đích theo từng đợt.
+- Lưu tiến độ tác vụ để có thể tiếp tục sau khi mở lại ứng dụng.
+- Hiển thị chính sách người dùng và yêu cầu đồng ý trước khi sử dụng.
 
-## Nhóm module
+## Cách sử dụng
 
-| Thư mục | Nhiệm vụ |
-|---|---|
-| `core/zalo/` | Mã dùng chung: encrypt/decrypt, header, config, debug |
-| `features/accounts/` | Quản lý tài khoản, capture login info, profile tài khoản |
-| `features/groups/` | API nhóm: lấy info nhóm, tạo nhóm, mời nhóm, gửi tin nhắn nhóm |
-| `features/members/` | Lấy thành viên nhóm |
-| `features/profiles/` | Mini profile, full profile fallback, avatar, user info, phone search |
-| `features/messaging/` | Gửi tin nhắn cá nhân, kết bạn |
-| `features/schedules/` | Quản lý lịch gửi và worker chạy lịch |
-| `features/tasks/` | Task chạy nền, progress, SSE |
+1. Khởi động ứng dụng Nexus.
+2. Đọc và tích đồng ý chính sách người dùng, sau đó bấm **Đồng ý và tiếp tục**.
+3. Kích hoạt phần mềm nếu hệ thống yêu cầu.
+4. Vào **Quản lý tài khoản** để thêm hoặc mở tài khoản Zalo.
+5. Chọn tính năng cần dùng trên thanh menu bên trái.
+6. Với tác vụ tự động, kiểm tra tài khoản, dữ liệu đầu vào, thời gian và số lượng mỗi đợt trước khi bấm chạy.
 
-## Luồng lấy thành viên nhóm
+### Tự động sao chép nhóm
 
-Luồng bắt buộc:
+1. Mở **Tự động sao chép nhóm**.
+2. Chọn tài khoản thực hiện và dán link hoặc ID nhóm nguồn.
+3. Chọn tạo nhóm mới hoặc chọn một nhóm đích có sẵn.
+4. Đặt thời gian bắt đầu, số người mỗi đợt và khoảng cách giữa các đợt.
+5. Xác nhận quyền mời thành viên rồi bấm **Chạy và lập lịch**.
+6. Theo dõi, hủy, tiếp tục hoặc xem chi tiết trong danh sách tác vụ phía dưới.
 
-```text
-Người dùng nhập URL nhóm hoặc groupId
-        ↓
-features.members.group_member_service.fetch_group_members_by_input()
-        ↓
-Nếu input là URL:
-    features.groups.get_group.resolve_group_id_from_url()
-    -> resolve URL thành groupId
-        ↓
-features.members.get_members.get_members_by_group_id()
-    -> gọi /api/group/getmg với payload {grids, avatar_size, mpage, mcount, imei}
-    -> tự động paginate nếu API trả hasMoreMember
-        ↓
-features.profiles.profile_service.fetch_profiles_with_single_fallback()
-        ↓
-features.profiles.profile_service.build_member_rows_from_uids()
-        ↓
-Trả dữ liệu về UI hoặc lịch gửi
-```
+> Người dùng phải tuân thủ pháp luật, chính sách của Zalo và các nền tảng liên quan; chỉ sử dụng dữ liệu, tài khoản và nhóm mà mình có quyền truy cập.
 
-Điểm quan trọng:
-- URL nhóm chỉ dùng để lấy `groupId`. Sau đó luôn gọi lấy thành viên bằng `groupId`.
-- Endpoint lấy member: `POST https://tt-group-wpa.chat.zalo.me/api/group/getmg`
-- Payload chuẩn: `{"grids": [group_id], "avatar_size": 120, "member_avatar_size": 120, "mpage": page, "mcount": 500, "imei": imei}`
+## Tài liệu chi tiết
 
-## Import mới
-
-Không dùng kiểu cũ:
-
-```python
-from utils.xxx import yyy
-```
-
-Dùng kiểu mới:
-
-```python
-from features.members.group_member_service import fetch_group_members_by_input
-from features.profiles.profile_service import fetch_profiles_with_single_fallback
-from core.zalo.zalo_config import get_zpw_ver
-```
-
-## Kiểm tra cú pháp
-
-```bash
-python -m compileall -q app.py core features authencation
-```
-
-## Build
-
-File `ZaloMemberTool.spec` đã được cập nhật hidden imports theo cấu trúc mới.
-
-### Ghi chú getmg/memberIds
-
-Bản này đã sửa parser endpoint `/api/group/getmg` theo response thực tế: danh sách UID thành viên được lấy từ `decoded.data[groupId].memberIds`. Field `currentMems` chỉ dùng làm dữ liệu phụ vì thường chỉ chứa một vài member mẫu.
-
-### Xử lý nhóm không có quyền truy cập
-
-Nếu `/api/group/getmg` trả `error_code = 164` với nội dung `Bạn không phải thành viên của nhóm này`, tool sẽ dừng ngay tại page hiện tại và trả lỗi về giao diện. Tool không tiếp tục gọi page 2..200 và không gọi API lấy profile.
+- [Kiến trúc tổng quan](docs/ARCHITECTURE.md)
+- [Danh mục tính năng](docs/FEATURES.md)
+- [Tự động sao chép nhóm](docs/GROUP_COPY.md)
+- [Chính sách người dùng](docs/USER_POLICY.md)

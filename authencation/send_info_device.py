@@ -115,6 +115,7 @@ SENDMAIL_USER = (os.getenv("SENDMAIL_USER", "") or "").strip()
 SENDMAIL_PASS = ''.join((os.getenv("SENDMAIL_PASS", "") or "").split())
 RECEIVER_EMAIL_1 = (os.getenv("RECEIVER_EMAIL_1", "") or "").strip()
 RECEIVER_EMAIL_2 = (os.getenv("RECEIVER_EMAIL_2", "") or "").strip()
+RECEIVER_EMAIL_3 = (os.getenv("RECEIVER_EMAIL_3", "") or "").strip()
 ACTIVATION_DAYS_VALID = int(os.getenv("ACTIVATION_DAYS_VALID", "30"))
 SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key_change_this")
 
@@ -582,14 +583,14 @@ def validate_activation_code():
 def send_activation_code_by_email(device_info, activation_code):
     """
     Send activation code to 2 recipients
-    Recipients: RECEIVER_EMAIL_1 and RECEIVER_EMAIL_2
+    Recipients: RECEIVER_EMAIL_1, RECEIVER_EMAIL_2, RECEIVER_EMAIL_3
     """
     if not device_info or not activation_code:
         return False
     
-    recipients = [r for r in [RECEIVER_EMAIL_1, RECEIVER_EMAIL_2] if r]
+    recipients = [r for r in [RECEIVER_EMAIL_1, RECEIVER_EMAIL_2, RECEIVER_EMAIL_3] if r]
     if not SENDMAIL_USER or not SENDMAIL_PASS or not recipients:
-        print("[AUTH] Missing email config. Set SENDMAIL_USER, SENDMAIL_PASS, RECEIVER_EMAIL_1/2 in .env")
+        print("[AUTH] Missing email config. Set SENDMAIL_USER, SENDMAIL_PASS, RECEIVER_EMAIL_1/2/3 in .env")
         return False
     
     try:
@@ -844,7 +845,7 @@ def register_device_with_activation(verbose=False):
             f.write(datetime.now().isoformat())
         if verbose:
             print("\n✅ New activation code sent!")
-            print(f"📧 Code sent to: {RECEIVER_EMAIL_1}, {RECEIVER_EMAIL_2}")
+            print(f"📧 Code sent to: {RECEIVER_EMAIL_1}, {RECEIVER_EMAIL_2}, {RECEIVER_EMAIL_3}")
             print("   User must enter the latest 12-character key when prompted (old key is now invalid).")
         return True
     except Exception as e:
@@ -1194,9 +1195,9 @@ def send_activation_code_by_email(device_info, activation_code):
     if not device_info or not activation_code:
         return False
 
-    recipients = [r for r in [RECEIVER_EMAIL_1, RECEIVER_EMAIL_2] if r]
+    recipients = [r for r in [RECEIVER_EMAIL_1, RECEIVER_EMAIL_2, RECEIVER_EMAIL_3] if r]
     if not SENDMAIL_USER or not SENDMAIL_PASS or not recipients:
-        print("[AUTH] Missing email config. Set SENDMAIL_USER, SENDMAIL_PASS, RECEIVER_EMAIL_1/2 in .env")
+        print("[AUTH] Missing email config. Set SENDMAIL_USER, SENDMAIL_PASS, RECEIVER_EMAIL_1/2/3 in .env")
         return False
 
     plan_label = activation_code.get("plan_label") or "Không rõ"
@@ -1748,9 +1749,9 @@ def send_activation_code_by_email(device_info, activation_code):
     if not device_info or not activation_code:
         return False
 
-    recipients = [r for r in [RECEIVER_EMAIL_1, RECEIVER_EMAIL_2] if r]
+    recipients = [r for r in [RECEIVER_EMAIL_1, RECEIVER_EMAIL_2, RECEIVER_EMAIL_3] if r]
     if not SENDMAIL_USER or not SENDMAIL_PASS or not recipients:
-        print("[AUTH] Missing email config. Set SENDMAIL_USER, SENDMAIL_PASS, RECEIVER_EMAIL_1/2 in .env")
+        print("[AUTH] Missing email config. Set SENDMAIL_USER, SENDMAIL_PASS, RECEIVER_EMAIL_1/2/3 in .env")
         return False
 
     plan_label = activation_code.get("plan_label") or "Không rõ"

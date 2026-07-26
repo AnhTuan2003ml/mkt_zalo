@@ -47,6 +47,8 @@ a = Analysis(
         'features.groups.add_group',
         'features.groups.get_group',
         'features.groups.group_manager',
+        'features.groups.group_copy_manager',
+        'features.groups.group_copy_worker',
         'features.groups.invite_group',
         'features.groups.send_sms_group',
         'features.members.get_members',
