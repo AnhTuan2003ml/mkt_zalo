@@ -1,129 +1,235 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or "Lịch gửi" }} - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=schedmon-20260726-v1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/schedule-monitor.css') }}?v=schedmon-20260726-v1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-masterise.css') }}?v=nexus-masterise-v6-20260728">
 </head>
-<body>
+<body class="schedmon-page">
 {% include '_nav.html' %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/schedule-monitor.css') }}?v=nexus-table-first-20260728">
 
+<link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <main class="page schedmon-shell">
     <header class="schedmon-topbar">
         <div class="schedmon-topbar-title">
-            <span class="schedmon-live-dot" id="schedmonLiveDot"></span>
+            <span class="schedmon-page-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3M8 18h6"/></svg>
+            </span>
             <div>
                 <strong>Lịch gửi</strong>
-                <small>Theo dõi lịch đang chạy và lịch sắp chạy tiếp theo</small>
+                <small>Bảng lịch là vùng làm việc chính. Các thống kê và lịch phụ được mở bằng cửa sổ nổi khi cần.</small>
             </div>
         </div>
-        <div class="schedmon-topbar-stats">
-            <div class="schedmon-stat running"><span>Đang chạy</span><strong id="statRunning">—</strong></div>
-            <div class="schedmon-stat"><span>Sắp chạy (24h)</span><strong id="statUpcoming">—</strong></div>
-            <div class="schedmon-stat done"><span>Hoàn thành hôm nay</span><strong id="statDoneToday">—</strong></div>
-            <div class="schedmon-stat error"><span>Cần xử lý</span><strong id="statError">—</strong></div>
+
+        <div class="schedmon-quick-tools" aria-label="Mở dữ liệu hỗ trợ">
+            <button type="button" class="schedmon-quick-btn is-running" data-schedmon-overlay-open="running" title="Xem lịch đang chạy">
+                <span class="schedmon-quick-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+                <span class="schedmon-quick-copy"><small>Đang chạy</small><strong id="statRunning">—</strong></span>
+            </button>
+            <button type="button" class="schedmon-quick-btn is-upcoming" data-schedmon-overlay-open="upcoming" title="Xem lịch sắp chạy">
+                <span class="schedmon-quick-icon"><svg viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></svg></span>
+                <span class="schedmon-quick-copy"><small>Sắp chạy 24h</small><strong id="statUpcoming">—</strong></span>
+            </button>
+            <button type="button" class="schedmon-quick-btn is-done" data-schedmon-overlay-open="performance" title="Xem hiệu suất gửi">
+                <span class="schedmon-quick-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span>
+                <span class="schedmon-quick-copy"><small>Hoàn thành hôm nay</small><strong id="statDoneToday">—</strong></span>
+            </button>
+            <button type="button" class="schedmon-quick-btn is-error" data-schedmon-overlay-open="alerts" title="Xem mục cần xử lý">
+                <span class="schedmon-quick-icon"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg></span>
+                <span class="schedmon-quick-copy"><small>Cần xử lý</small><strong id="statError">—</strong></span>
+            </button>
+            <button type="button" class="schedmon-quick-btn is-calendar" data-schedmon-overlay-open="calendar" title="Mở lịch tháng">
+                <span class="schedmon-quick-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span>
+                <span class="schedmon-quick-copy"><small>Lọc theo ngày</small><strong>Lịch tháng</strong></span>
+            </button>
         </div>
+
         <div class="schedmon-topbar-actions">
-            <button type="button" class="btn btn-ghost" id="schedmonRefreshBtn" onclick="SchedMon.reload()" title="Làm mới">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16"/></svg>Làm mới
+            <button type="button" class="btn btn-ghost" id="schedmonRefreshBtn" onclick="SchedMon.reload()" title="Làm mới dữ liệu">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16"/></svg>
+                <span>Làm mới</span>
             </button>
             <a class="btn btn-primary" href="{{ url_for('marketing_group_page') }}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M12 5v14M5 12h14"/></svg>Tạo chiến dịch
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Tạo chiến dịch</span>
             </a>
         </div>
     </header>
 
-    <section class="card">
-        <div class="schedmon-panel-head">
+    <section class="card schedmon-all-card" id="schedmonAllPanel">
+        <div class="schedmon-panel-head schedmon-all-head">
             <div>
-                <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Đang chạy<span class="schedmon-count-pill" id="runningCountPill">0</span></h3>
-                <p>Các lịch đang được xử lý ngay lúc này.</p>
+                <h2>
+                    <span class="schedmon-section-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3M8 18h6"/></svg></span>
+                    Tất cả lịch
+                    <span class="schedmon-count-pill" id="schedListCount">0 lịch</span>
+                </h2>
+                <p>Tìm, xem chi tiết, sửa, chạy ngay, hủy hoặc xóa lịch. Cuộn trực tiếp trong bảng bên dưới.</p>
             </div>
-        </div>
-        <div id="runningList" class="schedmon-running-grid">
-            <div class="schedmon-loading"><div class="spinner"></div><p>Đang tải...</p></div>
-        </div>
-    </section>
-
-    <section class="card">
-        <div class="schedmon-panel-head">
-            <div>
-                <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 6l6 6-6 6"/></svg>Sắp chạy tiếp theo</h3>
-                <p>Xếp theo thời gian gần nhất trước.</p>
-            </div>
-            <a href="#schedmonAllPanel">Xem tất cả lịch</a>
-        </div>
-        <div id="upcomingList" class="schedmon-upcoming-list">
-            <div class="schedmon-loading"><div class="spinner"></div><p>Đang tải...</p></div>
-        </div>
-    </section>
-
-    <section class="card" id="schedmonAllPanel">
-        <div class="schedmon-panel-head">
-            <div>
-                <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3M8 18h6"/></svg>Tất cả lịch</h3>
-                <p>Theo dõi, sửa, chạy ngay, hủy hoặc xóa lịch đã tạo.</p>
-            </div>
+            <button type="button" class="schedmon-date-filter-chip" id="schedmonDateFilterClear" hidden title="Bỏ lọc theo ngày">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+                <span>Đang xem <strong id="schedmonDateFilterLabel">—</strong></span>
+                <i aria-hidden="true">×</i>
+            </button>
         </div>
 
         <div class="schedule-filter-bar">
-            <input type="text" id="schedListSearch" placeholder="Tìm theo tiêu đề, nội dung..." oninput="SchedMon.filterAll()">
-            <select id="schedListTypeFilter" onchange="SchedMon.filterAll()">
-                <option value="">Tất cả loại lịch</option>
-                <option value="schedule">Lịch gửi tin nhắn</option>
-                <option value="friend">Lịch gửi kết bạn</option>
-                <option value="group_invite">Lịch mời vào nhóm</option>
-            </select>
-            <select id="schedListStatusFilter" onchange="SchedMon.filterAll()">
-                <option value="">Tất cả trạng thái</option>
-                <option value="pending">Chờ</option>
-                <option value="planned">Đã lên kế hoạch</option>
-                <option value="running">Đang chạy</option>
-                <option value="done">Hoàn thành</option>
-                <option value="completed">Hoàn thành kế hoạch</option>
-                <option value="partial">Một phần</option>
-                <option value="failed">Thất bại</option>
-                <option value="cancelled">Đã hủy</option>
-            </select>
-            <span id="schedListCount">0 lịch</span>
+            <label class="schedmon-search-field">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                <input type="text" id="schedListSearch" placeholder="Tìm tên chiến dịch, nội dung hoặc tài khoản..." oninput="SchedMon.filterAll()">
+            </label>
+            <label class="schedmon-select-field">
+                <span>Loại lịch</span>
+                <select id="schedListTypeFilter" onchange="SchedMon.filterAll()">
+                    <option value="">Tất cả</option>
+                    <option value="schedule">Lịch gửi tin nhắn</option>
+                    <option value="friend">Lịch gửi kết bạn</option>
+                    <option value="group_invite">Lịch mời vào nhóm</option>
+                </select>
+            </label>
+            <label class="schedmon-select-field">
+                <span>Trạng thái</span>
+                <select id="schedListStatusFilter" onchange="SchedMon.filterAll()">
+                    <option value="">Tất cả</option>
+                    <option value="pending">Chờ</option>
+                    <option value="planned">Đã lên kế hoạch</option>
+                    <option value="running">Đang chạy</option>
+                    <option value="done">Hoàn thành</option>
+                    <option value="completed">Hoàn thành kế hoạch</option>
+                    <option value="partial">Một phần</option>
+                    <option value="failed">Thất bại</option>
+                    <option value="cancelled">Đã hủy</option>
+                </select>
+            </label>
         </div>
 
-        <div id="allList" class="schedules-list-grid">
-            <div class="schedmon-loading"><div class="spinner"></div><p>Đang tải...</p></div>
+        <div class="schedmon-table-shell" tabindex="0" aria-label="Bảng tất cả lịch, có thể cuộn dọc và ngang">
+            <div class="schedmon-table-head" aria-hidden="true">
+                <span>Chiến dịch</span>
+                <span>Kênh / Nguồn</span>
+                <span>Thời gian chạy</span>
+                <span>Trạng thái</span>
+                <span>Kết quả</span>
+                <span>Hành động</span>
+            </div>
+            <div id="allList" class="schedules-list-grid">
+                <div class="schedmon-loading"><div class="spinner"></div><p>Đang tải...</p></div>
+            </div>
         </div>
     </section>
 </main>
 
-<!-- Notification Overlay -->
-<div class="notification-overlay" id="notificationOverlay">
-    <div class="notification-card">
-        <div class="notification-icon" id="notifIcon"></div>
-        <div class="notification-content">
-            <div class="notification-title" id="notifTitle">Thông báo</div>
-            <div class="notification-message" id="notifMessage"></div>
+<!-- Overlay: lịch đang chạy -->
+<div class="schedmon-data-overlay" id="schedmonOverlayRunning" data-schedmon-overlay="running" aria-hidden="true">
+    <div class="schedmon-overlay-card schedmon-overlay-wide" role="dialog" aria-modal="true" aria-labelledby="schedmonOverlayRunningTitle">
+        <div class="schedmon-overlay-head">
+            <div>
+                <h2 id="schedmonOverlayRunningTitle"><span class="schedmon-section-icon is-live"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>Lịch đang chạy hôm nay <span class="schedmon-count-pill" id="runningCountPill">0</span></h2>
+                <p>Các chiến dịch đang được hệ thống xử lý ngay lúc này.</p>
+            </div>
+            <div class="schedmon-overlay-head-actions">
+                <span class="schedmon-live-state"><i id="schedmonLiveDot"></i> Theo dõi trực tiếp</span>
+                <button type="button" class="schedmon-overlay-close" data-schedmon-overlay-close aria-label="Đóng">×</button>
+            </div>
         </div>
-        <button class="notification-close" onclick="SchedMon.hideNotif()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-        </button>
+        <div class="schedmon-overlay-body">
+            <div id="runningList" class="schedmon-running-list"><div class="schedmon-loading"><div class="spinner"></div><p>Đang tải...</p></div></div>
+        </div>
     </div>
 </div>
 
-<!-- Detail Modal -->
+<!-- Overlay: lịch sắp chạy -->
+<div class="schedmon-data-overlay" id="schedmonOverlayUpcoming" data-schedmon-overlay="upcoming" aria-hidden="true">
+    <div class="schedmon-overlay-card schedmon-overlay-wide" role="dialog" aria-modal="true" aria-labelledby="schedmonOverlayUpcomingTitle">
+        <div class="schedmon-overlay-head">
+            <div>
+                <h2 id="schedmonOverlayUpcomingTitle"><span class="schedmon-section-icon is-upcoming"><svg viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></svg></span>Sắp chạy tiếp theo <span class="schedmon-count-pill" id="upcomingCountPill">0</span></h2>
+                <p>Xếp theo thời gian gần nhất để ưu tiên kiểm tra trước khi chạy.</p>
+            </div>
+            <button type="button" class="schedmon-overlay-close" data-schedmon-overlay-close aria-label="Đóng">×</button>
+        </div>
+        <div class="schedmon-overlay-body">
+            <div id="upcomingList" class="schedmon-upcoming-list"><div class="schedmon-loading"><div class="spinner"></div><p>Đang tải...</p></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Overlay: lịch tháng -->
+<div class="schedmon-data-overlay" id="schedmonOverlayCalendar" data-schedmon-overlay="calendar" aria-hidden="true">
+    <div class="schedmon-overlay-card schedmon-overlay-calendar" role="dialog" aria-modal="true" aria-labelledby="schedmonOverlayCalendarTitle">
+        <div class="schedmon-overlay-head">
+            <div><h2 id="schedmonOverlayCalendarTitle">Lịch tháng</h2><p id="schedmonCalendarMonth">—</p></div>
+            <div class="schedmon-overlay-head-actions">
+                <div class="schedmon-calendar-controls" aria-label="Điều hướng tháng">
+                    <button type="button" class="schedmon-calendar-nav-btn" id="schedmonPrevMonthBtn" aria-label="Tháng trước" title="Tháng trước"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+                    <button type="button" class="schedmon-today-btn" id="schedmonTodayBtn">Hôm nay</button>
+                    <button type="button" class="schedmon-calendar-nav-btn" id="schedmonNextMonthBtn" aria-label="Tháng sau" title="Tháng sau"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+                </div>
+                <button type="button" class="schedmon-overlay-close" data-schedmon-overlay-close aria-label="Đóng">×</button>
+            </div>
+        </div>
+        <div class="schedmon-overlay-body">
+            <div class="schedmon-calendar-weekdays" aria-hidden="true"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span></div>
+            <div id="schedmonCalendarGrid" class="schedmon-calendar-grid" aria-label="Chọn ngày để lọc lịch hoạt động"></div>
+            <div class="schedmon-calendar-selection" id="schedmonCalendarSelection">
+                <span>Ngày đang xem</span><strong id="schedmonCalendarSelectionLabel">Tất cả thời gian</strong><button type="button" id="schedmonCalendarClearBtn" hidden>Bỏ lọc</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Overlay: cảnh báo -->
+<div class="schedmon-data-overlay" id="schedmonOverlayAlerts" data-schedmon-overlay="alerts" aria-hidden="true">
+    <div class="schedmon-overlay-card" role="dialog" aria-modal="true" aria-labelledby="schedmonOverlayAlertsTitle">
+        <div class="schedmon-overlay-head">
+            <div><h2 id="schedmonOverlayAlertsTitle">Nhắc việc / Cảnh báo <span class="schedmon-count-pill" id="schedmonAlertCount">0</span></h2><p>Ưu tiên các mục cần kiểm tra sớm.</p></div>
+            <button type="button" class="schedmon-overlay-close" data-schedmon-overlay-close aria-label="Đóng">×</button>
+        </div>
+        <div class="schedmon-overlay-body"><div id="schedmonAlertList" class="schedmon-alert-list"></div></div>
+    </div>
+</div>
+
+<!-- Overlay: hiệu suất -->
+<div class="schedmon-data-overlay" id="schedmonOverlayPerformance" data-schedmon-overlay="performance" aria-hidden="true">
+    <div class="schedmon-overlay-card" role="dialog" aria-modal="true" aria-labelledby="schedmonOverlayPerformanceTitle">
+        <div class="schedmon-overlay-head">
+            <div><h2 id="schedmonOverlayPerformanceTitle">Hiệu suất gửi</h2><p>Thống kê tổng hợp từ các lịch hiện có.</p></div>
+            <button type="button" class="schedmon-overlay-close" data-schedmon-overlay-close aria-label="Đóng">×</button>
+        </div>
+        <div class="schedmon-overlay-body">
+            <div class="schedmon-performance-hero">
+                <div><span>Tổng đã xử lý</span><strong id="schedmonProcessedTotal">0</strong><small id="schedmonProcessedCaption">0 người nhận</small></div>
+                <div class="schedmon-rate-ring" id="schedmonRateRing" style="--rate:0"><span id="schedmonSuccessRate">0%</span></div>
+            </div>
+            <div class="schedmon-performance-grid">
+                <div><span>Thành công</span><strong class="is-success" id="schedmonSuccessTotal">0</strong></div>
+                <div><span>Bị lỗi</span><strong class="is-danger" id="schedmonFailedTotal">0</strong></div>
+                <div><span>Đang chờ</span><strong id="schedmonPendingTotal">0</strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="notification-overlay" id="notificationOverlay">
+    <div class="notification-card">
+        <div class="notification-icon" id="notifIcon"></div>
+        <div class="notification-content"><div class="notification-title" id="notifTitle">Thông báo</div><div class="notification-message" id="notifMessage"></div></div>
+        <button class="notification-close" onclick="SchedMon.hideNotif()" aria-label="Đóng thông báo"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+</div>
+
 <div id="detailModal" class="detail-modal">
     <div class="detail-modal-content">
-        <div class="detail-modal-header">
-            <span id="detailTitle">Chi tiết thông tin</span>
-            <button class="detail-modal-close" onclick="SchedMon.closeDetailModal()">&times;</button>
-        </div>
+        <div class="detail-modal-header"><span id="detailTitle">Chi tiết thông tin</span><button class="detail-modal-close" onclick="SchedMon.closeDetailModal()" aria-label="Đóng">&times;</button></div>
         <div id="detailContent"></div>
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/schedule-monitor.js') }}?v=schedmon-20260726-v1"></script>
+<script src="{{ url_for('static', filename='js/schedule-monitor.js') }}?v=nexus-table-first-20260728"></script>
 </body>
 </html>

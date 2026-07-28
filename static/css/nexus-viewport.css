@@ -1,0 +1,620 @@
+/* Nexus viewport shell — cố định giao diện trong màn hình, chỉ vùng dữ liệu được cuộn. */
+
+:root {
+    --nexus-mobile-bar-height: 62px;
+    --nexus-viewport-gap: 14px;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    overscroll-behavior: none;
+}
+
+body {
+    position: relative;
+}
+
+.app-sidebar.header,
+.header.app-sidebar {
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100dvh !important;
+}
+
+.header-nav,
+.nexus-data-scroll,
+.accounts-list,
+.dash-activity-list,
+.dash-attention-list,
+.groups-list,
+.groups-members-table-wrap,
+.table-scroll,
+.table-wrap,
+.table-container,
+.sched-table-wrap,
+.personal-groups-table-wrap,
+.recipient-table,
+.group-copy-jobs,
+.conversation-list,
+.message-thread,
+.schedmon-running-list,
+.schedmon-upcoming-list,
+.schedmon-table-shell,
+.schedmon-alert-list,
+.log-drawer-body,
+.overlay-body,
+.groups-invite-list {
+    scrollbar-gutter: stable;
+    overscroll-behavior: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+}
+
+/* Khung nội dung luôn vừa đúng phần màn hình còn lại bên cạnh sidebar. */
+.page {
+    box-sizing: border-box !important;
+    width: calc(100vw - var(--ux-sidebar-width)) !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100dvh !important;
+    margin-left: var(--ux-sidebar-width) !important;
+    overflow: hidden !important;
+}
+
+.page,
+.page > *,
+.main-layout,
+.main-left,
+.main-right,
+.groups-manager-layout,
+.message-workspace,
+.schedmon-dashboard-grid,
+.schedmon-main-column,
+.schedmon-side-column {
+    min-width: 0;
+    min-height: 0;
+}
+
+/* ───────────────────────────── Tài khoản ───────────────────────────── */
+.accounts-shell {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+}
+.accounts-shell .acc-topbar,
+.accounts-shell #accountsStatus {
+    flex: 0 0 auto;
+    margin: 0 !important;
+}
+.accounts-shell > .card {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+.accounts-shell .accounts-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.accounts-shell .accounts-empty {
+    max-height: 100%;
+    overflow: auto;
+}
+
+/* ───────────────────────────── Tổng quan ───────────────────────────── */
+.dash-shell {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--nexus-viewport-gap) !important;
+}
+.dash-shell .dash-topbar,
+.dash-shell .dash-status {
+    flex: 0 0 auto;
+    margin: 0 !important;
+}
+.dash-shell .dash-grid {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    align-items: stretch !important;
+    overflow: hidden;
+}
+.dash-shell .dash-activity-panel,
+.dash-shell .dash-attention-panel {
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.dash-shell .dash-activity-list,
+.dash-shell .dash-attention-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow-y: auto !important;
+}
+.dash-shell .dash-side {
+    min-height: 0;
+    display: grid !important;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+}
+
+/* ───────────────────────────── Nhóm Zalo ───────────────────────────── */
+.groups-page {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--nexus-viewport-gap) !important;
+}
+.groups-page .groups-page-header {
+    flex: 0 0 auto;
+    margin: 0 !important;
+}
+.groups-page .groups-manager-layout {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    align-items: stretch !important;
+    overflow: hidden;
+}
+.groups-page .groups-sidebar-card,
+.groups-page .groups-detail-card {
+    height: 100%;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+.groups-page .groups-sidebar-card {
+    display: flex !important;
+    flex-direction: column !important;
+}
+.groups-page .groups-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+}
+.groups-page .groups-detail-card {
+    display: flex !important;
+    flex-direction: column !important;
+}
+.groups-page .groups-empty-large {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+}
+.groups-page #groupsDetailContent {
+    min-height: 0;
+    height: 100%;
+}
+.groups-page #groupsDetailContent:not([style*="display:none"]):not([style*="display: none"]) {
+    display: flex !important;
+    flex-direction: column !important;
+}
+.groups-page .group-detail-top,
+.groups-page .groups-members-toolbar,
+.groups-page .groups-selected-bar,
+.groups-page .groups-loading {
+    flex: 0 0 auto;
+}
+.groups-page .groups-members-table-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow: auto !important;
+}
+
+/* ───────────────────────────── Thành viên ───────────────────────────── */
+body.members-page .page {
+    width: calc(100vw - var(--ux-sidebar-width)) !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin-left: var(--ux-sidebar-width) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--nexus-viewport-gap) !important;
+}
+body.members-page .members-fetch-card {
+    flex: 0 0 auto;
+    margin: 0 !important;
+}
+body.members-page .main-layout,
+body.members-page .main-left {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+}
+body.members-page .main-left {
+    display: flex !important;
+    flex-direction: column !important;
+}
+body.members-page #groupInfoCard {
+    flex: 0 0 auto;
+    margin: 0 0 12px !important;
+}
+body.members-page #resultsSection {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+}
+body.members-page #resultsSection[style*="display:none"],
+body.members-page #resultsSection[style*="display: none"] {
+    display: none !important;
+}
+body.members-page #resultsSection:not([style*="display:none"]):not([style*="display: none"]) {
+    display: flex !important;
+}
+body.members-page #resultsSection .members-results-header,
+body.members-page #resultsSection .results-toolbar {
+    flex: 0 0 auto;
+}
+body.members-page #resultsSection .table-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow: auto !important;
+}
+body.members-page #emptyState {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0 !important;
+    overflow: auto;
+}
+
+/* ───────────────────────────── Tin nhắn ───────────────────────────── */
+.messages-page {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+}
+.messages-page > .messages-hero,
+.messages-page > .status-bar,
+.messages-page > .message-kpi-grid,
+.messages-page > .message-toolbar-card {
+    flex: 0 0 auto;
+    margin: 0 !important;
+}
+.messages-page .message-workspace {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    align-items: stretch !important;
+    overflow: hidden;
+}
+.messages-page .inbox-panel,
+.messages-page .thread-panel,
+.messages-page .message-side-panel {
+    height: 100%;
+    min-height: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+.messages-page .conversation-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow-y: auto !important;
+}
+.messages-page .thread-empty {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0 !important;
+    overflow: auto;
+}
+.messages-page .thread-detail {
+    min-height: 0;
+    height: 100%;
+}
+.messages-page .thread-detail:not([style*="display:none"]):not([style*="display: none"]) {
+    display: flex !important;
+    flex-direction: column !important;
+}
+.messages-page .thread-header,
+.messages-page .reply-box {
+    flex: 0 0 auto;
+}
+.messages-page .message-thread {
+    flex: 1 1 auto;
+    height: auto !important;
+    min-height: 0;
+    overflow-y: auto !important;
+}
+.messages-page .message-side-panel {
+    overflow-y: auto !important;
+}
+
+/* ───────────────────────────── Sao chép nhóm ───────────────────────── */
+.group-copy-page {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    padding-bottom: clamp(14px, 1.4vw, 24px) !important;
+}
+.group-copy-page .group-copy-jobs-card {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+}
+.group-copy-page .group-copy-list-head {
+    flex: 0 0 auto;
+}
+.group-copy-page .group-copy-jobs {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+}
+
+/* ───────────────────────────── Lịch hoạt động ───────────────────────── */
+.schedmon-shell {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--nexus-viewport-gap) !important;
+    padding-bottom: clamp(14px, 1.4vw, 24px) !important;
+}
+.schedmon-shell .schedmon-topbar {
+    flex: 0 0 auto;
+}
+.schedmon-shell .schedmon-dashboard-grid {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    align-items: stretch !important;
+    overflow: hidden;
+}
+.schedmon-shell .schedmon-main-column,
+.schedmon-shell .schedmon-side-column {
+    height: 100%;
+    min-height: 0 !important;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+    padding-right: 3px;
+}
+.schedmon-shell .schedmon-side-column {
+    position: static !important;
+    top: auto !important;
+}
+.schedmon-shell .schedmon-running-list,
+.schedmon-shell .schedmon-upcoming-list,
+.schedmon-shell .schedmon-alert-list {
+    max-height: min(34dvh, 360px);
+    overflow-y: auto;
+}
+.schedmon-shell .schedmon-table-shell {
+    max-height: min(48dvh, 520px);
+    overflow: auto !important;
+}
+
+/* ───────────────────────────── Chiến dịch gửi ───────────────────────── */
+body.campaign-builder-page .page {
+    display: flex !important;
+    flex-direction: column !important;
+}
+body.campaign-builder-page .page > .card {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+body.campaign-builder-page .page > .card > .card-title,
+body.campaign-builder-page .page > .card > .tab-nav {
+    flex: 0 0 auto;
+}
+body.campaign-builder-page .tab-content.active {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* ───────────────────────────── Trang nội dung ───────────────────────── */
+.guide-shell,
+.marketing-page,
+body.activation-page .page {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-gutter: stable;
+}
+
+/* Modal cũng giữ trong màn hình; phần thân modal tự cuộn. */
+.overlay-card,
+.groups-modal,
+.gc-create-card,
+.detail-modal-content,
+.nexus-update-modal {
+    max-height: min(90dvh, 920px) !important;
+    overflow: hidden !important;
+}
+.overlay-body,
+.gc-create-body,
+.groups-invite-list,
+.detail-modal-content {
+    min-height: 0;
+    overflow-y: auto !important;
+}
+
+/* Tablet/mobile: body vẫn cố định, phần nội dung chính là vùng cuộn an toàn. */
+@media (max-width: 1024px) {
+    body {
+        padding-top: var(--nexus-mobile-bar-height) !important;
+    }
+    .page,
+    body.members-page .page {
+        width: 100vw !important;
+        height: calc(100dvh - var(--nexus-mobile-bar-height)) !important;
+        min-height: 0 !important;
+        max-height: calc(100dvh - var(--nexus-mobile-bar-height)) !important;
+        margin-left: 0 !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+    .app-sidebar.header,
+    .header.app-sidebar {
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+    }
+    .dash-shell .dash-grid,
+    .groups-page .groups-manager-layout,
+    .messages-page .message-workspace,
+    .schedmon-shell .schedmon-dashboard-grid {
+        overflow: visible;
+    }
+    .dash-shell .dash-side,
+    .schedmon-shell .schedmon-main-column,
+    .schedmon-shell .schedmon-side-column,
+    .messages-page .message-side-panel {
+        height: auto;
+        overflow: visible !important;
+    }
+    .accounts-shell > .card,
+    .group-copy-page .group-copy-jobs-card,
+    body.members-page .main-layout,
+    body.members-page .main-left,
+    body.members-page #resultsSection,
+    body.campaign-builder-page .page > .card {
+        flex: none;
+        height: auto;
+        overflow: visible !important;
+    }
+    .accounts-shell .accounts-list,
+    .group-copy-page .group-copy-jobs,
+    body.members-page #resultsSection .table-scroll,
+    .groups-page .groups-list,
+    .groups-page .groups-members-table-wrap,
+    .messages-page .conversation-list,
+    .messages-page .message-thread,
+    .schedmon-shell .schedmon-running-list,
+    .schedmon-shell .schedmon-upcoming-list,
+    .schedmon-shell .schedmon-table-shell,
+    body.campaign-builder-page .tab-content.active {
+        max-height: min(62dvh, 620px) !important;
+        overflow: auto !important;
+    }
+}
+
+@media (max-width: 640px) {
+    :root { --nexus-mobile-bar-height: 60px; }
+    .page { padding: 12px !important; }
+    .messages-page .message-kpi-grid,
+    .schedmon-shell .schedmon-topbar-stats,
+    .gc-head-stats {
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+    }
+}
+
+
+/* ───────────────────── Khôi phục cuộn bảng / vùng dữ liệu ─────────────────────
+   Mỗi bảng chỉ có một vùng cuộn thật sự và mọi mắt xích flex/grid đều được phép co. */
+.table-scroll,
+.table-wrap,
+.table-container,
+.sched-table-wrap,
+.personal-groups-table-wrap,
+.groups-members-table-wrap,
+.accounts-list,
+.groups-list,
+.group-copy-jobs,
+.conversation-list,
+.message-thread,
+.schedmon-running-list,
+.schedmon-upcoming-list,
+.schedmon-alert-list,
+.schedules-list-grid,
+.gc-picker-list,
+.groups-invite-list,
+.overlay-body,
+.log-drawer-body {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior: auto;
+}
+
+/* Trang thành viên từng dùng display:block nên bảng nở theo toàn bộ nội dung,
+   trong khi page bị khóa theo viewport. Ép lại chuỗi flex để bảng nhận chiều cao còn lại. */
+@media (min-width: 1025px) {
+    body.members-page .main-layout {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 1 auto !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.members-page .main-left {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.members-page #resultsSection {
+        flex: 1 1 auto !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+    }
+
+    body.members-page #resultsSection .table-scroll {
+        flex: 1 1 auto !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: auto !important;
+    }
+}
+
+/* Lịch gửi: chỉ danh sách dòng cuộn; vỏ bảng giữ tiêu đề cố định.
+   Loại bỏ hai thanh cuộn lồng nhau khiến con lăn có cảm giác bị khóa. */
+.schedmon-shell .schedmon-table-shell {
+    max-height: none !important;
+    overflow: hidden !important;
+}
+
+.schedmon-shell .schedules-list-grid {
+    max-height: min(44dvh, 500px) !important;
+    overflow: auto !important;
+}
+
+/* Các bảng tạo chiến dịch luôn cuộn độc lập thay vì kéo dài tab. */
+body.campaign-builder-page .table-scroll,
+body.campaign-builder-page .sched-table-wrap,
+body.campaign-builder-page .personal-groups-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    max-height: min(54dvh, 620px) !important;
+    overflow: auto !important;
+}
+
+@media (max-width: 1024px) {
+    .schedmon-shell .schedules-list-grid,
+    body.campaign-builder-page .table-scroll,
+    body.campaign-builder-page .sched-table-wrap,
+    body.campaign-builder-page .personal-groups-table-wrap {
+        max-height: min(62dvh, 620px) !important;
+        overflow: auto !important;
+    }
+}

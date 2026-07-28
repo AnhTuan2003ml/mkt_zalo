@@ -1,0 +1,941 @@
+/* Nexus v12 — unified contrast system for menus, buttons, cards and overlays */
+:root,
+html[data-theme="light"] {
+    --nx11-page: #c4cdd2;
+    --nx11-sidebar: #e4eaed;
+    --nx11-surface: #d5dfe4;
+    --nx11-surface-strong: #c8d4da;
+    --nx11-item: #e5ebee;
+    --nx11-item-hover: #d9e3e7;
+    --nx11-border: #aebbc2;
+    --nx11-border-soft: #bec9ce;
+    --nx11-text: #142b3e;
+    --nx11-text-2: #334d5f;
+    --nx11-muted: #5d7280;
+    --nx11-blue: #1f5f8b;
+    --nx11-blue-hover: #2874a6;
+    --nx11-blue-deep: #173e59;
+    --nx11-gold: #b47b32;
+    --nx11-success: #216b50;
+    --nx11-danger: #9a3f49;
+    --nx11-warning: #835b21;
+}
+
+html,
+body,
+body[data-theme="light"] {
+    color: var(--nx11-text) !important;
+    background: var(--nx11-page) !important;
+}
+
+/* Core text hierarchy: pale surfaces always use dark text. */
+body:not(.policy-masterise) h1,
+body:not(.policy-masterise) h2,
+body:not(.policy-masterise) h3,
+body:not(.policy-masterise) h4,
+body:not(.policy-masterise) h5,
+body:not(.policy-masterise) h6,
+body:not(.policy-masterise) .card-title,
+body:not(.policy-masterise) .page-title,
+body:not(.policy-masterise) .section-title {
+    color: var(--nx11-text) !important;
+}
+body:not(.policy-masterise) p,
+body:not(.policy-masterise) small,
+body:not(.policy-masterise) .muted,
+body:not(.policy-masterise) .subtitle,
+body:not(.policy-masterise) .description {
+    color: var(--nx11-muted) !important;
+}
+
+/* Shell and content surfaces: no pure white, no glare. */
+.app-sidebar.header,
+.header.app-sidebar {
+    color: var(--nx11-text) !important;
+    background: var(--nx11-sidebar) !important;
+    border-right-color: var(--nx11-border) !important;
+}
+.card,
+.page-hero,
+.acc-topbar,
+.dash-topbar,
+.groups-page-header,
+.groups-sidebar-card,
+.groups-detail-card,
+.groups-main-card,
+.members-data-topbar,
+.members-data-card,
+.schedmon-topbar,
+.schedmon-all-card,
+.group-copy-jobs-card,
+.guide-section-pro,
+.guide-principle-panel,
+.activation-hero,
+.message-kpi-card {
+    color: var(--nx11-text) !important;
+    background: var(--nx11-surface) !important;
+    border-color: var(--nx11-border) !important;
+}
+
+/* Light cards/items use dark navy copy. */
+.card strong,
+.card h1,
+.card h2,
+.card h3,
+.card h4,
+.card h5,
+.card h6,
+.gc-job-card strong,
+.gc-job-card h3,
+.gc-job-card h4,
+.group-copy-detail-item strong,
+.account-card-name,
+.groups-list-item strong,
+.conversation-item strong,
+.guide-menu-item h4,
+.guide-step-card h3,
+.guide-process-card h3 {
+    color: var(--nx11-text) !important;
+}
+.card p,
+.card small,
+.gc-job-card small,
+.gc-job-card p,
+.gc-job-meta,
+.group-copy-detail-item span,
+.account-card-id,
+.groups-list-item small,
+.conversation-item small,
+.guide-menu-item p,
+.guide-step-card p,
+.guide-process-card p {
+    color: var(--nx11-text-2) !important;
+}
+
+/* Inputs: visibly separate from both page and cards. */
+input,
+select,
+textarea,
+.form-group input,
+.form-group select,
+.form-group textarea,
+.af-input,
+.ig-search,
+.overlay-textarea,
+.group-copy-account-search,
+.schedmon-search-field,
+.schedmon-select-field select {
+    color: var(--nx11-text) !important;
+    background: #edf1f3 !important;
+    border-color: #9faeb7 !important;
+}
+input::placeholder,
+textarea::placeholder {
+    color: #71838e !important;
+}
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--nx11-blue) !important;
+    box-shadow: 0 0 0 3px rgba(31, 95, 139, .18) !important;
+}
+
+/* Primary and secondary actions have unmistakable contrast. */
+.btn-primary,
+button.btn-primary,
+.policy-button,
+.gc-run-btn,
+.nexus-update-toast-btn {
+    color: #ffffff !important;
+    background: var(--nx11-blue) !important;
+    border-color: var(--nx11-blue) !important;
+}
+.btn-primary:hover:not(:disabled),
+button.btn-primary:hover:not(:disabled),
+.policy-button:hover:not(:disabled),
+.gc-run-btn:hover:not(:disabled),
+.nexus-update-toast-btn:hover {
+    color: #ffffff !important;
+    background: var(--nx11-blue-hover) !important;
+    border-color: var(--nx11-blue-hover) !important;
+}
+.btn-secondary,
+button.btn-secondary,
+.btn-ghost,
+button.btn-ghost {
+    color: var(--nx11-blue-deep) !important;
+    background: #edf1f3 !important;
+    border-color: #94a5af !important;
+}
+.btn-secondary:hover:not(:disabled),
+button.btn-secondary:hover:not(:disabled),
+.btn-ghost:hover:not(:disabled),
+button.btn-ghost:hover:not(:disabled) {
+    color: #ffffff !important;
+    background: var(--nx11-blue) !important;
+    border-color: var(--nx11-blue) !important;
+}
+.btn-danger,
+.btn-icon-danger {
+    color: #ffffff !important;
+    background: var(--nx11-danger) !important;
+    border-color: var(--nx11-danger) !important;
+}
+
+/* Selected menu, selected tabs and selected items: blue surface + white copy. */
+.app-sidebar .header-nav a.active,
+.header-nav a.active,
+.sidebar-mini-link.active,
+.tab-nav button.active,
+.tab-btn.active,
+.gc-segmented button.active,
+.gc-jobs-filter button.active,
+.groups-filter-pill.active,
+.group-copy-mode-switch button.active,
+[role="tab"][aria-selected="true"] {
+    color: #ffffff !important;
+    background: var(--nx11-blue) !important;
+    border-color: var(--nx11-blue) !important;
+    box-shadow: inset 4px 0 0 #62b4ed !important;
+}
+.app-sidebar .header-nav a.active *,
+.header-nav a.active *,
+.sidebar-mini-link.active *,
+.tab-nav button.active *,
+.tab-btn.active *,
+.gc-segmented button.active *,
+.gc-jobs-filter button.active *,
+.groups-filter-pill.active *,
+.group-copy-mode-switch button.active *,
+[role="tab"][aria-selected="true"] * {
+    color: #ffffff !important;
+}
+.app-sidebar .header-nav a.active .nav-icon,
+.header-nav a.active .nav-icon {
+    color: #ffffff !important;
+    background: rgba(255,255,255,.13) !important;
+    border-color: rgba(255,255,255,.34) !important;
+}
+.app-sidebar .header-nav a.active svg,
+.header-nav a.active svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+}
+.app-sidebar .header-nav a.active .nav-copy strong,
+.app-sidebar .header-nav a.active .nav-copy small,
+.header-nav a.active .nav-copy strong,
+.header-nav a.active .nav-copy small {
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+
+/* Selectable rows/cards remain legible when selected. */
+.groups-list-item.active,
+.account-dropdown-item.active,
+.groups-account-option.active,
+.group-copy-account-option.active,
+.conversation-item.active,
+.plan-item.active {
+    color: #ffffff !important;
+    background: var(--nx11-blue) !important;
+    border-color: var(--nx11-blue) !important;
+}
+.groups-list-item.active *,
+.account-dropdown-item.active *,
+.groups-account-option.active *,
+.group-copy-account-option.active *,
+.conversation-item.active *,
+.plan-item.active * {
+    color: #ffffff !important;
+}
+
+/* Dark editorial panels must always carry white copy. */
+.guide-start-panel,
+.policy-story {
+    color: #ffffff !important;
+    background: linear-gradient(180deg, #1d4c69, #173c56) !important;
+}
+.guide-start-panel .guide-panel-label,
+.guide-start-panel .guide-start-list strong,
+.guide-start-panel .guide-start-list small,
+.guide-start-panel .guide-start-list li,
+.policy-story .policy-brand strong,
+.policy-story .policy-brand span,
+.policy-story .policy-title,
+.policy-story .policy-lead,
+.policy-story .policy-value span,
+.policy-story .policy-version {
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+.guide-start-panel .guide-start-list small,
+.policy-story .policy-lead,
+.policy-story .policy-brand span,
+.policy-story .policy-version {
+    color: rgba(255,255,255,.78) !important;
+}
+.guide-start-panel .guide-start-list li:hover,
+.guide-start-panel .guide-start-list li:focus-within {
+    background: rgba(255,255,255,.10) !important;
+}
+.policy-story .policy-eyebrow,
+.guide-kicker,
+.guide-section-eyebrow {
+    color: #e3a958 !important;
+}
+
+/* Guide cards and section blocks use three visibly different tones. */
+.guide-hero-main {
+    background: #dfe6e9 !important;
+}
+.guide-anchor-nav {
+    background: #ccd7dc !important;
+    border-color: var(--nx11-border) !important;
+}
+.guide-anchor-nav a {
+    color: var(--nx11-text-2) !important;
+}
+.guide-anchor-nav a:hover,
+.guide-anchor-nav a:focus-visible,
+.guide-anchor-nav a.active {
+    color: #ffffff !important;
+    background: var(--nx11-blue) !important;
+}
+.guide-step-card,
+.guide-menu-item,
+.guide-process-card,
+.guide-help-card {
+    color: var(--nx11-text) !important;
+    background: var(--nx11-item) !important;
+    border-color: var(--nx11-border) !important;
+}
+.guide-step-card:hover,
+.guide-menu-item:hover,
+.guide-process-card:hover,
+.guide-help-card:hover {
+    background: var(--nx11-item-hover) !important;
+    border-color: #81939e !important;
+}
+
+/* Group-copy page: lower glare and keep every metric readable. */
+.group-copy-jobs-card {
+    background: #cfd9de !important;
+}
+.group-copy-list-head {
+    color: var(--nx11-text) !important;
+    background: #c3d0d6 !important;
+    border-color: var(--nx11-border) !important;
+}
+.gc-stat,
+.gc-job-metric,
+.gc-job-operator,
+.gc-job-route-node,
+.gc-job-card,
+.group-copy-account-trigger,
+.group-copy-account-menu,
+.group-copy-account-option,
+.group-copy-toggle-card,
+.group-copy-detail-item,
+.gc-picker-row {
+    color: var(--nx11-text) !important;
+    background: #e1e8eb !important;
+    border-color: var(--nx11-border) !important;
+}
+.gc-stat strong,
+.gc-job-metric strong,
+.gc-job-operator strong,
+.gc-job-route-node strong,
+.gc-job-title,
+.gc-job-title strong,
+.group-copy-account-selected strong,
+.group-copy-account-option-info strong {
+    color: var(--nx11-text) !important;
+}
+.gc-stat span,
+.gc-job-metric span,
+.gc-job-operator span,
+.gc-job-route-node small,
+.group-copy-account-selected small,
+.group-copy-account-option-info small {
+    color: var(--nx11-muted) !important;
+}
+.gc-job-card:hover,
+.gc-picker-row:hover,
+.group-copy-account-option:hover {
+    background: #d6e1e6 !important;
+}
+.gc-job-card .btn-primary,
+.gc-job-card button.btn-primary {
+    color: #ffffff !important;
+}
+.gc-job-card .btn-secondary,
+.gc-job-card button.btn-secondary,
+.gc-job-card .btn-ghost,
+.gc-job-card button.btn-ghost {
+    color: var(--nx11-blue-deep) !important;
+}
+
+/* Tables: dark header / white labels; pale rows / dark copy. */
+table,
+tbody,
+.table-scroll,
+.table-container,
+.members-table-stage,
+.groups-members-table-wrap,
+.personal-groups-table-wrap,
+.schedmon-table-shell,
+.accounts-table-wrap,
+.message-table-wrap,
+.group-copy-member-wrap {
+    color: var(--nx11-text) !important;
+    background: #e7ecef !important;
+    border-color: var(--nx11-border) !important;
+}
+thead,
+thead tr,
+th,
+.schedmon-table-head {
+    color: #ffffff !important;
+    background: #244f6d !important;
+    border-color: #356684 !important;
+}
+thead *,
+th * {
+    color: #ffffff !important;
+}
+td {
+    color: var(--nx11-text-2) !important;
+    border-color: #c3cdd2 !important;
+}
+tbody tr { background: #edf1f3 !important; }
+tbody tr:nth-child(even) { background: #e2e8eb !important; }
+tbody tr:hover { background: #d2e0e7 !important; }
+
+/* Popups: medium gray-blue instead of white, dark header, dark copy. */
+.overlay-backdrop,
+#msgOverlayBackdrop,
+.member-data-overlay,
+.nexus-update-backdrop,
+.groups-modal-backdrop,
+.group-copy-modal {
+    background: rgba(38, 51, 60, .48) !important;
+    backdrop-filter: blur(7px) saturate(110%) !important;
+}
+.overlay-card,
+.nexus-update-modal,
+.log-drawer,
+.detail-modal-content,
+.groups-modal-card {
+    color: var(--nx11-text) !important;
+    background: #d7e0e4 !important;
+    border-color: var(--nx11-border) !important;
+}
+.overlay-header,
+.overlay-footer,
+.gc-create-head,
+.log-drawer-header,
+.nexus-update-head,
+.nexus-update-actions,
+.groups-modal-head {
+    color: var(--nx11-text) !important;
+    background: #c4d0d6 !important;
+    border-color: var(--nx11-border) !important;
+}
+.overlay-body,
+.gc-create-body,
+.group-copy-detail-body,
+.nexus-update-body,
+.groups-modal-body {
+    color: var(--nx11-text) !important;
+    background: #d7e0e4 !important;
+}
+.overlay-name,
+.overlay-title,
+.pf-user-name,
+.gc-create-head strong,
+.nexus-update-head h3,
+.groups-modal-head strong {
+    color: var(--nx11-text) !important;
+}
+.overlay-uid,
+.overlay-label,
+.pf-user-uid,
+.gc-create-head small,
+.nexus-update-head p,
+.groups-modal-head small {
+    color: var(--nx11-muted) !important;
+}
+
+/* All transient notifications live at the bottom-right. */
+.member-toast-stack {
+    position: fixed !important;
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+    z-index: 10020 !important;
+}
+.member-toast,
+.groups-toast,
+.notification-card,
+.nexus-update-toast {
+    color: #ffffff !important;
+    background: #183f5a !important;
+    border: 1px solid #3c6c89 !important;
+    box-shadow: 0 18px 44px rgba(18, 37, 50, .28) !important;
+}
+.member-toast *,
+.groups-toast *,
+.notification-card *,
+.nexus-update-toast * {
+    color: #ffffff !important;
+}
+.member-toast-text,
+.notification-title,
+.nexus-update-toast-text {
+    color: #ffffff !important;
+}
+.notification-message {
+    color: rgba(255,255,255,.78) !important;
+}
+.groups-toast {
+    position: fixed !important;
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+    z-index: 10020 !important;
+}
+.notification-overlay {
+    position: fixed !important;
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+    z-index: 10020 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    transform: translateY(24px) !important;
+}
+.notification-overlay.show {
+    transform: translateY(0) !important;
+}
+.nexus-update-toast {
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+    z-index: 10010 !important;
+}
+.member-toast.success { border-left: 5px solid #58c792 !important; }
+.member-toast.error { border-left: 5px solid #ee7883 !important; }
+.member-toast.warning,
+.member-toast.warn { border-left: 5px solid #e2ad57 !important; }
+.member-toast.info { border-left: 5px solid #65b8ec !important; }
+
+@media (max-width: 700px) {
+    .member-toast-stack,
+    .groups-toast,
+    .notification-overlay,
+    .nexus-update-toast {
+        right: 10px !important;
+        bottom: 10px !important;
+        left: 10px !important;
+        max-width: none !important;
+    }
+}
+
+
+/* ========================================================================== 
+   V12 FINAL OVERRIDES
+   Quy tắc bắt buộc:
+   - Nền sáng => chữ xanh than đậm.
+   - Nền xanh => chữ trắng.
+   - Hover của mọi nút/menu/tab => nền xanh, chữ trắng.
+   ========================================================================== */
+
+:root,
+html[data-theme="light"] {
+    --nx12-page: #c4cdd2;
+    --nx12-sidebar: #e5ebee;
+    --nx12-panel: #d5dfe4;
+    --nx12-card: #e5ebee;
+    --nx12-card-hover: #d4e0e6;
+    --nx12-control: #eef3f5;
+    --nx12-border: #a9b7bf;
+    --nx12-border-strong: #879aa6;
+    --nx12-text: #153149;
+    --nx12-text-2: #3d5668;
+    --nx12-muted: #607583;
+    --nx12-blue: #1f5f8b;
+    --nx12-blue-hover: #2878ab;
+    --nx12-blue-dark: #173f5b;
+    --nx12-white: #ffffff;
+}
+
+html body,
+html body[data-theme="light"] {
+    color: var(--nx12-text) !important;
+    background: var(--nx12-page) !important;
+}
+
+/* ----- Sidebar: trạng thái thường, hover và được chọn ----- */
+html body .app-sidebar.header,
+html body .header.app-sidebar {
+    color: var(--nx12-text) !important;
+    background: var(--nx12-sidebar) !important;
+    border-right-color: var(--nx12-border) !important;
+}
+
+html body .app-sidebar.header .header-nav > a:not(.active),
+html body .header.app-sidebar .header-nav > a:not(.active) {
+    color: var(--nx12-text) !important;
+    background: var(--nx12-control) !important;
+    background-image: none !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+}
+html body .app-sidebar.header .header-nav > a:not(.active) .nav-copy strong,
+html body .app-sidebar.header .header-nav > a:not(.active) .nav-copy small,
+html body .header.app-sidebar .header-nav > a:not(.active) .nav-copy strong,
+html body .header.app-sidebar .header-nav > a:not(.active) .nav-copy small {
+    color: var(--nx12-text) !important;
+    opacity: 1 !important;
+}
+html body .app-sidebar.header .header-nav > a:not(.active) .nav-copy small,
+html body .header.app-sidebar .header-nav > a:not(.active) .nav-copy small {
+    color: var(--nx12-muted) !important;
+}
+html body .app-sidebar.header .header-nav > a:not(.active) .nav-icon,
+html body .header.app-sidebar .header-nav > a:not(.active) .nav-icon {
+    color: var(--nx12-blue-dark) !important;
+    background: #f7fafb !important;
+    border-color: #b7c4cb !important;
+}
+html body .app-sidebar.header .header-nav > a:not(.active) svg,
+html body .header.app-sidebar .header-nav > a:not(.active) svg {
+    color: var(--nx12-blue-dark) !important;
+    stroke: var(--nx12-blue-dark) !important;
+}
+
+html body .app-sidebar.header .header-nav > a.active,
+html body .header.app-sidebar .header-nav > a.active,
+html body .app-sidebar.header .header-nav > a[aria-current="page"],
+html body .header.app-sidebar .header-nav > a[aria-current="page"] {
+    color: var(--nx12-white) !important;
+    background: var(--nx12-blue) !important;
+    background-color: var(--nx12-blue) !important;
+    background-image: none !important;
+    border-color: var(--nx12-blue) !important;
+    box-shadow: inset 4px 0 0 #73c4f3 !important;
+}
+html body .app-sidebar.header .header-nav > a.active *,
+html body .header.app-sidebar .header-nav > a.active *,
+html body .app-sidebar.header .header-nav > a[aria-current="page"] *,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] * {
+    color: var(--nx12-white) !important;
+    opacity: 1 !important;
+}
+html body .app-sidebar.header .header-nav > a.active .nav-icon,
+html body .header.app-sidebar .header-nav > a.active .nav-icon,
+html body .app-sidebar.header .header-nav > a[aria-current="page"] .nav-icon,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] .nav-icon {
+    color: var(--nx12-white) !important;
+    background: rgba(255,255,255,.14) !important;
+    border-color: rgba(255,255,255,.42) !important;
+}
+html body .app-sidebar.header .header-nav > a.active svg,
+html body .header.app-sidebar .header-nav > a.active svg,
+html body .app-sidebar.header .header-nav > a[aria-current="page"] svg,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] svg {
+    color: var(--nx12-white) !important;
+    stroke: var(--nx12-white) !important;
+}
+
+html body .app-sidebar.header .header-nav > a:hover,
+html body .header.app-sidebar .header-nav > a:hover,
+html body .sidebar-mini-link:hover,
+html body .sidebar-policy-link:hover {
+    color: var(--nx12-white) !important;
+    background: var(--nx12-blue) !important;
+    background-image: none !important;
+    border-color: var(--nx12-blue) !important;
+    box-shadow: none !important;
+}
+html body .app-sidebar.header .header-nav > a:hover *,
+html body .header.app-sidebar .header-nav > a:hover *,
+html body .sidebar-mini-link:hover *,
+html body .sidebar-policy-link:hover * {
+    color: var(--nx12-white) !important;
+    opacity: 1 !important;
+}
+html body .app-sidebar.header .header-nav > a:hover svg,
+html body .header.app-sidebar .header-nav > a:hover svg,
+html body .sidebar-mini-link:hover svg,
+html body .sidebar-policy-link:hover svg {
+    color: var(--nx12-white) !important;
+    stroke: var(--nx12-white) !important;
+}
+
+/* ----- Mọi nút: mặc định sáng/chữ xanh; hover xanh/chữ trắng ----- */
+html body button:not(:disabled),
+html body .btn:not(:disabled),
+html body a.btn,
+html body [role="button"]:not([aria-disabled="true"]),
+html body [role="tab"]:not([aria-disabled="true"]) {
+    color: var(--nx12-blue-dark) !important;
+    background-color: var(--nx12-control) !important;
+    background-image: none !important;
+    border-color: var(--nx12-border) !important;
+}
+
+html body .btn-primary:not(:disabled),
+html body button.btn-primary:not(:disabled),
+html body .policy-button:not(:disabled),
+html body .gc-run-btn:not(:disabled),
+html body .nexus-update-toast-btn {
+    color: var(--nx12-white) !important;
+    background: var(--nx12-blue) !important;
+    border-color: var(--nx12-blue) !important;
+}
+
+html body button:not(:disabled):hover,
+html body .btn:not(:disabled):hover,
+html body a.btn:hover,
+html body [role="button"]:not([aria-disabled="true"]):hover,
+html body [role="tab"]:not([aria-disabled="true"]):hover,
+html body .guide-anchor-nav a:hover,
+html body .guide-anchor-nav a:focus-visible,
+html body .tab-btn:hover,
+html body .tab-nav button:hover,
+html body .gc-segmented button:hover,
+html body .gc-jobs-filter button:hover,
+html body .groups-filter-pill:hover,
+html body .group-copy-mode-switch button:hover {
+    color: var(--nx12-white) !important;
+    background: var(--nx12-blue) !important;
+    background-color: var(--nx12-blue) !important;
+    background-image: none !important;
+    border-color: var(--nx12-blue) !important;
+}
+html body button:not(:disabled):hover *,
+html body .btn:not(:disabled):hover *,
+html body a.btn:hover *,
+html body [role="button"]:not([aria-disabled="true"]):hover *,
+html body [role="tab"]:not([aria-disabled="true"]):hover *,
+html body .guide-anchor-nav a:hover *,
+html body .tab-btn:hover *,
+html body .tab-nav button:hover *,
+html body .gc-segmented button:hover *,
+html body .gc-jobs-filter button:hover *,
+html body .groups-filter-pill:hover *,
+html body .group-copy-mode-switch button:hover * {
+    color: var(--nx12-white) !important;
+}
+html body button:not(:disabled):hover svg,
+html body .btn:not(:disabled):hover svg,
+html body a.btn:hover svg,
+html body [role="button"]:not([aria-disabled="true"]):hover svg,
+html body [role="tab"]:not([aria-disabled="true"]):hover svg {
+    color: var(--nx12-white) !important;
+    stroke: var(--nx12-white) !important;
+}
+
+/* ----- Mọi tab/item được chọn: xanh + chữ trắng ----- */
+html body button.active,
+html body a.active:not(.brand),
+html body [role="tab"][aria-selected="true"],
+html body [aria-pressed="true"],
+html body .tab-btn.active,
+html body .tab-nav button.active,
+html body .gc-segmented button.active,
+html body .gc-jobs-filter button.active,
+html body .groups-filter-pill.active,
+html body .group-copy-mode-switch button.active,
+html body .groups-list-item.active,
+html body .group-copy-account-option.active,
+html body .groups-account-option.active,
+html body .conversation-item.active,
+html body .plan-item.active {
+    color: var(--nx12-white) !important;
+    background: var(--nx12-blue) !important;
+    background-color: var(--nx12-blue) !important;
+    background-image: none !important;
+    border-color: var(--nx12-blue) !important;
+}
+html body button.active *,
+html body a.active:not(.brand) *,
+html body [role="tab"][aria-selected="true"] *,
+html body [aria-pressed="true"] *,
+html body .tab-btn.active *,
+html body .tab-nav button.active *,
+html body .gc-segmented button.active *,
+html body .gc-jobs-filter button.active *,
+html body .groups-filter-pill.active *,
+html body .group-copy-mode-switch button.active *,
+html body .groups-list-item.active *,
+html body .group-copy-account-option.active *,
+html body .groups-account-option.active *,
+html body .conversation-item.active *,
+html body .plan-item.active * {
+    color: var(--nx12-white) !important;
+    opacity: 1 !important;
+}
+
+/* ----- Các số 01/02/03: nền sáng thì chữ xanh, tuyệt đối không trắng trên trắng ----- */
+html body.guide-page .guide-start-panel .guide-start-list > li > span,
+html body.guide-page .guide-start-panel .guide-start-list li > span:first-child,
+html body.guide-page .guide-section-number,
+html body.guide-page .guide-step-index,
+html body.guide-page .guide-process-label,
+html body.policy-masterise .policy-number,
+html body .step-number,
+html body .section-number,
+html body .index-badge {
+    color: var(--nx12-blue) !important;
+    background: #eef5f8 !important;
+    background-color: #eef5f8 !important;
+    border-color: #abc3d1 !important;
+    opacity: 1 !important;
+}
+
+/* Dark editorial panels: white copy, but number chips remain blue on pale background. */
+html body.guide-page .guide-start-panel,
+html body.policy-masterise .policy-story {
+    color: var(--nx12-white) !important;
+    background: linear-gradient(180deg, #1d4c69, #173c56) !important;
+}
+html body.guide-page .guide-start-panel .guide-panel-label,
+html body.guide-page .guide-start-panel .guide-start-list strong,
+html body.guide-page .guide-start-panel .guide-start-list small,
+html body.policy-masterise .policy-story .policy-brand strong,
+html body.policy-masterise .policy-story .policy-brand span,
+html body.policy-masterise .policy-story .policy-title,
+html body.policy-masterise .policy-story .policy-lead,
+html body.policy-masterise .policy-story .policy-value span,
+html body.policy-masterise .policy-story .policy-version {
+    color: var(--nx12-white) !important;
+    opacity: 1 !important;
+}
+html body.guide-page .guide-start-panel .guide-start-list small,
+html body.policy-masterise .policy-story .policy-brand span,
+html body.policy-masterise .policy-story .policy-lead,
+html body.policy-masterise .policy-story .policy-version {
+    color: rgba(255,255,255,.82) !important;
+}
+html body.policy-masterise .policy-story .policy-eyebrow,
+html body.policy-masterise .policy-story .policy-value b,
+html body.guide-page .guide-kicker,
+html body.guide-page .guide-section-eyebrow {
+    color: #efb866 !important;
+}
+
+/* ----- Card sáng luôn dùng chữ tối; card hover đổi tông rõ ----- */
+html body .card,
+html body .guide-step-card,
+html body .guide-menu-item,
+html body .guide-process-card,
+html body .gc-stat,
+html body .gc-job-card,
+html body .gc-job-metric,
+html body .group-copy-account-trigger,
+html body .group-copy-account-option,
+html body .group-copy-detail-item,
+html body .account-card,
+html body .groups-list-item:not(.active) {
+    color: var(--nx12-text) !important;
+    background: var(--nx12-card) !important;
+    border-color: var(--nx12-border) !important;
+}
+html body .card h1,
+html body .card h2,
+html body .card h3,
+html body .card h4,
+html body .card strong,
+html body .guide-step-card h3,
+html body .guide-menu-item h4,
+html body .guide-process-card h3,
+html body .gc-stat strong,
+html body .gc-job-card strong,
+html body .gc-job-metric strong,
+html body .account-card-name,
+html body .groups-list-item:not(.active) strong {
+    color: var(--nx12-text) !important;
+}
+html body .card p,
+html body .card small,
+html body .guide-step-card p,
+html body .guide-menu-item p,
+html body .guide-process-card p,
+html body .gc-stat span,
+html body .gc-job-card p,
+html body .gc-job-card small,
+html body .gc-job-metric span,
+html body .account-card-id,
+html body .groups-list-item:not(.active) small {
+    color: var(--nx12-text-2) !important;
+}
+html body .guide-step-card:hover,
+html body .guide-menu-item:hover,
+html body .guide-process-card:hover,
+html body .gc-job-card:hover,
+html body .group-copy-account-option:hover,
+html body .groups-list-item:not(.active):hover {
+    color: var(--nx12-text) !important;
+    background: var(--nx12-card-hover) !important;
+    border-color: var(--nx12-border-strong) !important;
+}
+
+/* Inputs / combobox: nền gần trắng, chữ xanh than rõ. */
+html body input,
+html body select,
+html body textarea,
+html body .form-group input,
+html body .form-group select,
+html body .form-group textarea,
+html body .overlay-textarea,
+html body .group-copy-account-search {
+    color: var(--nx12-text) !important;
+    background: var(--nx12-control) !important;
+    border-color: var(--nx12-border) !important;
+}
+html body input::placeholder,
+html body textarea::placeholder {
+    color: #6a7e8b !important;
+}
+
+/* Notification remains bottom-right and uses dark blue + white. */
+html body .member-toast-stack,
+html body .groups-toast,
+html body .notification-overlay,
+html body .nexus-update-toast {
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+}
+html body .member-toast,
+html body .groups-toast,
+html body .notification-card,
+html body .nexus-update-toast {
+    color: var(--nx12-white) !important;
+    background: var(--nx12-blue-dark) !important;
+    border-color: #477792 !important;
+}
+html body .member-toast *,
+html body .groups-toast *,
+html body .notification-card *,
+html body .nexus-update-toast * {
+    color: var(--nx12-white) !important;
+}
+
+@media (max-width: 700px) {
+    html body .member-toast-stack,
+    html body .groups-toast,
+    html body .notification-overlay,
+    html body .nexus-update-toast {
+        right: 10px !important;
+        bottom: 10px !important;
+        left: 10px !important;
+    }
+}

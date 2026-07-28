@@ -28,13 +28,36 @@ def get_app_root():
         return os.path.dirname(os.path.abspath(__file__))
 
 def get_base_path():
-    """Get base path for Flask resources (templates, static)."""
+    """Get the resource directory used by Flask.
+
+    In a PyInstaller one-file build the bundled templates/static files are
+    extracted into ``sys._MEIPASS``.  Before Flask starts, overlay any external
+    ``templates`` and ``static`` folders placed next to Nexus.exe onto that
+    extracted directory.  This keeps the EXE self-contained by default while
+    allowing a small UI patch ZIP to take effect without rebuilding the whole
+    application again.
+    """
     if getattr(sys, "frozen", False):
-        # PyInstaller --onefile: templates, static extract vào sys._MEIPASS (temp folder)
-        return sys._MEIPASS
-    else:
-        # Running as Python script
-        return os.path.dirname(os.path.abspath(__file__))
+        bundled_root = sys._MEIPASS
+        external_root = os.path.dirname(sys.executable)
+
+        for resource_name in ("templates", "static"):
+            external_dir = os.path.join(external_root, resource_name)
+            bundled_dir = os.path.join(bundled_root, resource_name)
+            if not os.path.isdir(external_dir):
+                continue
+            try:
+                os.makedirs(bundled_dir, exist_ok=True)
+                shutil.copytree(external_dir, bundled_dir, dirs_exist_ok=True)
+                print(f"[UI] Loaded external {resource_name} override from {external_dir}")
+            except Exception as error:
+                # A failed optional override must never stop Nexus from opening.
+                print(f"[UI] Could not load external {resource_name} override: {error}")
+
+        return bundled_root
+
+    # Running as Python source.
+    return os.path.dirname(os.path.abspath(__file__))
 
 app_root = get_app_root()
 base_path = get_base_path()
@@ -47,6 +70,9 @@ app = Flask(__name__,
 app.secret_key = "zalo-tool-secret-key"
 app.config['JSON_AS_ASCII'] = False  # Allow non-ASCII characters in JSON
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+# UI patches must be visible immediately after overwrite/restart.
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # ─── Setup sys.path for source/packaged modules ───────────────────────────────
 if getattr(sys, "frozen", False):
@@ -63,7 +89,7 @@ if module_root not in sys.path:
 if auth_path not in sys.path:
     sys.path.insert(0, auth_path)
 
-from features.members.group_member_service import fetch_group_members_by_input, format_group_info
+from features.members.group_member_service import fetch_group_members_by_input, format_group_info, resolve_group_input_to_group_id
 from features.profiles.profile_service import fetch_profiles_with_single_fallback, build_member_rows_from_uids, fetch_friend_relations
 from features.messaging.send_sms import send_sms
 from features.messaging.add_friend import send_friend_request
@@ -131,7 +157,7 @@ from core.zalo.zalo_config import get_zpw_ver
 FRIEND_PLANS_FILE = os.path.join(app_root, "data", "friend_invite_plans.json")
 INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.json")
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
-USER_POLICY_VERSION = "2026-07-22-group-marketing-v4-session"
+USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
@@ -909,7 +935,7 @@ def api_policy_accept():
     activation = _activation_status_payload() if DEVICE_TRACKING_ENABLED else {"activated": True}
     if activation.get("activated"):
         ensure_schedule_worker_started()
-    next_url = url_for("guide_page") if activation.get("activated") else url_for("activation_page")
+    next_url = (url_for("guide_page") + "?welcome=1") if activation.get("activated") else url_for("activation_page")
     return jsonify({
         "success": True,
         "message": "Đã ghi nhận đồng ý chính sách người dùng.",
@@ -993,7 +1019,7 @@ def api_activation_resend():
 @app.route("/")
 def index():
     from flask import redirect
-    return redirect(url_for("dashboard_page"))
+    return redirect(url_for("guide_page"))
 
 
 @app.route("/dashboard")
@@ -1296,9 +1322,103 @@ def log_stream():
 
 
 
-def _get_account_credentials(account_id: str, require_imei: bool = False):
+def _cookie_has_name(cookie_str: str, cookie_name: str) -> bool:
+    target = str(cookie_name or "").strip().lower()
+    if not target:
+        return False
+    for item in str(cookie_str or "").split(";"):
+        item = item.strip()
+        if "=" not in item:
+            continue
+        name, value = item.split("=", 1)
+        if name.strip().lower() == target and value.strip():
+            return True
+    return False
+
+
+def _refresh_account_cookies_if_possible(account_id: str, account: dict, timeout: float = 7.0) -> bool:
+    port = (account or {}).get("remoteDebugPort")
+    if not port:
+        return False
+    try:
+        from features.accounts.account_network_monitor import refresh_account_cookies
+        return bool(refresh_account_cookies(account_id, int(port), timeout=timeout))
+    except Exception as error:
+        print(f"[session_refresh] Không đọc lại được cookies account={account_id}: {error}")
+        return False
+
+
+def _is_zalo_session_error(error) -> bool:
+    message = str(error or "").lower()
+    return any(marker in message for marker in (
+        "zpw_sek",
+        "zpw enk",
+        "zpwenk",
+        "cookie", 
+        "phiên đăng nhập",
+        "session",
+    ))
+
+
+def _refresh_account_session_blocking(account_id: str, timeout: float = 18.0) -> bool:
+    """Tự bắt lại zpwEnk + zpw_sek từ Chrome đang mở và chờ tối đa timeout.
+
+    Chỉ dùng sau khi API Zalo xác nhận session hiện tại không hợp lệ.
     """
-    Lấy cookies / zpwEnk / imei theo account đang chọn.
+    account = get_account(account_id)
+    if not account:
+        return False
+    port = account.get("remoteDebugPort")
+    if not port:
+        return False
+
+    try:
+        if not _chrome_debug_port_alive(port):
+            return False
+    except Exception:
+        return False
+
+    refresh_started_at = int(time.time() * 1000)
+    # Không xóa cookies/zpwEnk đang lưu. Monitor sẽ thay thế từng giá trị sau
+    # khi bắt được bộ phiên mới hợp lệ; nếu quá trình bắt lại thất bại, dữ liệu
+    # cũ vẫn còn để người dùng không bị mất phiên vì một lần bấm Làm mới.
+    update_account(
+        account_id,
+        loginCaptured=False,
+        sessionRefreshStartedAt=refresh_started_at,
+    )
+
+    try:
+        from features.accounts.account_network_monitor import start_account_network_monitor
+        start_account_network_monitor(account_id, int(port))
+    except Exception as error:
+        print(f"[session_refresh] Không khởi động được monitor account={account_id}: {error}")
+        return False
+
+    deadline = time.time() + max(5.0, float(timeout or 0))
+    while time.time() < deadline:
+        current = get_account(account_id) or {}
+        cookies = current.get("cookies") or ""
+        captured_at = int(current.get("sessionCapturedAt") or 0)
+        if (
+            current.get("loginCaptured")
+            and str(current.get("zpwEnk") or "").strip()
+            and _cookie_has_name(cookies, "zpw_sek")
+            and captured_at >= refresh_started_at
+        ):
+            print(f"[session_refresh] Đã khôi phục session account={account_id}")
+            return True
+        time.sleep(0.35)
+
+    print(f"[session_refresh] Hết thời gian chờ session account={account_id}")
+    return False
+
+
+def _get_account_credentials(account_id: str, require_imei: bool = False):
+    """Lấy bộ session đồng nhất của tài khoản đang chọn.
+
+    getmg cần cả zpwEnk và cookie zpw_sek cùng một phiên. Cookie dài hoặc có
+    zpsid/__zi nhưng thiếu zpw_sek vẫn không dùng được.
     """
     account_id = (account_id or "").strip()
     if not account_id:
@@ -1309,26 +1429,91 @@ def _get_account_credentials(account_id: str, require_imei: bool = False):
         raise ValueError("Không tìm thấy tài khoản.")
 
     cookies = (account.get("cookies") or "").strip()
+    if not _cookie_has_name(cookies, "zpw_sek"):
+        # Tự đọc lại cookie HttpOnly từ Chrome đang mở trước khi báo lỗi cho UI.
+        _refresh_account_cookies_if_possible(account_id, account)
+        account = get_account(account_id) or account
+        cookies = (account.get("cookies") or "").strip()
+
     zpw_enk = (account.get("zpwEnk") or "").strip()
     imei = (account.get("imei") or "").strip()
 
     missing = []
-    if not cookies:
-        missing.append("cookies")
+    if not account.get("loginCaptured"):
+        missing.append("phiên đăng nhập chưa hoàn tất")
     if not zpw_enk:
         missing.append("zpwEnk")
+    if not _cookie_has_name(cookies, "zpw_sek"):
+        missing.append("cookie zpw_sek")
     if require_imei and not imei:
         missing.append("imei")
 
     if missing:
         raise ValueError(
-            "Tài khoản chưa đủ dữ liệu: " + ", ".join(missing) +
-            ". Hãy mở tài khoản để monitor lấy phiên, hoặc bổ sung IMEI cho account."
+            "Tài khoản chưa đủ phiên xác thực: " + ", ".join(missing) +
+            ". Hãy mở lại tài khoản Zalo, chờ trạng thái Sẵn sàng rồi thao tác lại."
         )
 
     return account, cookies, zpw_enk, imei
 
 
+def _emit_session_status(callback, message: str, kind: str = "loading"):
+    if not callback:
+        return
+    try:
+        callback(message, kind)
+    except TypeError:
+        callback(message)
+    except Exception:
+        pass
+
+
+def _fetch_group_members_session_safe(
+    account_id: str,
+    group_input: str,
+    callback=None,
+    require_imei: bool = False,
+    auto_join_when_not_member: bool = True,
+    leave_after_auto_join: bool = True,
+):
+    """Gọi getmg với một lần tự khôi phục session khi zpw_sek/zpwEnk lệch phiên."""
+    account, cookies, zpw_enk, imei = _get_account_credentials(
+        account_id, require_imei=require_imei
+    )
+    zpw_ver = get_zpw_ver()
+
+    for attempt in range(2):
+        try:
+            payload = fetch_group_members_by_input(
+                group_input,
+                zpw_enk,
+                cookies,
+                callback=callback,
+                zpw_ver=zpw_ver,
+                imei=imei,
+                auto_join_when_not_member=auto_join_when_not_member,
+                leave_after_auto_join=leave_after_auto_join,
+            )
+            return payload, account, cookies, zpw_enk, imei, zpw_ver
+        except ValueError as error:
+            if attempt > 0 or not _is_zalo_session_error(error):
+                raise
+            _emit_session_status(
+                callback,
+                "Phiên Zalo chưa đồng nhất. Đang bắt lại zpwEnk và zpw_sek...",
+                "loading",
+            )
+            if not _refresh_account_session_blocking(account_id):
+                raise ValueError(
+                    "Phiên Zalo đã hết hạn hoặc thiếu zpw_sek. Hãy mở tài khoản Zalo, "
+                    "đợi trang tải xong rồi thao tác lại."
+                ) from error
+            account, cookies, zpw_enk, imei = _get_account_credentials(
+                account_id, require_imei=require_imei
+            )
+            zpw_ver = get_zpw_ver()
+
+    raise ValueError("Không thể khôi phục phiên Zalo.")
 
 
 @app.route("/run", methods=["POST"])
@@ -1347,19 +1532,11 @@ def run():
         return jsonify({"error": "Thiếu Group Link hoặc Group ID!"}), 400
 
     try:
-        account, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=False)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-
-    try:
-        zpw_ver = get_zpw_ver()
-        member_payload = fetch_group_members_by_input(
+        member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
+            account_id,
             raw,
-            zpw_enk,
-            cookies,
             callback=sse_broadcast,
-            zpw_ver=zpw_ver,
-            imei=imei,
+            require_imei=False,
             auto_join_when_not_member=auto_join_when_not_member,
             leave_after_auto_join=False,
         )
@@ -2221,31 +2398,17 @@ def api_get_userinfo_batch():
 def _fetch_group_members_worker(task, account_id: str, group_input: str, auto_join_when_not_member: bool = True):
     """Worker lấy thành viên nhóm dùng chung service với /run để tránh trùng logic."""
     try:
-        account = get_account(account_id)
-        if not account:
-            raise ValueError("Không tìm thấy tài khoản")
-
-        cookies = account.get("cookies", "").strip()
-        zpw_enk = account.get("zpwEnk", "").strip()
-        imei = account.get("imei", "").strip()
-        zpw_ver = get_zpw_ver()
-
-        if not cookies or not zpw_enk:
-            raise ValueError("Tài khoản chưa có cookies hoặc zpwEnk")
-
         def task_log(msg, typ="info"):
             task.log(msg)
 
         task.log(f"Đang xử lý: {group_input}")
         task.set_progress(10)
 
-        member_payload = fetch_group_members_by_input(
+        member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
+            account_id,
             group_input,
-            zpw_enk,
-            cookies,
             callback=task_log,
-            zpw_ver=zpw_ver,
-            imei=imei,
+            require_imei=False,
             auto_join_when_not_member=auto_join_when_not_member,
             leave_after_auto_join=False,
         )
@@ -2304,25 +2467,13 @@ def _prepare_group_copy_job_worker(task, payload: dict):
     """Lấy thành viên nhóm nguồn và lưu tác vụ sao chép theo hạn mức mỗi ngày."""
     account_id = str(payload.get("accountId") or "").strip()
     source_input = str(payload.get("sourceInput") or "").strip()
-    account = get_account(account_id)
-    if not account:
-        raise ValueError("Không tìm thấy tài khoản thực hiện.")
-
-    cookies = str(account.get("cookies") or "").strip()
-    zpw_enk = str(account.get("zpwEnk") or "").strip()
-    imei = str(account.get("imei") or "").strip()
-    if not cookies or not zpw_enk:
-        raise ValueError("Tài khoản chưa có cookies hoặc zpwEnk.")
-
     task.set_progress(10)
     task.log("Đang đọc thông tin và danh sách thành viên nhóm nguồn...")
-    member_payload = fetch_group_members_by_input(
+    member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
+        account_id,
         source_input,
-        zpw_enk,
-        cookies,
         callback=lambda msg, typ="info": task.log(msg, typ),
-        zpw_ver=get_zpw_ver(),
-        imei=imei,
+        require_imei=False,
         auto_join_when_not_member=True,
         leave_after_auto_join=True,
     )
@@ -2347,7 +2498,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         cookies,
         imei=imei,
         log_func=lambda msg, typ="info": task.log(msg, typ),
-        zpw_ver=get_zpw_ver(),
+        zpw_ver=zpw_ver,
     )
     members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
 
@@ -2359,7 +2510,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         cookies,
         imei=imei,
         log_func=lambda msg, typ="info": task.log(msg, typ),
-        zpw_ver=get_zpw_ver(),
+        zpw_ver=zpw_ver,
     )
 
     account_uid = str(
@@ -3239,6 +3390,7 @@ def api_refresh_account_groups():
                 account_id,
                 loginCaptured=False,
                 userinfoCaptured=False,
+                zpwEnk="",
                 cookies="",
                 personalGroups=[],
                 groupsSyncedAt=0,
@@ -3359,16 +3511,11 @@ def api_get_group_members_for_manager():
         return jsonify({"success": False, "error": "Chưa chọn nhóm.", "members": []}), 400
 
     try:
-        account, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=False)
-        zpw_ver = get_zpw_ver()
-
-        member_payload = fetch_group_members_by_input(
+        member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
+            account_id,
             group_id,
-            zpw_enk,
-            cookies,
             callback=None,
-            zpw_ver=zpw_ver,
-            imei=imei,
+            require_imei=False,
         )
 
         uid_list = member_payload.get("uidList") or []
@@ -3442,58 +3589,78 @@ def api_get_task_status(task_id):
 
 @app.route("/api/groups/info", methods=["POST"])
 def api_get_group_info():
-    """API: Lấy thông tin nhóm chi tiết từ Zalo API (không lấy danh sách thành viên)."""
+    """API: Lấy thông tin nhóm chi tiết từ Zalo API (không lấy danh sách thành viên).
+
+    Nhận groupId thô hoặc groupInput (link/ID) — dùng chung logic chuẩn hoá
+    link->groupId với luồng lấy thành viên (resolve_group_input_to_group_id)
+    để trang Sao chép nhóm có thể xem trước avatar/tên/số thành viên nhóm
+    nguồn ngay khi dán link, không cần tạo hẳn tác vụ mới biết.
+    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
-    
+
     account_id = data.get("accountId") or data.get("account_id")
-    group_id = data.get("groupId") or data.get("group_id")
-    
-    if not account_id or not group_id:
+    group_input = str(
+        data.get("groupInput") or data.get("groupId") or data.get("group_id") or ""
+    ).strip()
+
+    if not account_id or not group_input:
         return jsonify({"error": "Thiếu accountId hoặc groupId"}), 400
-    
+
     try:
         account = get_account(account_id)
         if not account:
             return jsonify({"error": "Không tìm thấy tài khoản"}), 404
-        
+
         zpw_enk = account.get("zpwEnk", "")
         cookies = account.get("cookies", "")
         imei = account.get("imei", "")
-        
+
         if not zpw_enk or not cookies:
             return jsonify({"error": "Tài khoản chưa đầy đủ thông tin (zpwEnk, cookies)"}), 400
-        
+
+        try:
+            _, group_id, resolved_info, _ = resolve_group_input_to_group_id(
+                group_input, zpw_enk, cookies, zpw_ver=get_zpw_ver()
+            )
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        resolved_info = resolved_info or {}
+
+        if not group_id:
+            return jsonify({"success": False, "error": "Không xác định được Group ID từ link/ID đã nhập."}), 400
+
         sse_broadcast(f"Đang lấy thông tin nhóm {group_id[:8]}...", "loading")
-        
+
         from features.members.get_members import get_members as get_members_api
-        
+
         try:
             print(f"[api_groups_info] Calling get_members for group {group_id[:8]} zpw_enk={zpw_enk[:8]}... cookies len={len(cookies)}")
             resp, decoded, ginfo, mem_list = get_members_api(group_id, zpw_enk, cookies, imei=imei, zpw_ver=get_zpw_ver())
-            
+
             print(f"[api_groups_info] Response: decoded={type(decoded)} ginfo keys={list(ginfo.keys()) if ginfo else 'None'}")
-            
+
             if not ginfo:
                 print(f"[api_groups_info] ginfo is empty!")
                 ginfo = {}
-            
-            print(f"[api_groups_info] Returning groupInfo with name={ginfo.get('grid_name', 'N/A')}")
-            sse_broadcast(f"Hoàn thành! {ginfo.get('grid_name', 'Nhóm')}", "success")
-            
+
+            merged_name = ginfo.get("grid_name") or resolved_info.get("name") or ""
+            print(f"[api_groups_info] Returning groupInfo with name={merged_name or 'N/A'}")
+            sse_broadcast(f"Hoàn thành! {merged_name or 'Nhóm'}", "success")
+
             return jsonify({
                 "success": True,
                 "groupInfo": {
                     "groupId": ginfo.get("gridId", group_id),
-                    "name": ginfo.get("grid_name", ""),
-                    "desc": ginfo.get("grid_desc", ""),
+                    "name": merged_name,
+                    "desc": ginfo.get("grid_desc", "") or resolved_info.get("desc", ""),
                     "type": ginfo.get("grid_type", 0),
                     "creatorId": ginfo.get("grid_creatorId", ""),
                     "adminIds": ginfo.get("grid_adminIds", []),
-                    "avt": ginfo.get("grid_avatar", ""),
-                    "fullAvt": ginfo.get("grid_fullAvt", ""),
-                    "totalMember": ginfo.get("grid_totalMember", 0),
+                    "avt": ginfo.get("grid_avatar", "") or resolved_info.get("avt", ""),
+                    "fullAvt": ginfo.get("grid_fullAvt", "") or resolved_info.get("fullAvt", ""),
+                    "totalMember": ginfo.get("grid_totalMember", 0) or resolved_info.get("totalMember", 0),
                 }
             })
         
@@ -3740,6 +3907,17 @@ def after_request(response):
         elif 'text/' in content_type:
             response.headers['Content-Type'] = f'{content_type}; charset=utf-8'
     
+    # Do not let the embedded browser keep an old HTML/CSS/JS version after a
+    # patch has been copied over the application directory.
+    request_path = request.path or ""
+    if (
+        "text/html" in response.headers.get("Content-Type", "")
+        or request_path.startswith("/static/")
+    ):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
     return response
 
 

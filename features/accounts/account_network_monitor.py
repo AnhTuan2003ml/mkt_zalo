@@ -40,12 +40,19 @@ CONNECT_RETRY_SEC = 2
 
 ZALO_HOST_MARKERS = ("zalo.me", "zadn.vn", "zing.vn")
 ZALO_COOKIE_URLS = [
+    "https://zalo.me",
+    "https://id.zalo.me",
     "https://chat.zalo.me",
     "https://wpa.chat.zalo.me",
     "https://jr.chat.zalo.me",
     "https://api-wpa.chat.zalo.me",
     "https://tt-profile-wpa.chat.zalo.me",
+    "https://tt-group-wpa.chat.zalo.me",
+    "https://group-wpa.chat.zalo.me",
+    "https://p4-msg.chat.zalo.me",
 ]
+COOKIE_POLL_INTERVAL_SEC = 2.5
+SESSION_COOKIE_NAME = "zpw_sek"
 
 _monitors = {}
 _request_meta = {}
@@ -321,6 +328,38 @@ def _format_network_cookies(cookies_list) -> str:
     return "; ".join(parts)
 
 
+def _cookie_str_to_dict(cookie_str: str) -> dict:
+    result = {}
+    for item in str(cookie_str or "").split(";"):
+        item = item.strip()
+        if not item or "=" not in item:
+            continue
+        name, value = item.split("=", 1)
+        name = name.strip()
+        if name:
+            result[name] = value.strip()
+    return result
+
+
+def _cookie_dict_to_str(cookie_map: dict) -> str:
+    return "; ".join(
+        f"{name}={value}"
+        for name, value in (cookie_map or {}).items()
+        if name and value is not None
+    )
+
+
+def _merge_cookie_strings(*cookie_strings: str) -> str:
+    merged = {}
+    for cookie_str in cookie_strings:
+        merged.update(_cookie_str_to_dict(cookie_str))
+    return _cookie_dict_to_str(merged)
+
+
+def _has_session_cookie(cookie_str: str) -> bool:
+    return bool(_cookie_str_to_dict(cookie_str).get(SESSION_COOKIE_NAME))
+
+
 def _valid_zalo_cookie(cookie_str: str) -> bool:
     if not cookie_str or len(cookie_str) < 8:
         return False
@@ -348,11 +387,13 @@ def _merge_request_meta(account_id: str, request_id: str, url: str = "",
                     if n:
                         meta["headers"][n] = v
 
-    cookie = _header_get(meta["headers"], "cookie")
-    if not cookie and associated_cookies:
-        cookie = _cookies_from_associated(associated_cookies)
-        if cookie:
-            meta["headers"]["Cookie"] = cookie
+    header_cookie = _header_get(meta["headers"], "cookie")
+    associated_cookie = _cookies_from_associated(associated_cookies)
+    cookie = _merge_cookie_strings(header_cookie, associated_cookie)
+    if cookie:
+        # Chrome đôi khi chỉ đưa một phần cookie vào request header, trong khi
+        # associatedCookies vẫn chứa zpw_sek. Luôn hợp nhất cả hai nguồn.
+        meta["headers"]["Cookie"] = cookie
     return meta
 
 
@@ -363,10 +404,29 @@ def _extract_cookie_from_meta(meta: dict) -> str:
 
 
 def _save_cookies(account_id: str, cookie_str: str, source: str = ""):
-    if not _valid_zalo_cookie(cookie_str):
+    """Lưu cookie theo kiểu hợp nhất, không để request cookie rút gọn ghi đè
+    làm mất zpw_sek đã bắt được trước đó."""
+    incoming = str(cookie_str or "").strip()
+    if not _valid_zalo_cookie(incoming):
         return False
-    update_account(account_id, cookies=cookie_str.strip())
-    _log(f"Đã lưu cookies ({source}) account={account_id} len={len(cookie_str)}")
+
+    account = get_account(account_id) or {}
+    current = str(account.get("cookies") or "").strip()
+    merged = _merge_cookie_strings(current, incoming)
+    if not _valid_zalo_cookie(merged):
+        return False
+
+    if merged != current:
+        fields = {"cookies": merged}
+        if _has_session_cookie(merged):
+            fields["sessionCapturedAt"] = int(time.time() * 1000)
+        update_account(account_id, **fields)
+
+    auth_state = "zpw_sek=OK" if _has_session_cookie(merged) else "zpw_sek=MISSING"
+    _log(
+        f"Đã lưu cookies ({source}) account={account_id} "
+        f"len={len(merged)} {auth_state}"
+    )
     return True
 
 
@@ -393,6 +453,78 @@ def _get_zalo_ws_url(debug_port: int, deadline: float):
     return None
 
 
+def _get_browser_ws_url(debug_port: int) -> str:
+    """Lấy WebSocket của browser target để đọc cookie HttpOnly toàn profile.
+
+    ``Storage.getCookies`` ổn định hơn khi gọi ở browser target; một số bản
+    Chrome không trả đủ zpw_sek nếu chỉ gọi từ page target.
+    """
+    try:
+        response = requests.get(
+            f"http://127.0.0.1:{int(debug_port)}/json/version",
+            timeout=3,
+        )
+        return str((response.json() or {}).get("webSocketDebuggerUrl") or "")
+    except Exception:
+        return ""
+
+
+def _is_zalo_cookie_object(cookie: dict) -> bool:
+    domain = str((cookie or {}).get("domain") or "").lower().lstrip(".")
+    return any(marker in domain for marker in ("zalo.me", "zadn.vn", "zing.vn"))
+
+
+def _refresh_browser_storage_cookies(account_id: str, debug_port: int, timeout: float = 4.0) -> bool:
+    """Đọc cookie trực tiếp từ browser context, không đụng vào thư mục data.
+
+    Dữ liệu chỉ được cập nhật sau khi Chrome trả về cookie hợp lệ; bộ cookie
+    cũ luôn được hợp nhất nên zpw_sek không bị mất bởi một request rút gọn.
+    """
+    if websocket is None:
+        return False
+    browser_ws = _get_browser_ws_url(debug_port)
+    if not browser_ws:
+        return False
+
+    ws = None
+    try:
+        ws = websocket.create_connection(browser_ws, timeout=max(2.0, timeout))
+        ws.settimeout(0.8)
+        command_id = 910001
+        ws.send(json.dumps({
+            "id": command_id,
+            "method": "Storage.getCookies",
+            "params": {},
+        }))
+        deadline = time.time() + max(2.0, timeout)
+        while time.time() < deadline:
+            try:
+                raw = ws.recv()
+            except websocket.WebSocketTimeoutException:
+                continue
+            if not raw:
+                continue
+            message = json.loads(raw)
+            if message.get("id") != command_id:
+                continue
+            cookies = [
+                item for item in ((message.get("result") or {}).get("cookies") or [])
+                if _is_zalo_cookie_object(item)
+            ]
+            cookie_str = _format_network_cookies(cookies)
+            if cookie_str:
+                _save_cookies(account_id, cookie_str, "Storage.getCookies(browser)")
+            account = get_account(account_id) or {}
+            return _has_session_cookie(account.get("cookies") or "")
+    except Exception as error:
+        _log(f"Đọc browser cookies lỗi account={account_id}: {error}")
+    finally:
+        try:
+            if ws:
+                ws.close()
+        except Exception:
+            pass
+    return False
 
 
 def _navigate_to_zalo_after_network_enabled(ws, next_id_fn, account_id: str):
@@ -524,9 +656,8 @@ def _process_login_info(account_id: str, url: str, headers: dict, body_text: str
     fields = {
         "zpwEnk": zpw_enk,
         "loginCaptured": True,
+        "sessionCapturedAt": int(time.time() * 1000),
     }
-    if cookie:
-        fields["cookies"] = cookie
 
     uid = inner.get("uid")
     if uid:
@@ -569,8 +700,6 @@ def _process_userinfo(account_id: str, headers: dict, body_text: str):
         fields["name"] = name
     if avatar_url:
         fields["avatarUrl"] = avatar_url
-    if cookie:
-        fields["cookies"] = cookie
 
     update_account(account_id, **fields)
     _log(f"Đã lưu userinfo name={name!r} account={account_id}")
@@ -630,13 +759,10 @@ def _process_server_info(account_id: str, url: str, headers: dict, body_text: st
     _log(f"[DEBUG] getServerInfo zpw_enk={zpw_enk[:20] if zpw_enk else 'EMPTY'}")
     
     if zpw_enk:
-        fields = {
-            "zpwEnk": zpw_enk,
-        }
-        if cookie:
-            fields["cookies"] = cookie
-        
-        update_account(account_id, **fields)
+        # Cookie đã được hợp nhất bằng _save_cookies ở trên. Không gán trực tiếp
+        # request-cookie vào account vì request này có thể chỉ chứa một phần và
+        # làm mất zpw_sek vừa bắt được từ Chrome.
+        update_account(account_id, zpwEnk=zpw_enk)
         _log(f"✅ Đã lưu zpwEnk từ getServerInfo account={account_id}")
     else:
         _log(f"📡 Captured getServerInfo account={account_id}")
@@ -694,9 +820,13 @@ def _process_group_list(account_id: str, headers: dict, body_text: str, zpw_enk:
         # Get cookies for fetching group details. Ưu tiên cookie ngay trên request getlg/v4,
         # vì trên máy khác account cookies trong file data có thể chưa kịp lưu hoặc đã hết hạn.
         acc = get_account(account_id)
-        cookies = _header_get(headers, "cookie") or (acc.get("cookies", "") if acc else "")
-        if cookies:
-            _save_cookies(account_id, cookies, "getlg-header")
+        request_cookies = _header_get(headers, "cookie")
+        if request_cookies:
+            _save_cookies(account_id, request_cookies, "getlg-header")
+        # Luôn truyền cookie đã hợp nhất cho thread lấy chi tiết nhóm. Không dùng
+        # trực tiếp request-cookie rút gọn vì có thể thiếu zpw_sek.
+        acc = get_account(account_id) or acc or {}
+        cookies = str(acc.get("cookies") or "").strip()
         
         # Lưu group IDs trước; group_manager sẽ tự chạy thread lấy chi tiết nhóm song song
         save_account_groups(account_id, group_ids, zpw_enk, cookies)
@@ -748,27 +878,112 @@ def _handle_get_cookies_result(account_id: str, result: dict, merged_store: dict
 
 def _request_network_cookies(ws, account_id: str, next_id_fn,
                              pending_cookie_cmds: dict, merged_store: dict):
+    """Yêu cầu cookie theo từng host và toàn bộ browser context.
+
+    Việc gọi lặp lại là cần thiết vì lần gọi đầu thường xảy ra trước khi Zalo
+    hoàn tất đăng nhập và tạo zpw_sek.
+    """
     for url in ZALO_COOKIE_URLS:
-        cmd_id = next_id_fn()
-        pending_cookie_cmds[cmd_id] = merged_store
-        ws.send(
-            json.dumps(
-                {
-                    "id": cmd_id,
-                    "method": "Network.getCookies",
-                    "params": {"urls": [url]},
-                }
-            )
-        )
+        try:
+            cmd_id = next_id_fn()
+            pending_cookie_cmds[cmd_id] = merged_store
+            ws.send(json.dumps({
+                "id": cmd_id,
+                "method": "Network.getCookies",
+                "params": {"urls": [url]},
+            }))
+        except Exception:
+            continue
+
+    # Hai lệnh dưới giúp lấy cookie HttpOnly / cookie dùng chung .zalo.me mà
+    # request theo một URL cụ thể đôi khi không trả về.
+    for method in ("Network.getAllCookies", "Storage.getCookies"):
+        try:
+            cmd_id = next_id_fn()
+            pending_cookie_cmds[cmd_id] = merged_store
+            ws.send(json.dumps({"id": cmd_id, "method": method, "params": {}}))
+        except Exception:
+            continue
+
+
+def refresh_account_cookies(account_id: str, debug_port: int, timeout: float = 8.0) -> bool:
+    """Đọc lại cookie trực tiếp từ Chrome đang mở.
+
+    Ưu tiên browser target để lấy cookie HttpOnly toàn profile, sau đó mới dùng
+    page target và request headers làm nguồn bổ sung.
+    """
+    if websocket is None:
+        return False
+
+    if _refresh_browser_storage_cookies(
+        account_id, int(debug_port), timeout=min(4.5, max(2.0, float(timeout or 0)))
+    ):
+        return True
+
+    deadline = time.time() + max(2.0, float(timeout or 0))
+    ws_url = _get_zalo_ws_url(int(debug_port), min(deadline, time.time() + 4.0))
+    if not ws_url:
+        return False
+
+    ws = None
+    msg_id = [0]
+    pending = {}
+    merged_store = {}
+
+    def next_id():
+        msg_id[0] += 1
+        return msg_id[0]
+
+    try:
+        ws = websocket.create_connection(ws_url, timeout=5)
+        ws.settimeout(0.7)
+        ws.send(json.dumps({"id": next_id(), "method": "Network.enable", "params": {}}))
+        _request_network_cookies(ws, account_id, next_id, pending, merged_store)
+
+        while time.time() < deadline and pending:
+            try:
+                raw = ws.recv()
+            except websocket.WebSocketTimeoutException:
+                continue
+            except Exception:
+                break
+            if not raw:
+                continue
+            try:
+                message = json.loads(raw)
+            except Exception:
+                continue
+            mid = message.get("id")
+            if mid not in pending:
+                continue
+            merged = pending.pop(mid)
+            _handle_get_cookies_result(account_id, message.get("result") or {}, merged)
+
+        account = get_account(account_id) or {}
+        ok = _has_session_cookie(account.get("cookies") or "")
+        _log(f"Làm mới cookie trực tiếp account={account_id} zpw_sek={'OK' if ok else 'MISSING'}")
+        return ok
+    except Exception as e:
+        _log(f"Làm mới cookie trực tiếp lỗi account={account_id}: {e}")
+        return False
+    finally:
+        try:
+            if ws:
+                ws.close()
+        except Exception:
+            pass
 
 
 def _monitor_worker(account_id: str, debug_port: int, stop_event: threading.Event):
     deadline = time.time() + MONITOR_TIMEOUT_SEC
+    # Bắt cookie từ browser context trước, không xóa session đang lưu.
+    _refresh_browser_storage_cookies(account_id, debug_port, timeout=3.5)
     msg_id = [0]
     pending_body = {}
     pending_cookie_cmds = {}
     cookie_merge = {}
     reload_done = [False]
+    last_cookie_poll = [0.0]
 
     def next_id():
         msg_id[0] += 1
@@ -800,6 +1015,7 @@ def _monitor_worker(account_id: str, debug_port: int, stop_event: threading.Even
             _request_network_cookies(
                 ws, account_id, next_id, pending_cookie_cmds, cookie_merge
             )
+            last_cookie_poll[0] = time.time()
 
             if account_id not in _request_meta:
                 _request_meta[account_id] = {}
@@ -807,6 +1023,13 @@ def _monitor_worker(account_id: str, debug_port: int, stop_event: threading.Even
             while time.time() < deadline and not stop_event.is_set():
                 if account_capture_complete(account_id):
                     break
+
+                now = time.time()
+                if now - last_cookie_poll[0] >= COOKIE_POLL_INTERVAL_SEC:
+                    _request_network_cookies(
+                        ws, account_id, next_id, pending_cookie_cmds, cookie_merge
+                    )
+                    last_cookie_poll[0] = now
 
                 try:
                     raw = ws.recv()
@@ -932,6 +1155,11 @@ def _monitor_worker(account_id: str, debug_port: int, stop_event: threading.Even
 
                         if GET_LOGIN_INFO_MARKER in url:
                             _process_login_info(account_id, url, headers, body)
+                            _refresh_browser_storage_cookies(account_id, debug_port, timeout=3.0)
+                            _request_network_cookies(
+                                ws, account_id, next_id, pending_cookie_cmds, cookie_merge
+                            )
+                            last_cookie_poll[0] = time.time()
                             _try_process_pending_group_list(account_id)
                             # Reload page once after capturing login info để bắt getServerInfo
                             if not reload_done[0] and ws:
@@ -943,6 +1171,10 @@ def _monitor_worker(account_id: str, debug_port: int, stop_event: threading.Even
                             _process_userinfo(account_id, headers, body)
                         elif url.startswith(SERVER_INFO_URL_PREFIX):
                             _process_server_info(account_id, url, headers, body)
+                            _request_network_cookies(
+                                ws, account_id, next_id, pending_cookie_cmds, cookie_merge
+                            )
+                            last_cookie_poll[0] = time.time()
                             _try_process_pending_group_list(account_id)
                         elif url.startswith(GROUP_LIST_API_PREFIX):
                             # Get current zpwEnk to decrypt group list

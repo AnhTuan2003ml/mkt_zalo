@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kích hoạt phần mềm - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
     <style>
         .activation-wrap { max-width: 1080px; margin: 0 auto; }
         .activation-hero {
@@ -68,8 +68,9 @@
             .disclaimer { font-size: 10px; max-width: 200px; }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
-<body>
+<body class="activation-page">
     {% include '_nav.html' %}
     <main class="page">
         <div class="activation-wrap">

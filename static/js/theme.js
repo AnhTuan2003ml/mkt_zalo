@@ -5,15 +5,15 @@
     window.__NEXUS_THEME_LOADED__ = true;
 
     var STORAGE_KEY = 'nexus-theme';
-    // Chỉ còn chế độ tối — bỏ chế độ sáng theo yêu cầu người dùng.
-    var THEMES = { dark: true };
+    // Giao diện Nexus sử dụng chế độ sáng thống nhất để dữ liệu dễ đọc.
+    var THEMES = { light: true };
 
     function safeGetTheme() {
         try {
             var saved = localStorage.getItem(STORAGE_KEY);
-            return THEMES[saved] ? saved : 'dark';
+            return THEMES[saved] ? saved : 'light';
         } catch (error) {
-            return 'dark';
+            return 'light';
         }
     }
 
@@ -31,31 +31,31 @@
     }
 
     function themeLabel(theme) {
-        return theme === 'dark' ? 'Chế độ tối' : 'Chế độ sáng';
+        return 'Chế độ sáng';
     }
 
     function updateThemeControls(theme) {
         document.querySelectorAll('[data-theme-toggle]').forEach(function (button) {
-            var targetTheme = theme === 'dark' ? 'light' : 'dark';
+            var targetTheme = 'light';
             button.setAttribute('aria-label', 'Chuyển sang ' + themeLabel(targetTheme).toLowerCase());
             button.setAttribute('title', 'Chuyển sang ' + themeLabel(targetTheme).toLowerCase());
-            button.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+            button.setAttribute('aria-pressed', 'false');
 
             var label = button.querySelector('[data-theme-label]');
             if (label) label.textContent = themeLabel(theme);
 
             var description = button.querySelector('[data-theme-description]');
-            if (description) description.textContent = theme === 'dark' ? 'Dịu mắt khi làm việc lâu' : 'Rõ ràng trong môi trường sáng';
+            if (description) description.textContent = 'Rõ ràng trong môi trường sáng';
 
             var sunIcon = button.querySelector('[data-theme-icon="sun"]');
             var moonIcon = button.querySelector('[data-theme-icon="moon"]');
-            if (sunIcon) sunIcon.hidden = theme !== 'light';
-            if (moonIcon) moonIcon.hidden = theme !== 'dark';
+            if (sunIcon) sunIcon.hidden = false;
+            if (moonIcon) moonIcon.hidden = true;
         });
     }
 
     function applyTheme(theme, persist) {
-        theme = THEMES[theme] ? theme : 'dark';
+        theme = 'light';
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.style.colorScheme = theme;
         if (document.body) document.body.setAttribute('data-theme', theme);
@@ -65,7 +65,7 @@
     }
 
     function toggleTheme() {
-        return applyTheme('dark', true);
+        return applyTheme('light', true);
     }
 
     function quickPanel() {
@@ -149,6 +149,27 @@
     }
 
     applyTheme(safeGetTheme(), false);
+
+    function sessionCookieHas(cookieString, cookieName) {
+        var target = String(cookieName || '').trim().toLowerCase();
+        if (!target) return false;
+        return String(cookieString || '').split(';').some(function (part) {
+            var index = part.indexOf('=');
+            if (index < 0) return false;
+            return part.slice(0, index).trim().toLowerCase() === target && part.slice(index + 1).trim().length > 0;
+        });
+    }
+
+    function sessionAccountReady(account, requireImei) {
+        if (!account || !account.loginCaptured || !account.zpwEnk) return false;
+        if (!sessionCookieHas(account.cookies, 'zpw_sek')) return false;
+        return requireImei ? !!account.imei : true;
+    }
+
+    window.NexusSession = {
+        cookieHas: sessionCookieHas,
+        accountReady: sessionAccountReady
+    };
 
     window.NexusUI = {
         applyTheme: applyTheme,

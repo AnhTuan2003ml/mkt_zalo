@@ -4,7 +4,16 @@
 (function () {
     'use strict';
 
-    var state = { schedules: [], plans: [], accounts: [], all: [] };
+    var initialCalendarDate = new Date();
+    var state = {
+        schedules: [],
+        plans: [],
+        accounts: [],
+        all: [],
+        calendarYear: initialCalendarDate.getFullYear(),
+        calendarMonth: initialCalendarDate.getMonth(),
+        selectedDateKey: ''
+    };
     var REFRESH_MS = 15000;
     var refreshTimer = null;
 
@@ -38,6 +47,52 @@
         var ts = parseTime(v);
         if (!ts) return '-';
         return new Date(ts).toLocaleDateString('vi-VN');
+    }
+
+    function dateFromKey(key) {
+        var parts = String(key || '').split('-').map(Number);
+        if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+        return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
+    }
+
+    function formatDateKey(key, includeWeekday) {
+        var d = dateFromKey(key);
+        if (!d) return 'Tất cả thời gian';
+        return d.toLocaleDateString('vi-VN', includeWeekday ? {
+            weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric'
+        } : {
+            day: '2-digit', month: '2-digit', year: 'numeric'
+        });
+    }
+
+    function itemDateTimes(item) {
+        var values = [];
+        function add(v) {
+            var ts = parseTime(v);
+            if (ts && values.indexOf(ts) === -1) values.push(ts);
+        }
+        if (!item) return values;
+        if (item._itemType === 'schedule') {
+            add(item.runAt);
+            return values;
+        }
+        add(item.startDate);
+        add(item._nextTime);
+        getPlanBatches(item).forEach(function (batch) {
+            add(batch.date || batch.runAt || batch.scheduledAt);
+        });
+        return values;
+    }
+
+    function itemOccursOnDate(item, key) {
+        if (!key) return true;
+        return itemDateTimes(item).some(function (ts) { return localDayKey(ts) === key; });
+    }
+
+    function selectedDateSortTime(item, key) {
+        var matches = itemDateTimes(item).filter(function (ts) { return localDayKey(ts) === key; });
+        if (!matches.length) return item._sortTime || 0;
+        return Math.min.apply(Math, matches);
     }
 
     function statusLabel(status) {
@@ -175,6 +230,9 @@
         var upcoming = state.all.filter(function (item) {
             return !isRunning(item) && isPendingLike(item) && item._nextTime > 0 && item._nextTime <= Date.now() + 24 * 3600000;
         });
+        var allUpcoming = state.all.filter(function (item) {
+            return !isRunning(item) && isPendingLike(item) && item._nextTime > 0;
+        });
         var doneToday = state.all.filter(isDoneToday);
         var errorItems = state.all.filter(isError);
 
@@ -183,10 +241,12 @@
         setText('statDoneToday', doneToday.length);
         setText('statError', errorItems.length);
         setText('runningCountPill', running.length);
+        setText('upcomingCountPill', allUpcoming.length);
 
         var dot = document.getElementById('schedmonLiveDot');
         if (dot) dot.classList.toggle('idle', running.length === 0);
     }
+
 
     function setText(id, value) {
         var el = document.getElementById(id);
@@ -199,42 +259,53 @@
         var card = document.createElement('div');
         card.className = 'schedmon-running-card';
 
+        var title = item._itemType === 'schedule' ? (item.title || 'Không có tiêu đề') : (item.name || kind.label);
+        var account = accountName(item);
+        var runTime = item._itemType === 'schedule' ? formatDateTime(item.runAt) : formatDateTime(item._nextTime || item.startDate);
+        var percent = 0;
+        var processed = 0;
+        var total = 0;
+        var success = 0;
+        var failed = 0;
+        var actionHtml = '';
+
         if (item._itemType === 'schedule') {
             var recipients = item.recipients || [];
             var results = item.results || [];
-            var ok = results.filter(function (r) { return r.status === 'success'; }).length;
-            var fail = results.filter(function (r) { return r.status === 'failed'; }).length;
-            var total = recipients.length || 1;
-            var percent = Math.round(((ok + fail) / total) * 100);
-            card.innerHTML =
-                '<span class="schedmon-run-dot"></span><span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span>' +
-                '<div class="schedmon-running-title">' + escHtml(item.title || 'Không có tiêu đề') + '</div>' +
-                '<div class="schedmon-running-sub">' + escHtml(accountName(item)) + ' · bắt đầu ' + escHtml(formatDateTime(item.runAt)) + '</div>' +
-                '<div class="schedule-progress-wrap">' +
-                    '<div class="schedule-progress-line"><div class="schedule-progress-bar" style="width:' + percent + '%"></div></div>' +
-                    '<div class="schedule-progress-text"><span>' + (ok + fail) + '/' + recipients.length + ' đã xử lý</span><span>' + ok + ' thành công · ' + fail + ' lỗi</span></div>' +
-                '</div>' +
-                '<div class="schedmon-running-actions">' +
-                    '<button class="btn btn-ghost btn-sm" onclick="SchedMon.showDetail(\'' + item.scheduleId + '\')">Chi tiết</button>' +
-                    '<button class="btn btn-warning btn-sm" onclick="SchedMon.cancelSchedule(\'' + item.scheduleId + '\')">Hủy</button>' +
-                '</div>';
+            success = results.filter(function (r) { return r.status === 'success'; }).length;
+            failed = results.filter(function (r) { return r.status === 'failed'; }).length;
+            total = recipients.length;
+            processed = success + failed;
+            percent = total ? Math.round((processed / total) * 100) : 0;
+            actionHtml =
+                '<button class="btn btn-ghost btn-sm" onclick="SchedMon.showDetail(\'' + item.scheduleId + '\')">Chi tiết</button>' +
+                '<button class="btn btn-warning btn-sm" onclick="SchedMon.cancelSchedule(\'' + item.scheduleId + '\')">Hủy</button>';
         } else {
             var pg = item.progress || {};
-            var percent2 = Math.max(0, Math.min(100, Number(pg.percent || 0)));
-            card.innerHTML =
-                '<span class="schedmon-run-dot"></span><span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span>' +
-                '<div class="schedmon-running-title">' + escHtml(item.name || kind.label) + '</div>' +
-                '<div class="schedmon-running-sub">' + escHtml(item.accountName || item.accountId || 'N/A') + ' · ' + (pg.doneBatches || 0) + '/' + (pg.totalBatches || getPlanBatches(item).length) + ' batch xong</div>' +
-                '<div class="schedule-progress-wrap">' +
-                    '<div class="schedule-progress-line"><div class="schedule-progress-bar" style="width:' + percent2 + '%"></div></div>' +
-                    '<div class="schedule-progress-text"><span>Tiến độ: ' + percent2 + '%</span><span>' + (pg.processedMembers || 0) + '/' + (pg.totalMembers || item.totalMembers || 0) + ' người</span></div>' +
-                '</div>' +
-                '<div class="schedmon-running-actions">' +
-                    '<button class="btn btn-ghost btn-sm" onclick=\'SchedMon.showActionPlanDetail(' + jsArg(item.planType) + ',' + jsArg(item.id || '') + ')\'>Chi tiết / cập nhật</button>' +
-                '</div>';
+            percent = Math.max(0, Math.min(100, Number(pg.percent || 0)));
+            total = Number(pg.totalMembers || item.totalMembers || 0);
+            processed = Number(pg.processedMembers || 0);
+            success = Number(pg.doneMembers || processed || 0);
+            failed = Number(pg.failedMembers || 0);
+            actionHtml = '<button class="btn btn-ghost btn-sm" onclick=\'SchedMon.showActionPlanDetail(' + jsArg(item.planType) + ',' + jsArg(item.id || '') + ')\'>Chi tiết</button>';
         }
+
+        card.innerHTML =
+            '<div class="schedmon-running-main">' +
+                '<div class="schedmon-running-kicker"><span class="schedmon-run-dot"></span><span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span></div>' +
+                '<div class="schedmon-running-title" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
+                '<div class="schedmon-running-sub">' + escHtml(account) + '</div>' +
+            '</div>' +
+            '<div class="schedmon-running-metric"><span>Thời gian chạy</span><strong>' + escHtml(runTime) + '</strong></div>' +
+            '<div class="schedmon-running-progress">' +
+                '<div class="schedule-progress-line"><div class="schedule-progress-bar" style="width:' + percent + '%"></div></div>' +
+                '<div class="schedule-progress-text"><span>Tiến độ ' + percent + '%</span><span>' + processed + '/' + total + '</span></div>' +
+            '</div>' +
+            '<div class="schedmon-running-metric is-speed"><span>Kết quả</span><strong>' + success + ' thành công · ' + failed + ' lỗi</strong></div>' +
+            '<div class="schedmon-running-actions">' + actionHtml + '</div>';
         return card;
     }
+
 
     function renderRunning() {
         var root = document.getElementById('runningList');
@@ -257,10 +328,14 @@
         var upcoming = state.all
             .filter(function (item) { return !isRunning(item) && isPendingLike(item) && item._nextTime > 0; })
             .sort(function (a, b) { return a._nextTime - b._nextTime; })
-            .slice(0, 8);
+            .slice(0, 5);
+
+        setText('upcomingCountPill', state.all.filter(function (item) {
+            return !isRunning(item) && isPendingLike(item) && item._nextTime > 0;
+        }).length);
 
         if (!upcoming.length) {
-            root.innerHTML = '<div class="schedmon-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12h16M14 6l6 6-6 6"/></svg><b>Chưa có lịch nào sắp chạy</b><p>Tạo chiến dịch mới để thấy hàng chờ tại đây.</p></div>';
+            root.innerHTML = '<div class="schedmon-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12h16M14 6l6 6-6 6"/></svg><b>Chưa có lịch nào sắp chạy</b><p>Tạo chiến dịch mới để lịch tiếp theo xuất hiện tại đây.</p></div>';
             return;
         }
 
@@ -269,21 +344,27 @@
             var cd = countdownInfo(item._nextTime);
             var title = item._itemType === 'schedule' ? (item.title || 'Không có tiêu đề') : (item.name || kind.label);
             var id = item._itemType === 'schedule' ? item.scheduleId : item.id;
+            var total = item._itemType === 'schedule'
+                ? (item.recipients || []).length
+                : Number(((item.progress || {}).totalMembers) || item.totalMembers || 0);
             var actions = item._itemType === 'schedule'
                 ? '<button class="btn btn-success btn-sm" onclick="SchedMon.runNow(\'' + id + '\')">Chạy ngay</button>' +
-                  '<button class="btn btn-warning btn-sm" onclick="SchedMon.cancelSchedule(\'' + id + '\')">Hủy</button>'
+                  '<button class="btn btn-ghost btn-sm" onclick="SchedMon.showDetail(\'' + id + '\')">Chi tiết</button>'
                 : '<button class="btn btn-ghost btn-sm" onclick=\'SchedMon.showActionPlanDetail(' + jsArg(item.planType) + ',' + jsArg(id || '') + ')\'>Chi tiết</button>';
 
             return '<div class="schedmon-upcoming-item">' +
                 '<span class="schedmon-countdown-chip ' + cd.cls + '">' + escHtml(cd.text) + '</span>' +
                 '<div class="schedmon-upcoming-copy">' +
-                    '<div class="schedmon-up-title">' + escHtml(title) + '</div>' +
-                    '<div class="schedmon-up-meta"><span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span><span>' + escHtml(formatDateTime(item._nextTime)) + '</span><span>' + escHtml(accountName(item)) + '</span></div>' +
+                    '<div class="schedmon-up-title" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
+                    '<div class="schedmon-up-meta"><span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span><span>' + escHtml(accountName(item)) + '</span></div>' +
                 '</div>' +
+                '<div class="schedmon-upcoming-detail"><span>Thời gian</span><strong>' + escHtml(formatDateTime(item._nextTime)) + '</strong></div>' +
+                '<div class="schedmon-upcoming-detail is-estimate"><span>Quy mô</span><strong>' + total + ' người nhận</strong></div>' +
                 '<div class="schedmon-upcoming-actions">' + actions + '</div>' +
             '</div>';
         }).join('');
     }
+
 
     // ─── "Tất cả lịch" ───────────────────────────────────────────────────
     function jsArg(v) { return JSON.stringify(String(v == null ? '' : v)); }
@@ -295,83 +376,248 @@
         var ok = (sch.results || []).filter(function (r) { return r.status === 'success'; }).length;
         var fail = (sch.results || []).filter(function (r) { return r.status === 'failed'; }).length;
         var pend = Math.max(total - ok - fail, 0);
+        var processed = ok + fail;
+        var percent = total ? Math.round((processed / total) * 100) : 0;
 
-        var card = document.createElement('div');
-        card.className = 'schedule-card';
-        card.innerHTML =
-            '<div class="schedule-card-header">' +
-                '<div class="schedule-card-title-area">' +
-                    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span></div>' +
-                    '<h3 class="schedule-title">' + escHtml(sch.title || 'Không có tiêu đề') + '</h3>' +
-                    '<div class="schedule-time">🕒 ' + escHtml(formatDateTime(sch.runAt)) + '</div>' +
-                '</div>' +
-                '<span class="schedule-status-badge ' + badgeClass(st) + '">' + escHtml(statusLabel(st)) + '</span>' +
+        var row = document.createElement('div');
+        row.className = 'schedule-table-row';
+        row.innerHTML =
+            '<div class="schedule-table-cell">' +
+                '<div class="schedule-table-title" title="' + escHtml(sch.title || 'Không có tiêu đề') + '">' + escHtml(sch.title || 'Không có tiêu đề') + '</div>' +
+                '<div class="schedule-table-sub">' + escHtml((sch.message || 'Không có mô tả').slice(0, 90)) + '</div>' +
             '</div>' +
-            (sch.message ? '<div class="schedule-message">' + escHtml(sch.message) + '</div>' : '') +
-            '<div class="schedule-meta-row">' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Người nhận</span><span class="schedule-meta-value">' + ok + '/' + total + ' thành công</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Chưa gửi / Lỗi</span><span class="schedule-meta-value">' + pend + ' / ' + fail + '</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Tài khoản</span><span class="schedule-meta-value">' + escHtml(accountName(sch)) + '</span></div>' +
-            '</div>' +
-            '<div class="schedule-actions-group">' +
-                '<button class="btn btn-primary btn-sm" onclick="SchedMon.showEditModal(\'' + sch.scheduleId + '\')">Sửa</button>' +
-                '<button class="btn btn-ghost btn-sm" onclick="SchedMon.showDetail(\'' + sch.scheduleId + '\')">Chi tiết</button>' +
-                (st === 'pending' ? '<button class="btn btn-success btn-sm" onclick="SchedMon.runNow(\'' + sch.scheduleId + '\')">Chạy ngay</button>' : '') +
-                (st === 'pending' || st === 'running' ? '<button class="btn btn-warning btn-sm" onclick="SchedMon.cancelSchedule(\'' + sch.scheduleId + '\')">Hủy</button>' : '') +
-                (st !== 'running' ? '<button class="btn btn-danger btn-sm" onclick="SchedMon.deleteSchedule(\'' + sch.scheduleId + '\')">Xóa</button>' : '') +
+            '<div class="schedule-table-cell schedule-table-source"><span class="schedule-table-source-icon">Z</span><div><div class="schedule-table-value">' + escHtml(kind.label) + '</div><div class="schedule-table-sub">' + escHtml(accountName(sch)) + '</div></div></div>' +
+            '<div class="schedule-table-cell"><div class="schedule-table-value">' + escHtml(formatDateTime(sch.runAt)) + '</div></div>' +
+            '<div class="schedule-table-cell"><span class="schedule-status-badge ' + badgeClass(st) + '">' + escHtml(statusLabel(st)) + '</span></div>' +
+            '<div class="schedule-table-cell schedule-table-result"><strong>' + ok + '/' + total + ' (' + percent + '%)</strong><span>' + pend + ' chờ · ' + fail + ' lỗi</span></div>' +
+            '<div class="schedule-table-cell schedule-table-actions">' +
+                '<button class="schedule-icon-btn" title="Xem chi tiết" onclick="SchedMon.showDetail(\'' + sch.scheduleId + '\')">' + iconSvg('eye') + '</button>' +
+                '<button class="schedule-icon-btn" title="Sửa lịch" onclick="SchedMon.showEditModal(\'' + sch.scheduleId + '\')">' + iconSvg('edit') + '</button>' +
+                (st === 'pending' ? '<button class="schedule-icon-btn" title="Chạy ngay" onclick="SchedMon.runNow(\'' + sch.scheduleId + '\')">' + iconSvg('play') + '</button>' : '') +
+                (st !== 'running' ? '<button class="schedule-icon-btn is-danger" title="Xóa" onclick="SchedMon.deleteSchedule(\'' + sch.scheduleId + '\')">' + iconSvg('trash') + '</button>' : '<button class="schedule-icon-btn is-danger" title="Hủy" onclick="SchedMon.cancelSchedule(\'' + sch.scheduleId + '\')">' + iconSvg('stop') + '</button>') +
             '</div>';
-        return card;
+        return row;
     }
+
 
     function buildActionPlanCard(plan) {
         var st = actionPlanStatus(plan);
         var pg = plan.progress || {};
         var kind = kindInfo(plan);
         var total = Number(pg.totalMembers || plan.totalMembers || 0);
-        var pending = Number(pg.pendingMembers || Math.max(total - (pg.doneMembers || 0) - (pg.failedMembers || 0), 0));
+        var processed = Number(pg.processedMembers || 0);
         var failed = Number(pg.failedMembers || 0);
-        var percent = Math.max(0, Math.min(100, Number(pg.percent || 0)));
-        var groups = (plan.targetGroups || []).map(function (g) { return g.name || g.groupName || g.groupId; }).filter(Boolean).join(', ');
-        if (!groups && (plan.targetGroupIds || []).length) groups = (plan.targetGroupIds || []).join(', ');
-        var after = plan.afterAction === 'invite_existing_group' ? ('Sau kết bạn: mời vào ' + (groups || 'nhóm đã chọn')) : (plan.afterAction === 'create_new_group' ? ('Sau kết bạn: tạo nhóm ' + (plan.newGroupName || 'mới')) : 'Chỉ lưu/gửi theo lịch');
-        var metaTarget = plan.planType === 'group_invite' ? (groups || '-') : after;
+        var success = Math.max(processed - failed, 0);
+        var pending = Number(pg.pendingMembers || Math.max(total - processed, 0));
+        var percent = Math.max(0, Math.min(100, Number(pg.percent || (total ? Math.round(processed * 100 / total) : 0))));
+        var title = plan.name || kind.label;
 
-        var card = document.createElement('div');
-        card.className = 'schedule-card';
-        card.innerHTML =
-            '<div class="schedule-card-header">' +
-                '<div class="schedule-card-title-area">' +
-                    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">' +
-                        '<span class="schedule-kind-badge ' + kind.cls + '">' + escHtml(kind.label) + '</span>' +
-                        '<span class="schedule-time">Bắt đầu ' + escHtml(formatDate(plan.startDate)) + '</span>' +
-                    '</div>' +
-                    '<h3 class="schedule-title">' + escHtml(plan.name || kind.label) + '</h3>' +
-                '</div>' +
-                '<span class="schedule-status-badge ' + badgeClass(st) + '">' + escHtml(statusLabel(st)) + '</span>' +
+        var row = document.createElement('div');
+        row.className = 'schedule-table-row';
+        row.innerHTML =
+            '<div class="schedule-table-cell">' +
+                '<div class="schedule-table-title" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
+                '<div class="schedule-table-sub">' + escHtml((plan.message || plan.planTypeLabel || 'Kế hoạch tự động').slice(0, 90)) + '</div>' +
             '</div>' +
-            (plan.message ? '<div class="schedule-message">' + escHtml(plan.message) + '</div>' : '') +
-            '<div class="schedule-progress-wrap">' +
-                '<div class="schedule-progress-line"><div class="schedule-progress-bar" style="width:' + percent + '%"></div></div>' +
-                '<div class="schedule-progress-text"><span>Tiến độ: ' + percent + '%</span><span>' + (pg.processedMembers || 0) + '/' + total + ' đã xử lý</span></div>' +
-            '</div>' +
-            '<div class="schedule-meta-row">' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Mỗi ngày</span><span class="schedule-meta-value">' + escHtml(String(plan.dailyLimit || 1)) + ' người</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Batch</span><span class="schedule-meta-value">' + (pg.doneBatches || 0) + '/' + (pg.totalBatches || getPlanBatches(plan).length) + ' xong</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Chờ / Lỗi</span><span class="schedule-meta-value">' + pending + ' / ' + failed + '</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Tài khoản</span><span class="schedule-meta-value">' + escHtml(plan.accountName || plan.accountId || 'N/A') + '</span></div>' +
-                '<div class="schedule-meta-item"><span class="schedule-meta-label">Đích</span><span class="schedule-meta-value">' + escHtml(metaTarget || '-') + '</span></div>' +
-            '</div>' +
-            '<div class="schedule-actions-group">' +
-                '<button class="btn btn-ghost btn-sm" onclick=\'SchedMon.showActionPlanDetail(' + jsArg(plan.planType) + ',' + jsArg(plan.id || '') + ')\'>Chi tiết / cập nhật tiến độ</button>' +
+            '<div class="schedule-table-cell schedule-table-source"><span class="schedule-table-source-icon">N</span><div><div class="schedule-table-value">' + escHtml(kind.label) + '</div><div class="schedule-table-sub">' + escHtml(plan.accountName || plan.accountId || 'N/A') + '</div></div></div>' +
+            '<div class="schedule-table-cell"><div class="schedule-table-value">' + escHtml(formatDateTime(plan._nextTime || plan.startDate)) + '</div></div>' +
+            '<div class="schedule-table-cell"><span class="schedule-status-badge ' + badgeClass(st) + '">' + escHtml(statusLabel(st)) + '</span></div>' +
+            '<div class="schedule-table-cell schedule-table-result"><strong>' + processed + '/' + total + ' (' + percent + '%)</strong><span>' + pending + ' chờ · ' + failed + ' lỗi</span></div>' +
+            '<div class="schedule-table-cell schedule-table-actions">' +
+                '<button class="schedule-icon-btn" title="Chi tiết và cập nhật" onclick=\'SchedMon.showActionPlanDetail(' + jsArg(plan.planType) + ',' + jsArg(plan.id || '') + ')\'>' + iconSvg('eye') + '</button>' +
             '</div>';
-        return card;
+        return row;
+    }
+
+
+    function iconSvg(name) {
+        var icons = {
+            eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
+            edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>',
+            play: '<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></svg>',
+            trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>',
+            stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
+        };
+        return icons[name] || '';
+    }
+
+    function getItemTotals(item) {
+        if (item._itemType === 'schedule') {
+            var recipients = item.recipients || [];
+            var results = item.results || [];
+            var success = results.filter(function (r) { return r.status === 'success'; }).length;
+            var failed = results.filter(function (r) { return r.status === 'failed'; }).length;
+            return { total: recipients.length, success: success, failed: failed, processed: success + failed };
+        }
+        var pg = item.progress || {};
+        var total = Number(pg.totalMembers || item.totalMembers || 0);
+        var processed = Number(pg.processedMembers || 0);
+        var failed = Number(pg.failedMembers || 0);
+        return { total: total, success: Math.max(processed - failed, 0), failed: failed, processed: processed };
+    }
+
+    function renderPerformance() {
+        var totals = state.all.reduce(function (acc, item) {
+            var t = getItemTotals(item);
+            acc.total += t.total;
+            acc.success += t.success;
+            acc.failed += t.failed;
+            acc.processed += t.processed;
+            return acc;
+        }, { total: 0, success: 0, failed: 0, processed: 0 });
+        var pending = Math.max(totals.total - totals.processed, 0);
+        var rate = totals.processed ? Math.round(totals.success * 1000 / totals.processed) / 10 : 0;
+        setText('schedmonProcessedTotal', totals.processed);
+        setText('schedmonProcessedCaption', 'Trên ' + totals.total + ' người nhận');
+        setText('schedmonSuccessRate', rate + '%');
+        setText('schedmonSuccessTotal', totals.success);
+        setText('schedmonFailedTotal', totals.failed);
+        setText('schedmonPendingTotal', pending);
+        var ring = document.getElementById('schedmonRateRing');
+        if (ring) ring.style.setProperty('--rate', Math.max(0, Math.min(100, rate)));
+    }
+
+    function renderAlerts() {
+        var root = document.getElementById('schedmonAlertList');
+        if (!root) return;
+        var alerts = [];
+        state.all.forEach(function (item) {
+            var title = item._itemType === 'schedule' ? (item.title || 'Lịch gửi') : (item.name || item.planTypeLabel || 'Kế hoạch');
+            if (isError(item)) {
+                alerts.push({ type: 'error', title: title + ' đang có lỗi', detail: 'Mở chi tiết để kiểm tra nguyên nhân và xử lý.' });
+                return;
+            }
+            if (!isRunning(item) && isPendingLike(item) && item._nextTime > 0 && item._nextTime <= Date.now() + 30 * 60000) {
+                alerts.push({ type: 'warning', title: title + ' sắp chạy', detail: countdownInfo(item._nextTime).text + ' · Hãy kiểm tra nội dung và tài khoản gửi.' });
+            }
+        });
+        alerts = alerts.slice(0, 4);
+        setText('schedmonAlertCount', alerts.length);
+        if (!alerts.length) {
+            root.innerHTML = '<div class="schedmon-alert-empty">Không có cảnh báo cần xử lý.</div>';
+            return;
+        }
+        root.innerHTML = alerts.map(function (a) {
+            return '<div class="schedmon-alert-item ' + (a.type === 'error' ? 'is-error' : '') + '">' +
+                '<span class="schedmon-alert-icon">' + (a.type === 'error' ? '!' : 'A') + '</span>' +
+                '<div class="schedmon-alert-copy"><strong>' + escHtml(a.title) + '</strong><span>' + escHtml(a.detail) + '</span></div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function localDayKey(ts) {
+        var d = new Date(ts);
+        return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+    }
+
+    function updateDateFilterUI() {
+        var hasDate = Boolean(state.selectedDateKey);
+        var shortLabel = formatDateKey(state.selectedDateKey, false);
+        var longLabel = formatDateKey(state.selectedDateKey, true);
+        var chip = document.getElementById('schedmonDateFilterClear');
+        var chipLabel = document.getElementById('schedmonDateFilterLabel');
+        var selectionLabel = document.getElementById('schedmonCalendarSelectionLabel');
+        var clearBtn = document.getElementById('schedmonCalendarClearBtn');
+
+        if (chip) chip.hidden = !hasDate;
+        if (chipLabel) chipLabel.textContent = shortLabel;
+        if (selectionLabel) selectionLabel.textContent = hasDate ? longLabel : 'Tất cả thời gian';
+        if (clearBtn) clearBtn.hidden = !hasDate;
+    }
+
+    function selectCalendarDate(key, options) {
+        options = options || {};
+        var selected = dateFromKey(key);
+        if (!selected) return;
+        state.selectedDateKey = key;
+        state.calendarYear = selected.getFullYear();
+        state.calendarMonth = selected.getMonth();
+        renderCalendar();
+        updateDateFilterUI();
+        filterAll();
+
+        if (options.notify !== false) {
+            showNotif('Đã chọn ngày', 'Đang hiển thị lịch hoạt động ngày ' + formatDateKey(key, false) + '.', 'info');
+        }
+        if (options.keepOverlay !== true) closeDataOverlay('calendar');
+        if (options.scroll !== false) {
+            var table = document.querySelector('.schedmon-table-shell');
+            if (table && typeof table.focus === 'function') table.focus({ preventScroll: true });
+        }
+    }
+
+    function clearDateFilter(options) {
+        options = options || {};
+        if (!state.selectedDateKey && !options.force) return;
+        state.selectedDateKey = '';
+        renderCalendar();
+        updateDateFilterUI();
+        filterAll();
+        if (options.notify !== false) showNotif('Đã bỏ lọc ngày', 'Đang hiển thị toàn bộ lịch hoạt động.', 'info');
+    }
+
+    function changeCalendarMonth(delta) {
+        var view = new Date(state.calendarYear, state.calendarMonth + delta, 1, 12, 0, 0, 0);
+        state.calendarYear = view.getFullYear();
+        state.calendarMonth = view.getMonth();
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        var root = document.getElementById('schedmonCalendarGrid');
+        if (!root) return;
+        var now = new Date();
+        var year = state.calendarYear;
+        var month = state.calendarMonth;
+        setText('schedmonCalendarMonth', 'Tháng ' + (month + 1) + ', ' + year);
+
+        var eventDays = {};
+        state.all.forEach(function (item) {
+            itemDateTimes(item).forEach(function (ts) {
+                var key = localDayKey(ts);
+                eventDays[key] = (eventDays[key] || 0) + 1;
+            });
+        });
+
+        var first = new Date(year, month, 1, 12, 0, 0, 0);
+        var startOffset = (first.getDay() + 6) % 7;
+        var start = new Date(year, month, 1 - startOffset, 12, 0, 0, 0);
+        var todayKey = localDayKey(now.getTime());
+        var html = '';
+        for (var i = 0; i < 42; i += 1) {
+            var d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i, 12, 0, 0, 0);
+            var key = localDayKey(d.getTime());
+            var eventCount = eventDays[key] || 0;
+            var classes = ['schedmon-calendar-day'];
+            if (d.getMonth() !== month) classes.push('is-muted');
+            if (key === todayKey) classes.push('is-today');
+            if (key === state.selectedDateKey) classes.push('is-selected');
+            if (eventCount) classes.push('has-event');
+            var title = d.toLocaleDateString('vi-VN') + (eventCount ? ' · ' + eventCount + ' lịch hoạt động' : ' · Không có lịch');
+            html += '<button type="button" class="' + classes.join(' ') + '" data-date-key="' + key + '" aria-label="' + escHtml(title) + '" aria-pressed="' + (key === state.selectedDateKey ? 'true' : 'false') + '" title="' + escHtml(title) + '"><span>' + d.getDate() + '</span></button>';
+        }
+        root.innerHTML = html;
+        root.querySelectorAll('[data-date-key]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                selectCalendarDate(button.getAttribute('data-date-key'));
+            });
+        });
+        updateDateFilterUI();
+    }
+
+    function renderSupportWidgets() {
+        renderCalendar();
+        renderAlerts();
+        renderPerformance();
     }
 
     function renderAll(items) {
         var root = document.getElementById('allList');
         if (!root) return;
         if (!items.length) {
-            root.innerHTML = '<div class="schedmon-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><b>Chưa có lịch nào</b><p>Tạo chiến dịch đầu tiên để theo dõi tại đây.</p></div>';
+            var emptyTitle = state.selectedDateKey ? ('Không có lịch ngày ' + formatDateKey(state.selectedDateKey, false)) : 'Chưa có lịch nào';
+            var emptyText = state.selectedDateKey ? 'Chọn ngày khác trên lịch tháng hoặc bấm Bỏ lọc để xem toàn bộ.' : 'Tạo chiến dịch đầu tiên để theo dõi tại đây.';
+            root.innerHTML = '<div class="schedmon-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><b>' + escHtml(emptyTitle) + '</b><p>' + escHtml(emptyText) + '</p></div>';
             setText('schedListCount', '0 lịch');
             return;
         }
@@ -386,6 +632,7 @@
         var q = ((document.getElementById('schedListSearch') || {}).value || '').toLowerCase();
         var sf = (document.getElementById('schedListStatusFilter') || {}).value || '';
         var tf = (document.getElementById('schedListTypeFilter') || {}).value || '';
+        var dateKey = state.selectedDateKey || '';
         var filtered = state.all.filter(function (s) {
             var isPlan = s._itemType === 'action_plan';
             var type = isPlan ? s.planType : 'schedule';
@@ -394,10 +641,15 @@
             if (q && searchText.indexOf(q) === -1) return false;
             if (tf && type !== tf) return false;
             if (sf && status !== sf && !(sf === 'done' && status === 'completed') && !(sf === 'pending' && (status === 'planned' || status === 'pending_manual'))) return false;
+            if (dateKey && !itemOccursOnDate(s, dateKey)) return false;
             return true;
-        }).sort(function (a, b) { return (b._sortTime || 0) - (a._sortTime || 0); });
+        }).sort(function (a, b) {
+            if (dateKey) return selectedDateSortTime(a, dateKey) - selectedDateSortTime(b, dateKey);
+            return (b._sortTime || 0) - (a._sortTime || 0);
+        });
         renderAll(filtered);
-        if (q || sf || tf) setText('schedListCount', filtered.length + '/' + state.all.length + ' lịch');
+        if (q || sf || tf || dateKey) setText('schedListCount', filtered.length + '/' + state.all.length + ' lịch');
+        updateDateFilterUI();
     }
 
     // ─── Chi tiết / sửa / hành động ───────────────────────────────────────
@@ -589,6 +841,71 @@
         });
     }
 
+    // ─── Overlay dữ liệu phụ ─────────────────────────────────────────────
+    function getDataOverlay(name) {
+        if (!name) return null;
+        return document.querySelector('[data-schedmon-overlay="' + String(name) + '"]');
+    }
+
+    function closeDataOverlay(name) {
+        var overlay = name ? getDataOverlay(name) : document.querySelector('.schedmon-data-overlay.is-open');
+        if (!overlay) return;
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('schedmon-overlay-open');
+
+        var opener = overlay._schedmonOpener;
+        if (opener && typeof opener.focus === 'function') {
+            setTimeout(function () { opener.focus(); }, 20);
+        }
+    }
+
+    function closeAllDataOverlays() {
+        document.querySelectorAll('.schedmon-data-overlay.is-open').forEach(function (overlay) {
+            overlay.classList.remove('is-open');
+            overlay.setAttribute('aria-hidden', 'true');
+        });
+        document.body.classList.remove('schedmon-overlay-open');
+    }
+
+    function openDataOverlay(name, opener) {
+        var overlay = getDataOverlay(name);
+        if (!overlay) return;
+        closeAllDataOverlays();
+        overlay._schedmonOpener = opener || document.activeElement;
+        overlay.classList.add('is-open');
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('schedmon-overlay-open');
+
+        var closeBtn = overlay.querySelector('[data-schedmon-overlay-close]');
+        if (closeBtn) setTimeout(function () { closeBtn.focus(); }, 20);
+    }
+
+    function bindDataOverlays() {
+        document.querySelectorAll('[data-schedmon-overlay-open]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                openDataOverlay(button.getAttribute('data-schedmon-overlay-open'), button);
+            });
+        });
+
+        document.querySelectorAll('[data-schedmon-overlay-close]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var overlay = button.closest('[data-schedmon-overlay]');
+                if (overlay) closeDataOverlay(overlay.getAttribute('data-schedmon-overlay'));
+            });
+        });
+
+        document.querySelectorAll('.schedmon-data-overlay').forEach(function (overlay) {
+            overlay.addEventListener('mousedown', function (event) {
+                if (event.target === overlay) closeDataOverlay(overlay.getAttribute('data-schedmon-overlay'));
+            });
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closeAllDataOverlays();
+        });
+    }
+
     // ─── Modal / thông báo dùng chung ─────────────────────────────────────
     function setModal(title, html) {
         var titleEl = document.getElementById('detailTitle');
@@ -611,6 +928,8 @@
         card.className = 'notification-overlay ' + type;
         document.getElementById('notifTitle').textContent = title;
         document.getElementById('notifMessage').textContent = message;
+        var icon = document.getElementById('notifIcon');
+        if (icon) icon.textContent = type === 'success' ? '✓' : (type === 'error' ? '!' : 'i');
         card.classList.add('show');
         clearTimeout(card._timeout);
         card._timeout = setTimeout(function () { card.classList.remove('show'); }, 3000);
@@ -634,6 +953,7 @@
             renderRunning();
             renderUpcoming();
             filterAll();
+            renderSupportWidgets();
         }).catch(function () {
             showNotif('Lỗi', 'Không tải được dữ liệu lịch', 'error');
         });
@@ -648,6 +968,24 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        bindDataOverlays();
+
+        var todayBtn = document.getElementById('schedmonTodayBtn');
+        var prevBtn = document.getElementById('schedmonPrevMonthBtn');
+        var nextBtn = document.getElementById('schedmonNextMonthBtn');
+        var calendarClearBtn = document.getElementById('schedmonCalendarClearBtn');
+        var dateFilterClearBtn = document.getElementById('schedmonDateFilterClear');
+
+        if (todayBtn) todayBtn.addEventListener('click', function () {
+            var today = new Date();
+            selectCalendarDate(localDayKey(today.getTime()), { scroll: false });
+        });
+        if (prevBtn) prevBtn.addEventListener('click', function () { changeCalendarMonth(-1); });
+        if (nextBtn) nextBtn.addEventListener('click', function () { changeCalendarMonth(1); });
+        if (calendarClearBtn) calendarClearBtn.addEventListener('click', function () { clearDateFilter(); });
+        if (dateFilterClearBtn) dateFilterClearBtn.addEventListener('click', function () { clearDateFilter(); });
+
+        updateDateFilterUI();
         reload();
         startAutoRefresh();
     });
@@ -655,6 +993,9 @@
     window.SchedMon = {
         reload: reload,
         filterAll: filterAll,
+        selectCalendarDate: selectCalendarDate,
+        clearDateFilter: clearDateFilter,
+        changeCalendarMonth: changeCalendarMonth,
         showDetail: showDetail,
         showEditModal: showEditModal,
         showActionPlanDetail: showActionPlanDetail,
@@ -663,6 +1004,8 @@
         cancelSchedule: cancelSchedule,
         deleteSchedule: deleteSchedule,
         closeDetailModal: closeDetailModal,
-        hideNotif: hideNotif
+        hideNotif: hideNotif,
+        openOverlay: openDataOverlay,
+        closeOverlay: closeDataOverlay
     };
 }());

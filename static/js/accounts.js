@@ -21,7 +21,7 @@ function accountStatusLabel(acc) {
 }
 
 function accountReady(acc) {
-    return !!(acc && acc.zpwEnk && acc.cookies && acc.loginCaptured && acc.userinfoCaptured);
+    return !!(window.NexusSession && NexusSession.accountReady(acc, false) && acc.userinfoCaptured);
 }
 
 function renderAccountsStats(accounts) {
@@ -185,7 +185,7 @@ async function loadAccountsList(silent) {
 
         // Nếu tất cả tài khoản đều hoàn thành, dừng polling
         var allComplete = accounts.every(function(a) {
-            return a.zpwEnk && a.cookies && a.loginCaptured && a.userinfoCaptured && a.avatarUrl;
+            return accountReady(a) && !!a.avatarUrl;
         });
         if (allComplete && _accountsPollTimer) {
             stopAccountsPolling();

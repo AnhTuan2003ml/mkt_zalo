@@ -100,7 +100,12 @@ def _profile_path(account_id: str) -> str:
 
 
 def normalize_account(acc: dict, default_name: str = None) -> dict:
-    """Chuẩn hóa field tài khoản (tương thích account cũ)."""
+    """Chuẩn hóa field tài khoản (tương thích account cũ).
+
+    Các trường phiên đang dùng được giữ nguyên. Việc mở lại Chrome chỉ yêu cầu
+    monitor bắt phiên mới, tuyệt đối không xóa cookie/khóa phiên cũ trước khi
+    thu được bộ thay thế hợp lệ.
+    """
     created = acc.get("createdAt") or int(time.time() * 1000)
     name = (acc.get("name") or default_name or "Tài khoản").strip()
 
@@ -121,6 +126,8 @@ def normalize_account(acc: dict, default_name: str = None) -> dict:
         "personalGroups": acc.get("personalGroups") or [],  # Danh sách nhóm cá nhân
         "groupsSyncedAt": int(acc.get("groupsSyncedAt") or 0),
         "groupsSyncStatus": acc.get("groupsSyncStatus", "") or "",
+        "sessionRefreshStartedAt": int(acc.get("sessionRefreshStartedAt") or 0),
+        "sessionCapturedAt": int(acc.get("sessionCapturedAt") or 0),
     }
 
     if acc.get("uid"):
@@ -133,11 +140,22 @@ def normalize_account(acc: dict, default_name: str = None) -> dict:
 
 @_locked
 def load_accounts():
-    """Đọc danh sách tài khoản từ data/accounts.json."""
+    """Đọc danh sách tài khoản từ data/accounts.json.
+
+    Nếu file chính bị ghi dở hoặc hỏng JSON, thử phục hồi từ bản sao an toàn
+    thay vì trả danh sách rỗng rồi vô tình ghi đè dữ liệu người dùng.
+    """
     _ensure_dirs()
+    backup_file = ACCOUNTS_FILE + ".bak"
     if not os.path.isfile(ACCOUNTS_FILE):
-        save_accounts([])
-        return []
+        if os.path.isfile(backup_file):
+            try:
+                shutil.copy2(backup_file, ACCOUNTS_FILE)
+            except OSError:
+                pass
+        if not os.path.isfile(ACCOUNTS_FILE):
+            save_accounts([])
+            return []
 
     try:
         with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
@@ -168,17 +186,54 @@ def load_accounts():
         if changed:
             save_accounts(accounts)
         return accounts
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as error:
+        backup_file = ACCOUNTS_FILE + ".bak"
+        if os.path.isfile(backup_file):
+            try:
+                with open(backup_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                raw = data.get("accounts", [])
+                if isinstance(raw, list):
+                    restored = [normalize_account(a) for a in raw if a.get("accountId")]
+                    print(f"[account_manager] Phục hồi accounts.json từ backup sau lỗi: {error}")
+                    return restored
+            except (json.JSONDecodeError, OSError):
+                pass
+        print(f"[account_manager] Không đọc được accounts.json: {error}")
         return []
 
 
 @_locked
 def save_accounts(accounts):
-    """Lưu danh sách tài khoản vào data/accounts.json."""
+    """Lưu accounts.json theo kiểu atomic và tạo bản sao dự phòng.
+
+    File tạm được ghi xong rồi mới thay thế file chính, tránh mất cookies khi
+    ứng dụng bị tắt đúng lúc đang ghi dữ liệu.
+    """
     _ensure_dirs()
     normalized = [normalize_account(a) for a in accounts]
-    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"accounts": normalized}, f, ensure_ascii=False, indent=2)
+    payload = {"accounts": normalized}
+    temp_file = ACCOUNTS_FILE + ".tmp"
+    backup_file = ACCOUNTS_FILE + ".bak"
+
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
+
+    if os.path.isfile(ACCOUNTS_FILE):
+        try:
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as current:
+                existing = json.load(current)
+            if isinstance(existing.get("accounts", []), list):
+                shutil.copy2(ACCOUNTS_FILE, backup_file)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    os.replace(temp_file, ACCOUNTS_FILE)
 
 
 def _find_account(accounts, account_id):
@@ -205,6 +260,20 @@ def update_account(account_id: str, **fields):
         save_accounts(accounts)
         return accounts[i]
     return None
+
+
+def _cookie_has(cookie_str: str, name: str) -> bool:
+    target = str(name or "").strip().lower()
+    if not target:
+        return False
+    for item in str(cookie_str or "").split(";"):
+        item = item.strip()
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        if key.strip().lower() == target and value.strip():
+            return True
+    return False
 
 
 def account_capture_complete(account_id: str) -> bool:
@@ -258,12 +327,14 @@ def account_capture_complete(account_id: str) -> bool:
         print(f"[account_capture_complete] No personalGroups for {account_id[:8]}...")
         return False
     
-    # Kiểm tra cookies - phải đủ dài (thường 400+ ký tự)
+    # Cookie dài không đồng nghĩa với phiên hợp lệ. getmg bắt buộc phải có
+    # zpw_sek; trước đây cookie 282 ký tự vẫn được lưu và ghi đè cookie đầy đủ.
     cookies = acc.get("cookies", "")
-    has_sufficient_cookies = len(cookies) > 300
-    
-    if not has_sufficient_cookies:
-        print(f"[account_capture_complete] Insufficient cookies ({len(cookies)} chars) for {account_id[:8]}...")
+    if not _cookie_has(cookies, "zpw_sek"):
+        print(
+            f"[account_capture_complete] Missing zpw_sek "
+            f"({len(cookies)} chars) for {account_id[:8]}..."
+        )
         return False
     
     # TẤT CẢ điều kiện thỏa - dữ liệu đủ
@@ -276,7 +347,7 @@ def account_capture_basic(account_id: str) -> bool:
         return False
     return bool(
         acc.get("zpwEnk")
-        and acc.get("cookies")
+        and _cookie_has(acc.get("cookies") or "", "zpw_sek")
         and acc.get("name")
         and acc.get("avatarUrl")
         and acc.get("loginCaptured")
@@ -320,24 +391,18 @@ def auto_capture_account_imei(account_id: str):
 
 
 def reset_account_session(account_id: str, clear_groups: bool = True):
-    """
-    Reset cờ capture để lần Mở/Làm mới tiếp theo trích xuất lại cookies và phiên.
+    """Yêu cầu monitor bắt lại phiên mà không xóa dữ liệu hiện có.
 
-    clear_groups=True để không còn hiển thị danh sách nhóm cũ trong lúc đang đồng bộ lại.
-    Nếu không xóa personalGroups cũ, account_capture_complete có thể dừng monitor
-    quá sớm ngay khi login/userinfo/cookies đã đủ, trước khi bắt được getlg/v4 mới.
+    Bản cũ đặt cookies/zpwEnk/personalGroups thành chuỗi rỗng ngay khi bấm Mở,
+    khiến phiên đang dùng bị mất trước khi Chrome kịp phát sinh cookie mới.
+    Từ đây chỉ hạ cờ ``loginCaptured`` và đánh dấu đang đồng bộ. Dữ liệu cũ
+    tiếp tục được giữ làm phương án dự phòng cho đến khi phiên mới được bắt đủ.
     """
     fields = {
         "loginCaptured": False,
-        "userinfoCaptured": False,
-        "cookies": "",
-        "groupsSyncStatus": "opening",
+        "groupsSyncStatus": "opening" if not clear_groups else "refreshing",
+        "sessionRefreshStartedAt": int(time.time() * 1000),
     }
-    if clear_groups:
-        fields.update({
-            "personalGroups": [],
-            "groupsSyncedAt": 0,
-        })
     update_account(account_id, **fields)
 
 

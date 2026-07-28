@@ -1,211 +1,1460 @@
-/* Lịch gửi — trang riêng chỉ để theo dõi: đang chạy lịch nào, tiếp theo là lịch nào. */
+/* Nexus Premium — Lịch gửi */
 
-.schedmon-shell { max-width: 1480px; }
-
-/* ─── Topbar ─────────────────────────────────────────────────────────── */
-.schedmon-topbar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-bottom: 18px;
-    padding: 14px 18px;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: linear-gradient(135deg, rgba(56, 189, 248, .14), rgba(14, 25, 39, .58));
-}
-.schedmon-topbar-title { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 0; }
-.schedmon-live-dot {
-    flex: 0 0 auto;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 0 rgba(88, 166, 255, .55);
-    animation: schedmonPulse 2s infinite;
-}
-.schedmon-live-dot.idle { background: var(--text-muted); animation: none; box-shadow: none; }
-@keyframes schedmonPulse {
-    0% { box-shadow: 0 0 0 0 rgba(88, 166, 255, .55); }
-    70% { box-shadow: 0 0 0 8px rgba(88, 166, 255, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0); }
-}
-.schedmon-topbar-title strong { display: block; font-size: 16px; color: var(--text); }
-.schedmon-topbar-title small { display: block; margin-top: 2px; color: var(--text-muted); font-size: 12px; }
-
-.schedmon-topbar-stats { display: flex; flex: 2 1 420px; gap: 8px; overflow-x: auto; }
-.schedmon-stat {
-    flex: 1 1 110px;
-    min-width: 100px;
-    padding: 8px 12px;
-    border: 1px solid rgba(174, 205, 232, .1);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, .025);
-}
-.schedmon-stat span { display: block; color: var(--text-muted); font-size: 10px; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
-.schedmon-stat strong { display: block; margin-top: 3px; color: var(--text); font-size: 18px; }
-.schedmon-stat.running strong { color: var(--accent); }
-.schedmon-stat.error strong { color: var(--red); }
-.schedmon-stat.done strong { color: var(--green); }
-
-.schedmon-topbar-actions { display: flex; gap: 8px; flex: 0 0 auto; }
-
-/* ─── Panels ─────────────────────────────────────────────────────────── */
-.schedmon-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.schedmon-panel-head h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-.schedmon-panel-head p { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; }
-.schedmon-panel-head a { color: var(--accent-hover); font-size: 12px; font-weight: 700; text-decoration: none; }
-.schedmon-panel-head a:hover { text-decoration: underline; }
-.schedmon-count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; padding: 2px 8px; border-radius: 999px; background: rgba(88, 166, 255, .14); color: var(--accent); font-size: 12px; font-weight: 700; }
-
-/* ─── Running now ────────────────────────────────────────────────────── */
-.schedmon-running-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.schedmon-running-card {
-    position: relative;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: 10px;
-    padding: 14px;
-    background: var(--surface2);
-}
-.schedmon-running-card .schedmon-run-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 6px; animation: schedmonPulse 1.6s infinite; }
-.schedmon-running-title { font-size: 14px; font-weight: 700; color: var(--text); margin: 8px 0 4px; word-break: break-word; }
-.schedmon-running-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
-.schedmon-running-card .schedule-progress-wrap { margin: 6px 0 2px; }
-.schedmon-running-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; }
-
-/* ─── Upcoming (next-up queue) ───────────────────────────────────────── */
-.schedmon-upcoming-list { display: flex; flex-direction: column; gap: 8px; }
-.schedmon-upcoming-item {
-    display: grid;
-    grid-template-columns: 108px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface2);
-    transition: border-color .16s ease;
-}
-.schedmon-upcoming-item:hover { border-color: rgba(88, 166, 255, .4); }
-.schedmon-upcoming-item:first-child { border-color: rgba(88, 166, 255, .45); box-shadow: 0 0 0 1px rgba(88, 166, 255, .12); }
-.schedmon-countdown-chip { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; text-align: center; white-space: nowrap; background: rgba(148, 163, 184, .12); color: var(--text-muted); }
-.schedmon-countdown-chip.soon { background: rgba(255, 152, 0, .14); color: #ff9800; }
-.schedmon-countdown-chip.overdue { background: rgba(244, 68, 60, .14); color: var(--red); }
-.schedmon-upcoming-copy { min-width: 0; }
-.schedmon-upcoming-copy .schedmon-up-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.schedmon-upcoming-copy .schedmon-up-meta { margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); }
-.schedmon-upcoming-actions { display: flex; gap: 6px; }
-
-/* ─── Empty state ────────────────────────────────────────────────────── */
-.schedmon-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; color: var(--text-muted); text-align: center; }
-.schedmon-empty svg { width: 34px; height: 34px; opacity: .4; }
-.schedmon-empty b { color: var(--text); font-size: 13px; }
-.schedmon-empty p { margin: 0; font-size: 12px; }
-.schedmon-loading { display: flex; align-items: center; gap: 10px; padding: 24px 8px; color: var(--text-muted); font-size: 12.5px; }
-
-/* ─── Kind badges (loại chiến dịch) ──────────────────────────────────── */
-.schedule-kind-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; border: 1px solid rgba(88, 166, 255, .24); background: rgba(88, 166, 255, .10); color: var(--accent); white-space: nowrap; }
-.schedule-kind-badge.friend { color: #4ade80; background: rgba(74, 222, 128, .10); border-color: rgba(74, 222, 128, .24); }
-.schedule-kind-badge.group_invite { color: #fbbf24; background: rgba(251, 191, 36, .10); border-color: rgba(251, 191, 36, .24); }
-.schedule-kind-badge.kind-ingroup { color: #4ade80; background: rgba(74, 222, 128, .10); border-color: rgba(74, 222, 128, .24); }
-.schedule-kind-badge.kind-permember { color: var(--accent); background: rgba(88, 166, 255, .10); border-color: rgba(88, 166, 255, .24); }
-.schedule-kind-badge.kind-phone { color: #c084fc; background: rgba(192, 132, 252, .10); border-color: rgba(192, 132, 252, .24); }
-
-/* ─── Status badges ──────────────────────────────────────────────────── */
-.schedule-status-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.schedule-status-badge.pending { background: rgba(255, 152, 0, .12); color: #ff9800; border: 1px solid rgba(255, 152, 0, .25); }
-.schedule-status-badge.running { background: rgba(56, 139, 253, .12); color: var(--accent); border: 1px solid rgba(56, 139, 253, .25); }
-.schedule-status-badge.done { background: rgba(63, 185, 80, .12); color: var(--green); border: 1px solid rgba(63, 185, 80, .25); }
-.schedule-status-badge.partial { background: rgba(255, 152, 0, .12); color: #ff9800; border: 1px solid rgba(255, 152, 0, .25); }
-.schedule-status-badge.failed { background: rgba(244, 68, 60, .12); color: var(--red); border: 1px solid rgba(244, 68, 60, .25); }
-.schedule-status-badge.cancelled { background: rgba(128, 128, 128, .08); color: var(--text-muted); border: 1px solid rgba(128, 128, 128, .2); }
-
-/* ─── Progress bar (dùng lại cho kế hoạch kết bạn / mời nhóm) ───────────── */
-.schedule-progress-wrap { margin: 10px 0 4px; }
-.schedule-progress-line { height: 8px; border-radius: 999px; overflow: hidden; background: rgba(148, 163, 184, .18); border: 1px solid rgba(148, 163, 184, .18); }
-.schedule-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #4ade80); border-radius: 999px; }
-.schedule-progress-text { font-size: 12px; color: var(--text-muted); margin-top: 5px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-
-/* ─── All schedules (danh sách đầy đủ) ───────────────────────────────── */
-.schedule-filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-.schedule-filter-bar input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--surface); color: var(--text); }
-.schedule-filter-bar select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--surface); color: var(--text); }
-.schedule-filter-bar span { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-
-.schedules-list-grid {
+.schedmon-shell {
+    width: min(100%, 1680px);
+    max-width: 1680px;
     display: flex;
     flex-direction: column;
+    gap: 18px;
+    padding-bottom: 42px !important;
+}
+
+.schedmon-topbar,
+.schedmon-panel,
+.schedmon-all-card,
+.schedmon-side-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(112, 168, 255, .18) !important;
+    background:
+        radial-gradient(circle at 0 0, rgba(47, 124, 255, .13), transparent 34%),
+        linear-gradient(145deg, rgba(13, 27, 48, .98), rgba(8, 19, 35, .98)) !important;
+    box-shadow:
+        0 22px 58px rgba(0, 0, 0, .25),
+        inset 0 1px 0 rgba(255, 255, 255, .045) !important;
+}
+
+.schedmon-topbar::after,
+.schedmon-panel::after,
+.schedmon-side-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(110deg, rgba(83, 143, 255, .035), transparent 34%, rgba(69, 224, 205, .025));
+}
+
+.schedmon-topbar {
+    display: grid;
+    grid-template-columns: minmax(300px, 1.08fr) minmax(520px, 1.45fr) auto;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 20px;
+    border-radius: 20px;
+}
+
+.schedmon-topbar-title,
+.schedmon-topbar-stats,
+.schedmon-topbar-actions,
+.schedmon-panel > *,
+.schedmon-side-card > * { position: relative; z-index: 1; }
+
+.schedmon-topbar-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.schedmon-page-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 54px;
+    width: 54px;
+    height: 54px;
+    border: 1px solid rgba(90, 160, 255, .42);
+    border-radius: 17px;
+    background: linear-gradient(145deg, rgba(31, 102, 255, .32), rgba(91, 56, 255, .18));
+    box-shadow: 0 12px 30px rgba(23, 86, 255, .20), inset 0 1px 0 rgba(255, 255, 255, .08);
+    color: #6ecbff;
+}
+.schedmon-page-icon svg { width: 27px; height: 27px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+.schedmon-topbar-title strong {
+    display: block;
+    color: var(--text);
+    font-size: 24px;
+    font-weight: 820;
+    letter-spacing: -.035em;
+}
+.schedmon-topbar-title small {
+    display: block;
+    max-width: 560px;
+    margin-top: 6px;
+    color: #9eb4c9;
+    font-size: 12.5px;
+    line-height: 1.6;
+}
+
+.schedmon-topbar-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+.schedmon-stat {
+    min-height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 12px 14px;
+    border: 1px solid rgba(154, 184, 222, .14);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .025));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+.schedmon-stat > span {
+    color: #87a2ba;
+    font-size: 9.5px;
+    font-weight: 760;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.schedmon-stat > strong {
+    margin-top: 5px;
+    color: var(--text);
+    font-size: 25px;
+    line-height: 1;
+    font-weight: 840;
+    letter-spacing: -.04em;
+}
+.schedmon-stat > small { margin-top: 6px; color: #758da3; font-size: 10px; }
+.schedmon-stat.running strong { color: #60c9ff; }
+.schedmon-stat.upcoming strong { color: #a879ff; }
+.schedmon-stat.done strong { color: #55dda2; }
+.schedmon-stat.error strong { color: #ff7688; }
+
+.schedmon-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.schedmon-topbar-actions .btn {
+    min-height: 44px !important;
+    justify-content: center;
+    white-space: nowrap;
+}
+.schedmon-topbar-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.schedmon-dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 18px;
+    align-items: start;
+}
+.schedmon-main-column,
+.schedmon-side-column {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.schedmon-side-column { position: sticky; top: 20px; }
+
+.schedmon-panel,
+.schedmon-all-card,
+.schedmon-side-card {
+    margin: 0 !important;
+    border-radius: 20px !important;
+}
+.schedmon-panel,
+.schedmon-all-card { padding: 18px !important; }
+.schedmon-side-card { padding: 17px !important; }
+
+.schedmon-panel-head,
+.schedmon-side-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+.schedmon-panel-head h2,
+.schedmon-side-head h2 {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.3;
+    font-weight: 790;
+    letter-spacing: -.02em;
+}
+.schedmon-panel-head p,
+.schedmon-side-head p {
+    margin: 5px 0 0;
+    color: #8098ad;
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+.schedmon-panel-head > a {
+    color: #6fcaff;
+    font-size: 11.5px;
+    font-weight: 760;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.schedmon-panel-head > a:hover { color: #a8e1ff; }
+
+.schedmon-section-icon {
+    display: grid;
+    place-items: center;
+    width: 29px;
+    height: 29px;
+    border-radius: 10px;
+    border: 1px solid rgba(101, 182, 255, .2);
+    background: rgba(42, 124, 255, .11);
+    color: #67c7ff;
+}
+.schedmon-section-icon.is-live { color: #5ce0a3; border-color: rgba(82, 224, 163, .22); background: rgba(82, 224, 163, .08); }
+.schedmon-section-icon.is-upcoming { color: #a77bff; border-color: rgba(167, 123, 255, .22); background: rgba(167, 123, 255, .08); }
+.schedmon-section-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.schedmon-count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    min-height: 24px;
+    padding: 3px 8px;
+    border: 1px solid rgba(91, 166, 255, .20);
+    border-radius: 999px;
+    background: rgba(53, 130, 255, .12);
+    color: #72cbff;
+    font-size: 10.5px;
+    font-weight: 820;
+}
+.schedmon-live-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border: 1px solid rgba(80, 222, 160, .18);
+    border-radius: 999px;
+    background: rgba(80, 222, 160, .07);
+    color: #76ddb0;
+    font-size: 10.5px;
+    font-weight: 720;
+    white-space: nowrap;
+}
+.schedmon-live-state i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #51dda0;
+    box-shadow: 0 0 0 0 rgba(81, 221, 160, .45);
+    animation: schedmonPulse 1.9s infinite;
+}
+.schedmon-live-state i.idle { background: #71889d; box-shadow: none; animation: none; }
+@keyframes schedmonPulse {
+    0% { box-shadow: 0 0 0 0 rgba(81, 221, 160, .46); }
+    70% { box-shadow: 0 0 0 9px rgba(81, 221, 160, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(81, 221, 160, 0); }
+}
+
+.schedmon-running-list,
+.schedmon-upcoming-list { display: flex; flex-direction: column; gap: 10px; }
+
+.schedmon-running-card {
+    display: grid;
+    grid-template-columns: minmax(230px, 1.25fr) 120px minmax(150px, .8fr) 105px auto;
+    gap: 14px;
+    align-items: center;
+    padding: 13px 14px;
+    border: 1px solid rgba(151, 183, 221, .13);
+    border-radius: 15px;
+    background: linear-gradient(135deg, rgba(16, 34, 58, .8), rgba(9, 22, 39, .82));
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.schedmon-running-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(78, 174, 255, .29);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .16);
+}
+.schedmon-running-main { min-width: 0; }
+.schedmon-running-kicker { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.schedmon-run-dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: #4ed99c;
+    box-shadow: 0 0 0 5px rgba(78, 217, 156, .08);
+}
+.schedmon-running-title {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 790;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.schedmon-running-sub {
+    overflow: hidden;
+    margin-top: 4px;
+    color: #8199ae;
+    font-size: 10.5px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.schedmon-running-metric { min-width: 0; }
+.schedmon-running-metric span {
+    display: block;
+    color: #7891a7;
+    font-size: 9px;
+    font-weight: 730;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.schedmon-running-metric strong {
+    display: block;
+    margin-top: 5px;
+    color: #eaf5ff;
+    font-size: 12.5px;
+    font-weight: 780;
+}
+.schedmon-running-progress { min-width: 0; }
+.schedule-progress-wrap { margin: 0; }
+.schedule-progress-line {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(137, 169, 204, .12);
+}
+.schedule-progress-bar {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #4c7dff, #28c1ff, #52dea5);
+    box-shadow: 0 0 16px rgba(50, 181, 255, .22);
+}
+.schedule-progress-text {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    color: #7892a8;
+    font-size: 9.5px;
+}
+.schedmon-running-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.schedmon-running-actions .btn { min-height: 35px !important; padding: 7px 11px !important; font-size: 10.5px !important; }
+
+.schedule-kind-badge,
+.schedule-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 23px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(92, 176, 255, .22);
+    background: rgba(54, 134, 255, .10);
+    color: #6fcaff;
+    font-size: 9.5px;
+    font-weight: 790;
+    white-space: nowrap;
+}
+.schedule-kind-badge.friend,
+.schedule-kind-badge.kind-ingroup { color: #68dda9; border-color: rgba(85, 221, 168, .20); background: rgba(85, 221, 168, .08); }
+.schedule-kind-badge.group_invite { color: #c69aff; border-color: rgba(185, 127, 255, .22); background: rgba(185, 127, 255, .09); }
+.schedule-kind-badge.kind-phone { color: #ffcf78; border-color: rgba(255, 192, 91, .22); background: rgba(255, 192, 91, .08); }
+.schedule-status-badge.pending { color: #ffc972; border-color: rgba(255, 194, 87, .22); background: rgba(255, 194, 87, .09); }
+.schedule-status-badge.running { color: #65ccff; border-color: rgba(91, 192, 255, .24); background: rgba(91, 192, 255, .10); }
+.schedule-status-badge.done { color: #61dda6; border-color: rgba(84, 220, 163, .22); background: rgba(84, 220, 163, .09); }
+.schedule-status-badge.partial { color: #ffc972; border-color: rgba(255, 194, 87, .22); background: rgba(255, 194, 87, .09); }
+.schedule-status-badge.failed { color: #ff8e9b; border-color: rgba(255, 112, 130, .24); background: rgba(255, 112, 130, .10); }
+.schedule-status-badge.cancelled { color: #90a4b6; border-color: rgba(144, 164, 182, .18); background: rgba(144, 164, 182, .08); }
+
+.schedmon-upcoming-item {
+    display: grid;
+    grid-template-columns: 74px minmax(220px, 1fr) 150px 130px auto;
+    gap: 13px;
+    align-items: center;
+    min-height: 68px;
+    padding: 11px 13px;
+    border: 1px solid rgba(151, 183, 221, .12);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .026);
+    transition: border-color .16s ease, background .16s ease;
+}
+.schedmon-upcoming-item:hover { border-color: rgba(85, 171, 255, .25); background: rgba(53, 132, 255, .045); }
+.schedmon-upcoming-item:first-child { border-color: rgba(91, 176, 255, .25); }
+.schedmon-countdown-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 7px 8px;
+    border-radius: 11px;
+    background: rgba(130, 157, 188, .10);
+    color: #b7c9d8;
+    font-size: 9.5px;
+    font-weight: 800;
+    line-height: 1.3;
+    text-align: center;
+}
+.schedmon-countdown-chip.soon { color: #ffd17b; background: rgba(245, 185, 70, .10); }
+.schedmon-countdown-chip.overdue { color: #ff9ba7; background: rgba(255, 104, 124, .10); }
+.schedmon-upcoming-copy { min-width: 0; }
+.schedmon-up-title { overflow: hidden; color: var(--text); font-size: 12.5px; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }
+.schedmon-up-meta { display: flex; align-items: center; gap: 7px; margin-top: 5px; color: #7891a7; font-size: 9.5px; }
+.schedmon-upcoming-detail span { display: block; color: #7891a7; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.schedmon-upcoming-detail strong { display: block; margin-top: 4px; color: #dbeafa; font-size: 10.5px; font-weight: 720; }
+.schedmon-upcoming-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.schedmon-upcoming-actions .btn { min-height: 34px !important; padding: 6px 10px !important; font-size: 10px !important; }
+
+.schedmon-empty {
+    display: grid;
+    place-items: center;
+    min-height: 138px;
+    padding: 22px;
+    border: 1px dashed rgba(147, 180, 216, .18);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, .02);
+    color: #7d95aa;
+    text-align: center;
+}
+.schedmon-empty svg { width: 30px; height: 30px; margin-bottom: 8px; opacity: .55; }
+.schedmon-empty b { color: #dceaf6; font-size: 12.5px; }
+.schedmon-empty p { margin: 5px 0 0; max-width: 360px; font-size: 10.5px; line-height: 1.5; }
+.schedmon-loading { display: flex; align-items: center; gap: 9px; padding: 18px; color: #7f97ab; font-size: 11px; }
+.spinner { width: 24px; height: 24px; border: 2px solid rgba(145, 177, 211, .18); border-top-color: #61caff; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.schedmon-all-card { min-height: 390px; }
+.schedmon-all-head { margin-bottom: 12px; }
+.schedmon-date-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 7px 10px 7px 12px;
+    border: 1px solid rgba(95, 190, 255, .34);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(38, 124, 255, .17), rgba(77, 75, 255, .11));
+    color: #cfeeff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 8px 22px rgba(23, 99, 255, .10);
+    cursor: pointer;
+    transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.schedmon-date-filter-chip[hidden] { display: none !important; }
+.schedmon-date-filter-chip:hover {
+    transform: translateY(-1px);
+    border-color: rgba(107, 205, 255, .58);
+    background: linear-gradient(135deg, rgba(42, 139, 255, .23), rgba(84, 76, 255, .16));
+}
+.schedmon-date-filter-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(67, 177, 255, .18), 0 8px 22px rgba(23, 99, 255, .10); }
+.schedmon-date-filter-chip svg { width: 16px; height: 16px; fill: none; stroke: #73ceff; stroke-width: 1.9; }
+.schedmon-date-filter-chip span { color: #8faac0; font-size: 10px; font-weight: 690; }
+.schedmon-date-filter-chip strong { margin-left: 3px; color: #eef9ff; font-size: 11px; font-weight: 800; }
+.schedmon-date-filter-chip i {
+    display: grid;
+    place-items: center;
+    width: 21px;
+    height: 21px;
+    border-radius: 7px;
+    background: rgba(255,255,255,.055);
+    color: #93b4ca;
+    font-size: 15px;
+    font-style: normal;
+    line-height: 1;
+}
+.schedule-filter-bar {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 145px 145px;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 12px;
+}
+.schedmon-search-field,
+.schedmon-select-field { display: block; position: relative; }
+.schedmon-search-field svg {
+    position: absolute;
+    top: 50%;
+    left: 13px;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: #718ca3;
+    stroke-width: 2;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+.schedmon-search-field input { width: 100%; padding-left: 40px !important; }
+.schedmon-select-field > span { display: block; margin: 0 0 5px 2px; color: #748da4; font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.schedmon-select-field select { width: 100%; }
+.schedule-filter-bar input,
+.schedule-filter-bar select {
+    min-height: 40px !important;
+    border-radius: 11px !important;
+    border-color: rgba(151, 183, 221, .14) !important;
+    background: rgba(4, 13, 25, .45) !important;
+    font-size: 11px !important;
+}
+
+.schedmon-table-shell {
+    overflow: hidden;
+    border: 1px solid rgba(151, 183, 221, .13);
+    border-radius: 15px;
+    background: rgba(4, 13, 25, .28);
+}
+.schedmon-table-head,
+.schedule-table-row {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.25fr) minmax(120px, .85fr) minmax(120px, .8fr) 100px minmax(130px, .9fr) 124px;
     gap: 12px;
-    max-height: 620px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-right: 6px;
+    align-items: center;
+}
+.schedmon-table-head {
+    min-height: 39px;
+    padding: 0 12px;
+    border-bottom: 1px solid rgba(151, 183, 221, .12);
+    background: rgba(44, 84, 130, .10);
+    color: #7890a6;
+    font-size: 8.8px;
+    font-weight: 780;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.schedules-list-grid {
+    max-height: 490px;
+    overflow: auto;
     scrollbar-width: thin;
 }
-.schedules-list-grid::-webkit-scrollbar { width: 8px; }
-.schedules-list-grid::-webkit-scrollbar-track { background: transparent; }
-.schedules-list-grid::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .28); border-radius: 999px; }
-.schedules-list-grid::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .45); }
-.schedule-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: all .2s ease; }
-.schedule-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(88, 166, 255, .1); }
-.schedule-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
-.schedule-card-title-area { flex: 1; min-width: 0; }
-.schedule-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; word-break: break-word; }
-.schedule-time { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-.schedule-message { background: var(--bg); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; color: var(--text-muted); margin: 10px 0; max-height: 120px; overflow-y: auto; }
-.schedule-meta-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 10px 0; }
-.schedule-meta-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
-.schedule-meta-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
-.schedule-meta-value { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
-.schedule-actions-group { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+.schedule-table-row {
+    min-height: 60px;
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(151, 183, 221, .09);
+    transition: background .15s ease;
+}
+.schedule-table-row:last-child { border-bottom: 0; }
+.schedule-table-row:hover { background: rgba(54, 132, 255, .045); }
+.schedule-table-cell { min-width: 0; }
+.schedule-table-title {
+    overflow: hidden;
+    color: #ecf6ff;
+    font-size: 11.5px;
+    font-weight: 760;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.schedule-table-sub {
+    overflow: hidden;
+    margin-top: 4px;
+    color: #748da4;
+    font-size: 9.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.schedule-table-source { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.schedule-table-source-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 25px;
+    width: 25px;
+    height: 25px;
+    border-radius: 8px;
+    background: rgba(83, 130, 255, .13);
+    color: #79c9ff;
+    font-size: 9px;
+    font-weight: 850;
+}
+.schedule-table-value { color: #cbdbea; font-size: 10.5px; line-height: 1.45; }
+.schedule-table-result strong { display: block; color: #eaf4fd; font-size: 10.5px; }
+.schedule-table-result span { display: block; margin-top: 3px; color: #728ba2; font-size: 9.5px; }
+.schedule-table-actions { display: flex; justify-content: flex-end; gap: 5px; }
+.schedule-icon-btn {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(151, 183, 221, .14);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .03);
+    color: #9bb2c6;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.schedule-icon-btn:hover { color: #73ceff; border-color: rgba(96, 189, 255, .3); background: rgba(74, 154, 255, .08); }
+.schedule-icon-btn.is-danger:hover { color: #ff8795; border-color: rgba(255, 112, 130, .28); background: rgba(255, 112, 130, .08); }
+.schedule-icon-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
 
+.schedmon-side-head { margin-bottom: 12px; }
+.schedmon-calendar-head { align-items: center; }
+.schedmon-calendar-controls { display: inline-flex; align-items: center; gap: 6px; }
+.schedmon-calendar-nav-btn,
+.schedmon-today-btn {
+    display: inline-grid;
+    place-items: center;
+    min-height: 32px;
+    border: 1px solid rgba(151, 183, 221, .18);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .025));
+    color: #b9cedf;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    font-size: 9.5px;
+    font-weight: 740;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.schedmon-calendar-nav-btn { width: 32px; padding: 0; }
+.schedmon-calendar-nav-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.schedmon-today-btn { padding: 6px 10px; }
+.schedmon-calendar-nav-btn:hover,
+.schedmon-today-btn:hover {
+    transform: translateY(-1px);
+    color: #85dcff;
+    border-color: rgba(96, 189, 255, .40);
+    background: rgba(63, 154, 255, .11);
+}
+.schedmon-calendar-nav-btn:focus-visible,
+.schedmon-today-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(69, 182, 255, .17); }
+.schedmon-calendar-weekdays,
+.schedmon-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.schedmon-calendar-weekdays { margin-bottom: 6px; color: #6f879d; font-size: 8.5px; font-weight: 790; text-align: center; }
+.schedmon-calendar-day {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: #c7d7e4;
+    font: inherit;
+    font-size: 9.5px;
+    cursor: pointer;
+    appearance: none;
+    transition: color .14s ease, border-color .14s ease, background .14s ease, transform .14s ease, box-shadow .14s ease;
+}
+.schedmon-calendar-day:hover {
+    z-index: 1;
+    transform: translateY(-1px);
+    border-color: rgba(98, 190, 255, .32);
+    background: rgba(56, 139, 255, .10);
+    color: #f3fbff;
+}
+.schedmon-calendar-day:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(69, 182, 255, .18); }
+.schedmon-calendar-day.is-muted { color: #526a7e; }
+.schedmon-calendar-day.is-today {
+    color: #eaf8ff;
+    border-color: rgba(84, 184, 255, .43);
+    background: rgba(41, 127, 255, .15);
+}
+.schedmon-calendar-day.is-selected {
+    color: #fff;
+    border-color: rgba(105, 214, 255, .72);
+    background: linear-gradient(145deg, #247fff, #514dff);
+    box-shadow: 0 10px 24px rgba(37, 111, 255, .28), inset 0 1px 0 rgba(255,255,255,.16);
+}
+.schedmon-calendar-day.is-selected:hover { background: linear-gradient(145deg, #3593ff, #625cff); }
+.schedmon-calendar-day.has-event::after {
+    content: "";
+    position: absolute;
+    bottom: 3px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #5dcbff;
+    box-shadow: 0 0 8px rgba(93, 203, 255, .65);
+}
+.schedmon-calendar-day.is-selected.has-event::after { background: #8af0c3; box-shadow: 0 0 8px rgba(138, 240, 195, .7); }
+.schedmon-calendar-selection {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3px 10px;
+    align-items: center;
+    margin-top: 12px;
+    padding: 10px 11px;
+    border: 1px solid rgba(151, 183, 221, .12);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(36, 92, 165, .10), rgba(255,255,255,.018));
+}
+.schedmon-calendar-selection > span { grid-column: 1; color: #728da4; font-size: 8.5px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+.schedmon-calendar-selection > strong { grid-column: 1; color: #e5f3ff; font-size: 10.5px; font-weight: 780; }
+.schedmon-calendar-selection > button {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    min-height: 30px;
+    padding: 5px 9px;
+    border: 1px solid rgba(89, 187, 255, .25);
+    border-radius: 9px;
+    background: rgba(50, 142, 255, .09);
+    color: #72cdff;
+    font-size: 9px;
+    font-weight: 760;
+    cursor: pointer;
+}
+.schedmon-calendar-selection > button[hidden] { display: none !important; }
+.schedmon-calendar-selection > button:hover { border-color: rgba(101, 202, 255, .46); background: rgba(50, 142, 255, .15); color: #b7ebff; }
+
+.schedmon-alert-list { display: flex; flex-direction: column; gap: 8px; }
+.schedmon-alert-item {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+    padding: 10px;
+    border: 1px solid rgba(151, 183, 221, .11);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .025);
+}
+.schedmon-alert-icon {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    color: #ffca74;
+    background: rgba(255, 190, 78, .10);
+    font-size: 12px;
+    font-weight: 850;
+}
+.schedmon-alert-item.is-error .schedmon-alert-icon { color: #ff8593; background: rgba(255, 104, 124, .10); }
+.schedmon-alert-copy strong { display: block; color: #e4eef7; font-size: 10.5px; line-height: 1.4; }
+.schedmon-alert-copy span { display: block; margin-top: 3px; color: #748ba0; font-size: 9.5px; line-height: 1.45; }
+.schedmon-alert-empty { padding: 18px 10px; color: #7891a7; font-size: 10.5px; text-align: center; }
+
+.schedmon-performance-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px;
+    border: 1px solid rgba(151, 183, 221, .11);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .027);
+}
+.schedmon-performance-hero span { color: #778fa5; font-size: 9px; font-weight: 740; text-transform: uppercase; letter-spacing: .08em; }
+.schedmon-performance-hero strong { display: block; margin-top: 5px; color: #edf7ff; font-size: 24px; font-weight: 840; letter-spacing: -.04em; }
+.schedmon-performance-hero small { display: block; margin-top: 3px; color: #6f879c; font-size: 9px; }
+.schedmon-rate-ring {
+    display: grid;
+    place-items: center;
+    width: 76px;
+    height: 76px;
+    flex: 0 0 76px;
+    border-radius: 50%;
+    background: conic-gradient(#4f8cff calc(var(--rate) * 1%), rgba(130, 158, 190, .12) 0);
+    position: relative;
+}
+.schedmon-rate-ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #0c1b2f; border: 1px solid rgba(151, 183, 221, .10); }
+.schedmon-rate-ring span { position: relative; z-index: 1; color: #eef7ff; font-size: 13px; font-weight: 820; }
+.schedmon-performance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 9px; }
+.schedmon-performance-grid > div { padding: 10px; border: 1px solid rgba(151, 183, 221, .10); border-radius: 12px; background: rgba(255, 255, 255, .022); }
+.schedmon-performance-grid span { display: block; color: #748ba0; font-size: 8.8px; }
+.schedmon-performance-grid strong { display: block; margin-top: 5px; color: #e4eef7; font-size: 16px; font-weight: 820; }
+.schedmon-performance-grid strong.is-success { color: #5bdca6; }
+.schedmon-performance-grid strong.is-danger { color: #ff7d8d; }
+
+/* Modal, thông báo và chi tiết kế hoạch */
 .action-plan-batches { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.action-plan-batch { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg); }
+.action-plan-batch { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: rgba(255,255,255,.03); }
 .action-plan-batch-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .action-plan-batch-title { font-weight: 700; color: var(--text); font-size: 13px; }
 .action-plan-batch-meta { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
 .action-plan-batch-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .action-plan-mini-list { max-height: 140px; overflow: auto; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; color: var(--text-muted); font-size: 12px; }
-
-/* ─── Detail / edit modal (tối giản, tách riêng khỏi trang chiến dịch) ── */
-.detail-modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, .5); }
+.detail-modal { display: none; position: fixed; z-index: 1000; inset: 0; padding: 18px; background: rgba(1, 7, 16, .74); backdrop-filter: blur(8px); }
 .detail-modal.show { display: flex; align-items: center; justify-content: center; }
-.detail-modal-content { background: var(--surface); border-radius: 12px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0, 0, 0, .3); }
-.detail-modal-header { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: var(--text); display: flex; justify-content: space-between; align-items: center; }
-.detail-modal-close { font-size: 28px; font-weight: bold; color: var(--text-muted); cursor: pointer; border: none; background: none; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
-.detail-modal-close:hover { color: var(--text); }
-.detail-item { margin-bottom: 14px; display: flex; gap: 12px; }
-.detail-label { font-weight: 600; color: var(--text-muted); min-width: 100px; font-size: 12px; text-transform: uppercase; }
-.detail-value { color: var(--text); word-break: break-all; }
+.detail-modal-content { width: min(760px, 94vw); max-height: 86vh; overflow-y: auto; padding: 24px; border: 1px solid rgba(151,183,221,.18); border-radius: 20px; background: linear-gradient(180deg, rgba(15,29,48,.99), rgba(8,18,32,.99)); box-shadow: 0 32px 80px rgba(0,0,0,.45); }
+.detail-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; color: var(--text); font-size: 18px; font-weight: 810; }
+.detail-modal-close { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid rgba(151,183,221,.13); border-radius: 10px; background: rgba(255,255,255,.03); color: #8fa6ba; font-size: 22px; cursor: pointer; }
+.detail-modal-close:hover { color: #fff; border-color: rgba(91,190,255,.26); }
+.detail-item { display: flex; gap: 12px; margin-bottom: 13px; }
+.detail-label { min-width: 124px; color: #7890a5; font-size: 10px; font-weight: 760; text-transform: uppercase; letter-spacing: .06em; }
+.detail-value { color: #e6f0f8; font-size: 12px; line-height: 1.55; word-break: break-word; }
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
-.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--surface); color: var(--text); }
-.form-group textarea { resize: vertical; min-height: 100px; }
-.spinner { border: 3px solid var(--border); border-top: 3px solid var(--accent); border-radius: 50%; width: 32px; height: 32px; animation: spin .8s linear infinite; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-/* ─── Notification overlay ───────────────────────────────────────────── */
-.notification-overlay { position: fixed; top: 20px; right: 20px; z-index: 9998; opacity: 0; pointer-events: none; transform: translateX(400px); transition: all .3s ease; }
+.form-group label { display: block; margin-bottom: 5px; color: var(--text); font-size: 12px; font-weight: 700; }
+.notification-overlay { position: fixed; top: 22px; right: 22px; z-index: 9998; opacity: 0; pointer-events: none; transform: translateX(420px); transition: all .28s ease; }
 .notification-overlay.show { opacity: 1; pointer-events: auto; transform: translateX(0); }
-.notification-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; gap: 12px; align-items: start; min-width: 300px; max-width: 400px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); }
-.notification-icon { flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; font-weight: bold; }
-.notification-card.success .notification-icon { background: rgba(63, 185, 80, .2); color: var(--green); }
-.notification-card.error .notification-icon { background: rgba(248, 113, 73, .2); color: var(--red); }
-.notification-card.info .notification-icon { background: rgba(88, 166, 255, .2); color: var(--accent); }
+.notification-card { display: flex; gap: 12px; align-items: start; min-width: 310px; max-width: 430px; padding: 15px; border: 1px solid rgba(151,183,221,.17); border-radius: 16px; background: rgba(10,23,40,.98); box-shadow: 0 20px 52px rgba(0,0,0,.34); }
+.notification-icon { flex: 0 0 25px; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; font-size: 12px; font-weight: 850; }
 .notification-content { flex: 1; min-width: 0; }
-.notification-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
-.notification-message { font-size: 12px; color: var(--text-muted); line-height: 1.4; word-break: break-word; }
-.notification-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.notification-close:hover { color: var(--text); }
+.notification-title { color: var(--text); font-size: 12px; font-weight: 780; }
+.notification-message { margin-top: 3px; color: #8299ae; font-size: 11px; line-height: 1.45; }
+.notification-close { width: 28px; height: 28px; display: grid; place-items: center; border: 0; background: transparent; color: #758ca1; cursor: pointer; }
+.notification-close svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.notification-overlay.success .notification-icon { color: #5bddaa; background: rgba(84,220,168,.11); }
+.notification-overlay.error .notification-icon { color: #ff8392; background: rgba(255,104,124,.11); }
+.notification-overlay.info .notification-icon { color: #69caff; background: rgba(91,190,255,.11); }
 
+html[data-theme="light"] .schedmon-topbar,
+html[data-theme="light"] .schedmon-panel,
+html[data-theme="light"] .schedmon-all-card,
+html[data-theme="light"] .schedmon-side-card {
+    border-color: rgba(35, 95, 150, .13) !important;
+    background:
+        radial-gradient(circle at 0 0, rgba(45, 125, 255, .08), transparent 34%),
+        linear-gradient(145deg, rgba(255,255,255,.99), rgba(244,249,255,.99)) !important;
+    box-shadow: 0 18px 42px rgba(43, 79, 116, .10), inset 0 1px 0 #fff !important;
+}
+html[data-theme="light"] .schedmon-running-card,
+html[data-theme="light"] .schedmon-upcoming-item,
+html[data-theme="light"] .schedmon-table-shell,
+html[data-theme="light"] .schedule-table-row,
+html[data-theme="light"] .schedmon-performance-hero,
+html[data-theme="light"] .schedmon-performance-grid > div,
+html[data-theme="light"] .schedmon-alert-item { background: rgba(241, 247, 253, .82); }
+html[data-theme="light"] .schedmon-rate-ring::before { background: #f8fbff; }
+html[data-theme="light"] .schedmon-calendar-nav-btn,
+html[data-theme="light"] .schedmon-today-btn,
+html[data-theme="light"] .schedmon-calendar-selection,
+html[data-theme="light"] .schedmon-date-filter-chip { background: rgba(235, 245, 255, .92); }
+html[data-theme="light"] .schedmon-calendar-day { color: #405c74; }
+html[data-theme="light"] .schedmon-calendar-day.is-muted { color: #a0afbc; }
+html[data-theme="light"] .schedmon-calendar-day.is-today { color: #145da7; background: rgba(34, 126, 225, .08); }
+html[data-theme="light"] .schedmon-calendar-day.is-selected { color: #fff; background: linear-gradient(145deg, #177ee7, #5046df); }
+html[data-theme="light"] .schedmon-calendar-selection > strong,
+html[data-theme="light"] .schedmon-date-filter-chip strong { color: #17344d; }
+html[data-theme="light"] .schedule-table-title,
+html[data-theme="light"] .schedmon-running-title,
+html[data-theme="light"] .schedmon-up-title,
+html[data-theme="light"] .schedmon-running-metric strong,
+html[data-theme="light"] .schedule-table-value,
+html[data-theme="light"] .schedule-table-result strong,
+html[data-theme="light"] .schedmon-alert-copy strong,
+html[data-theme="light"] .schedmon-performance-hero strong,
+html[data-theme="light"] .schedmon-performance-grid strong { color: #182b3f; }
+
+@media (max-width: 1450px) {
+    .schedmon-topbar { grid-template-columns: 1fr; }
+    .schedmon-topbar-actions { justify-content: flex-end; }
+    .schedmon-dashboard-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+    .schedmon-running-card { grid-template-columns: minmax(220px, 1.2fr) 110px minmax(140px, .8fr) auto; }
+    .schedmon-running-metric.is-speed { display: none; }
+    .schedmon-upcoming-item { grid-template-columns: 72px minmax(220px, 1fr) 140px auto; }
+    .schedmon-upcoming-detail.is-estimate { display: none; }
+}
+@media (max-width: 1180px) {
+    .schedmon-dashboard-grid { grid-template-columns: 1fr; }
+    .schedmon-side-column { position: static; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .schedmon-table-head,
+    .schedule-table-row { grid-template-columns: minmax(190px, 1.2fr) minmax(110px, .8fr) minmax(110px, .8fr) 95px minmax(120px, .8fr) 110px; }
+}
 @media (max-width: 900px) {
-    .schedmon-topbar { flex-wrap: wrap; }
-    .schedmon-topbar-stats { flex-basis: 100%; }
-    .schedmon-upcoming-item { grid-template-columns: 88px minmax(0, 1fr); }
-    .schedmon-upcoming-actions { grid-column: 1 / -1; justify-content: flex-end; }
+    .schedmon-topbar-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .schedmon-topbar-actions { justify-content: stretch; }
+    .schedmon-topbar-actions .btn { flex: 1; }
+    .schedmon-side-column { grid-template-columns: 1fr; }
+    .schedmon-running-card { grid-template-columns: 1fr 1fr; }
+    .schedmon-running-main { grid-column: 1 / -1; }
+    .schedmon-running-progress { grid-column: 1 / -1; }
+    .schedmon-running-actions { justify-content: flex-start; }
+    .schedmon-upcoming-item { grid-template-columns: 70px minmax(0, 1fr) auto; }
+    .schedmon-upcoming-detail { display: none; }
+    .schedule-filter-bar { grid-template-columns: 1fr 1fr; }
+    .schedmon-search-field { grid-column: 1 / -1; }
+    .schedmon-table-shell { overflow-x: auto; }
+    .schedmon-table-head,
+    .schedule-table-row { min-width: 890px; }
 }
 @media (max-width: 640px) {
-    .schedmon-topbar { align-items: flex-start; }
-    .schedmon-running-grid { grid-template-columns: 1fr; }
+    .schedmon-shell { gap: 14px; }
+    .schedmon-topbar { padding: 16px; border-radius: 17px; }
+    .schedmon-topbar-title { align-items: flex-start; }
+    .schedmon-page-icon { width: 44px; height: 44px; flex-basis: 44px; border-radius: 14px; }
+    .schedmon-topbar-title strong { font-size: 20px; }
+    .schedmon-topbar-title small { font-size: 11px; }
+    .schedmon-topbar-stats { grid-template-columns: 1fr 1fr; }
+    .schedmon-stat { min-height: 78px; }
+    .schedmon-topbar-actions { flex-direction: column; }
+    .schedmon-topbar-actions .btn { width: 100%; }
+    .schedmon-panel,
+    .schedmon-all-card,
+    .schedmon-side-card { padding: 15px !important; border-radius: 17px !important; }
+    .schedmon-panel-head { flex-direction: column; }
+    .schedmon-all-head { align-items: stretch; }
+    .schedmon-date-filter-chip { width: 100%; justify-content: flex-start; }
+    .schedmon-date-filter-chip i { margin-left: auto; }
+    .schedmon-calendar-head { flex-direction: row; align-items: center; }
+    .schedmon-live-state { display: none; }
+    .schedmon-running-card { grid-template-columns: 1fr; }
+    .schedmon-running-main,
+    .schedmon-running-progress { grid-column: auto; }
+    .schedmon-running-metric.is-speed { display: block; }
+    .schedmon-upcoming-item { grid-template-columns: 1fr; align-items: start; }
+    .schedmon-upcoming-actions { justify-content: flex-start; }
+    .schedule-filter-bar { grid-template-columns: 1fr; }
+    .schedmon-search-field { grid-column: auto; }
+    .detail-item { flex-direction: column; gap: 4px; }
+    .detail-label { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .schedmon-live-state i,
+    .spinner { animation: none !important; }
+    .schedmon-running-card,
+    .schedmon-upcoming-item,
+    .schedule-table-row { transition: none !important; }
+}
+
+/* Keep long KPI labels contained without colliding with the next metric card. */
+.schedmon-stat > span {
+    min-height: 23px;
+    white-space: normal;
+    line-height: 1.2;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TABLE-FIRST UI — 2026-07-28
+   Bảng lịch là nguồn dữ liệu chính. Mọi khu phụ mở bằng overlay, không chiếm
+   chiều cao của vùng làm việc và bảng chỉ có một vùng cuộn duy nhất.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+body.schedmon-page .schedmon-shell {
+    width: calc(100vw - var(--ux-sidebar-width)) !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100dvh !important;
+    padding: clamp(14px, 1.2vw, 22px) !important;
+    padding-bottom: clamp(14px, 1.2vw, 22px) !important;
+    gap: 12px !important;
+    overflow: hidden !important;
+}
+
+body.schedmon-page .schedmon-topbar {
+    flex: 0 0 auto;
+    display: grid !important;
+    grid-template-columns: minmax(250px, .95fr) minmax(520px, 1.55fr) auto !important;
+    align-items: center;
+    gap: 14px !important;
+    min-height: 84px;
+    padding: 13px 15px !important;
+    border-radius: 18px !important;
+    overflow: visible !important;
+}
+
+body.schedmon-page .schedmon-topbar-title {
+    gap: 11px;
+}
+
+body.schedmon-page .schedmon-page-icon {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 14px;
+}
+
+body.schedmon-page .schedmon-page-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+body.schedmon-page .schedmon-topbar-title strong {
+    font-size: 21px;
+}
+
+body.schedmon-page .schedmon-topbar-title small {
+    max-width: 520px;
+    margin-top: 3px;
+    font-size: 10.5px;
+    line-height: 1.45;
+}
+
+body.schedmon-page .schedmon-quick-tools {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(92px, 1fr));
+    gap: 7px;
+    min-width: 0;
+}
+
+body.schedmon-page .schedmon-quick-btn {
+    min-width: 0;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 1px solid rgba(151, 183, 221, .14);
+    border-radius: 13px;
+    background: linear-gradient(180deg, rgba(255,255,255,.052), rgba(255,255,255,.022));
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    transition: transform .15s ease, border-color .15s ease, background .15s ease;
+}
+
+body.schedmon-page .schedmon-quick-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(101, 190, 255, .34);
+    background: rgba(57, 130, 235, .09);
+}
+
+body.schedmon-page .schedmon-quick-btn:focus-visible {
+    outline: none;
+    border-color: #5dbfff;
+    box-shadow: 0 0 0 3px rgba(71, 154, 255, .18);
+}
+
+body.schedmon-page .schedmon-quick-icon {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: rgba(90, 156, 255, .10);
+    color: #6ac9ff;
+}
+
+body.schedmon-page .schedmon-quick-icon svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+body.schedmon-page .schedmon-quick-btn.is-upcoming .schedmon-quick-icon { color: #b38aff; background: rgba(162, 112, 255, .10); }
+body.schedmon-page .schedmon-quick-btn.is-done .schedmon-quick-icon { color: #5ce0a3; background: rgba(82, 224, 163, .09); }
+body.schedmon-page .schedmon-quick-btn.is-error .schedmon-quick-icon { color: #ff8292; background: rgba(255, 112, 130, .09); }
+body.schedmon-page .schedmon-quick-btn.is-calendar .schedmon-quick-icon { color: #73cfff; background: rgba(73, 166, 255, .10); }
+
+body.schedmon-page .schedmon-quick-copy {
+    min-width: 0;
+    display: block;
+}
+
+body.schedmon-page .schedmon-quick-copy small,
+body.schedmon-page .schedmon-quick-copy strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.schedmon-page .schedmon-quick-copy small {
+    color: #7f99b0;
+    font-size: 8px;
+    font-weight: 760;
+    letter-spacing: .045em;
+    text-transform: uppercase;
+}
+
+body.schedmon-page .schedmon-quick-copy strong {
+    margin-top: 3px;
+    color: #eaf5ff;
+    font-size: 14px;
+    line-height: 1;
+    font-weight: 820;
+}
+
+body.schedmon-page .schedmon-topbar-actions {
+    position: relative;
+    z-index: 2;
+    gap: 7px;
+}
+
+body.schedmon-page .schedmon-topbar-actions .btn {
+    min-height: 39px !important;
+    padding: 8px 11px !important;
+    border-radius: 11px !important;
+    font-size: 10.5px !important;
+}
+
+body.schedmon-page .schedmon-all-card {
+    flex: 1 1 auto !important;
+    height: 0;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 14px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 18px !important;
+    overflow: hidden !important;
+}
+
+body.schedmon-page .schedmon-all-head {
+    flex: 0 0 auto;
+    align-items: center;
+    margin-bottom: 9px;
+}
+
+body.schedmon-page .schedmon-all-head h2 {
+    font-size: 15px;
+}
+
+body.schedmon-page .schedmon-all-head p {
+    margin-top: 3px;
+    font-size: 10px;
+}
+
+body.schedmon-page .schedule-filter-bar {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(260px, 1fr) 160px 160px;
+    gap: 8px;
+    margin-bottom: 9px;
+}
+
+body.schedmon-page .schedule-filter-bar input,
+body.schedmon-page .schedule-filter-bar select {
+    min-height: 37px !important;
+    border-radius: 10px !important;
+}
+
+/* Một vùng cuộn duy nhất: cả đầu bảng và danh sách nằm trong table-shell. */
+body.schedmon-page .schedmon-table-shell,
+body.schedmon-page .schedmon-shell .schedmon-table-shell {
+    position: relative;
+    flex: 1 1 auto !important;
+    height: 0 !important;
+    min-width: 0;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: auto !important;
+    border-radius: 13px;
+    scrollbar-gutter: stable both-edges;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
+}
+
+body.schedmon-page .schedmon-table-head,
+body.schedmon-page .schedule-table-row {
+    min-width: 940px;
+    grid-template-columns: minmax(230px, 1.35fr) minmax(145px, .82fr) minmax(145px, .82fr) 112px minmax(145px, .85fr) 134px;
+}
+
+body.schedmon-page .schedmon-table-head {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    min-height: 40px;
+    background: rgba(15, 37, 62, .98);
+    box-shadow: 0 1px 0 rgba(151, 183, 221, .13);
+    backdrop-filter: blur(12px);
+}
+
+body.schedmon-page .schedules-list-grid,
+body.schedmon-page .schedmon-shell .schedules-list-grid {
+    width: 100%;
+    min-width: 940px;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.schedmon-page .schedule-table-row {
+    min-height: 58px;
+}
+
+body.schedmon-page .schedmon-table-shell:focus-visible {
+    outline: none;
+    border-color: rgba(91, 185, 255, .42);
+    box-shadow: 0 0 0 3px rgba(71, 154, 255, .12);
+}
+
+body.schedmon-page .schedmon-empty {
+    min-height: 190px;
+}
+
+/* Overlay dữ liệu phụ */
+body.schedmon-page.schedmon-overlay-open {
+    overflow: hidden !important;
+}
+
+.schedmon-data-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 6500;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    background: rgba(1, 8, 18, .76);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity .16s ease;
+}
+
+.schedmon-data-overlay.is-open {
+    display: flex;
+    opacity: 1;
+}
+
+.schedmon-overlay-card {
+    width: min(760px, 96vw);
+    max-height: min(86dvh, 820px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(112, 168, 255, .24);
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at 0 0, rgba(47, 124, 255, .16), transparent 38%),
+        linear-gradient(145deg, rgba(13, 27, 48, .995), rgba(7, 17, 31, .995));
+    box-shadow: 0 30px 90px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.05);
+    transform: translateY(8px) scale(.985);
+    transition: transform .16s ease;
+}
+
+.schedmon-data-overlay.is-open .schedmon-overlay-card {
+    transform: translateY(0) scale(1);
+}
+
+.schedmon-overlay-card.schedmon-overlay-wide {
+    width: min(1120px, 96vw);
+}
+
+.schedmon-overlay-card.schedmon-overlay-calendar {
+    width: min(560px, 96vw);
+}
+
+.schedmon-overlay-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 17px 18px;
+    border-bottom: 1px solid rgba(151, 183, 221, .12);
+    background: rgba(255,255,255,.018);
+}
+
+.schedmon-overlay-head h2 {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    color: var(--text);
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -.02em;
+}
+
+.schedmon-overlay-head p {
+    margin: 5px 0 0;
+    color: #8098ad;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.schedmon-overlay-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.schedmon-overlay-close {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(151, 183, 221, .16);
+    border-radius: 11px;
+    background: rgba(255,255,255,.035);
+    color: #a8bed0;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.schedmon-overlay-close:hover {
+    color: #fff;
+    border-color: rgba(101, 190, 255, .34);
+    background: rgba(57, 130, 235, .10);
+}
+
+.schedmon-overlay-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 16px 18px 18px;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+}
+
+.schedmon-overlay-body .schedmon-running-list,
+.schedmon-overlay-body .schedmon-upcoming-list,
+.schedmon-overlay-body .schedmon-alert-list {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.schedmon-overlay-body .schedmon-empty {
+    min-height: 240px;
+}
+
+.schedmon-overlay-body .schedmon-performance-hero {
+    margin-top: 0;
+}
+
+/* Light theme */
+html[data-theme="light"] body.schedmon-page .schedmon-table-head {
+    background: rgba(239, 246, 252, .98);
+}
+
+html[data-theme="light"] .schedmon-overlay-card {
+    border-color: rgba(38, 91, 138, .18);
+    background: linear-gradient(145deg, rgba(255,255,255,.995), rgba(242,247,252,.995));
+    box-shadow: 0 30px 90px rgba(33, 56, 77, .24), inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+html[data-theme="light"] body.schedmon-page .schedmon-quick-btn {
+    border-color: rgba(38, 91, 138, .14);
+    background: rgba(255,255,255,.72);
+}
+
+html[data-theme="light"] body.schedmon-page .schedmon-quick-copy strong,
+html[data-theme="light"] .schedmon-overlay-head h2 {
+    color: #182b3f;
+}
+
+@media (max-width: 1480px) {
+    body.schedmon-page .schedmon-topbar {
+        grid-template-columns: minmax(230px, .9fr) minmax(470px, 1.45fr) auto !important;
+    }
+    body.schedmon-page .schedmon-quick-btn {
+        padding-inline: 7px;
+    }
+    body.schedmon-page .schedmon-quick-icon {
+        display: none;
+    }
+}
+
+@media (max-width: 1240px) {
+    body.schedmon-page .schedmon-topbar {
+        grid-template-columns: 1fr auto !important;
+    }
+    body.schedmon-page .schedmon-quick-tools {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+    }
+    body.schedmon-page .schedmon-quick-icon {
+        display: grid;
+    }
+}
+
+@media (max-width: 1024px) {
+    body.schedmon-page {
+        padding-top: var(--nexus-mobile-bar-height) !important;
+    }
+    body.schedmon-page .schedmon-shell {
+        width: 100vw !important;
+        height: calc(100dvh - var(--nexus-mobile-bar-height)) !important;
+        max-height: calc(100dvh - var(--nexus-mobile-bar-height)) !important;
+        margin-left: 0 !important;
+        overflow: hidden !important;
+    }
+    body.schedmon-page .schedmon-topbar {
+        grid-template-columns: 1fr auto !important;
+    }
+    body.schedmon-page .schedmon-quick-tools {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 2px;
+        scrollbar-width: thin;
+    }
+    body.schedmon-page .schedmon-quick-btn {
+        flex: 0 0 150px;
+    }
+}
+
+@media (max-width: 720px) {
+    body.schedmon-page .schedmon-shell {
+        padding: 10px !important;
+        gap: 9px !important;
+    }
+    body.schedmon-page .schedmon-topbar {
+        grid-template-columns: 1fr !important;
+        padding: 12px !important;
+        border-radius: 15px !important;
+    }
+    body.schedmon-page .schedmon-topbar-title small {
+        display: none;
+    }
+    body.schedmon-page .schedmon-topbar-actions {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+    }
+    body.schedmon-page .schedmon-topbar-actions .btn {
+        width: 38px;
+        min-width: 38px;
+        padding: 8px !important;
+    }
+    body.schedmon-page .schedmon-topbar-actions .btn span {
+        display: none;
+    }
+    body.schedmon-page .schedmon-quick-tools {
+        grid-column: auto;
+        grid-row: auto;
+        padding-right: 2px;
+    }
+    body.schedmon-page .schedmon-quick-btn {
+        flex-basis: 134px;
+        min-height: 48px;
+    }
+    body.schedmon-page .schedmon-all-card {
+        padding: 11px !important;
+        border-radius: 15px !important;
+    }
+    body.schedmon-page .schedmon-all-head {
+        align-items: flex-start;
+    }
+    body.schedmon-page .schedmon-all-head p {
+        display: none;
+    }
+    body.schedmon-page .schedule-filter-bar {
+        grid-template-columns: 1fr 1fr;
+    }
+    body.schedmon-page .schedmon-search-field {
+        grid-column: 1 / -1;
+    }
+    .schedmon-data-overlay {
+        align-items: flex-end;
+        padding: 8px;
+    }
+    .schedmon-overlay-card,
+    .schedmon-overlay-card.schedmon-overlay-wide,
+    .schedmon-overlay-card.schedmon-overlay-calendar {
+        width: 100%;
+        max-height: calc(100dvh - 16px);
+        border-radius: 18px;
+    }
+    .schedmon-overlay-head {
+        padding: 14px;
+    }
+    .schedmon-overlay-body {
+        padding: 14px;
+    }
+    .schedmon-overlay-head-actions .schedmon-live-state {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    body.schedmon-page .schedule-filter-bar {
+        grid-template-columns: 1fr;
+    }
+    body.schedmon-page .schedmon-search-field {
+        grid-column: auto;
+    }
+    body.schedmon-page .schedmon-date-filter-chip {
+        width: auto;
+        max-width: 100%;
+    }
+    .schedmon-overlay-head {
+        align-items: flex-start;
+    }
+    .schedmon-overlay-head h2 {
+        font-size: 15px;
+    }
+    .schedmon-overlay-head-actions {
+        gap: 6px;
+    }
 }

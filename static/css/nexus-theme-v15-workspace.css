@@ -1,0 +1,1467 @@
+/* Nexus V13 — light pastel system, clear contrast, no dark blocks */
+:root,
+html[data-theme="light"] {
+    --nx13-page: #eef3f7;
+    --nx13-page-2: #e7eef4;
+    --nx13-sidebar: #f7fafc;
+    --nx13-panel: #f8fbfd;
+    --nx13-panel-soft: #f1f6fa;
+    --nx13-item: #edf5fb;
+    --nx13-item-hover: #dceeff;
+    --nx13-selected: #d9ecff;
+    --nx13-selected-2: #cde5fb;
+    --nx13-border: #c7d4de;
+    --nx13-border-strong: #a9bdcb;
+    --nx13-text: #17354d;
+    --nx13-text-2: #476378;
+    --nx13-muted: #6c8293;
+    --nx13-blue: #4d98d3;
+    --nx13-blue-hover: #347fb8;
+    --nx13-blue-text: #1f5f91;
+    --nx13-blue-soft: #dceeff;
+    --nx13-green-soft: #ddf3e8;
+    --nx13-green-text: #27694f;
+    --nx13-red-soft: #f8e3e7;
+    --nx13-red-text: #9a4652;
+    --nx13-yellow-soft: #f7edd8;
+    --nx13-yellow-text: #856126;
+    --nx13-shadow: 0 10px 28px rgba(55, 91, 118, .09);
+}
+
+html,
+html body,
+html body[data-theme="light"] {
+    color: var(--nx13-text) !important;
+    background: linear-gradient(135deg, var(--nx13-page), var(--nx13-page-2)) fixed !important;
+}
+
+html body h1,
+html body h2,
+html body h3,
+html body h4,
+html body h5,
+html body h6,
+html body strong,
+html body b,
+html body .card-title,
+html body .page-title,
+html body .section-title {
+    color: var(--nx13-text) !important;
+}
+
+html body p,
+html body small,
+html body .muted,
+html body .subtitle,
+html body .description {
+    color: var(--nx13-text-2) !important;
+}
+
+/* Sidebar */
+html body .app-sidebar.header,
+html body .header.app-sidebar {
+    color: var(--nx13-text) !important;
+    background: var(--nx13-sidebar) !important;
+    border-right: 1px solid var(--nx13-border) !important;
+    box-shadow: 8px 0 24px rgba(53, 86, 110, .06) !important;
+}
+
+html body .header-content .brand,
+html body .brand {
+    color: var(--nx13-text) !important;
+    background: #ffffff !important;
+    border-color: var(--nx13-border) !important;
+    box-shadow: 0 5px 16px rgba(70, 103, 129, .06) !important;
+}
+
+html body .brand-copy h1,
+html body .header-content .brand h1 {
+    color: var(--nx13-text) !important;
+}
+html body .brand-subtitle,
+html body .nav-section-label {
+    color: var(--nx13-muted) !important;
+}
+
+html body .app-sidebar .header-nav > a,
+html body .header.app-sidebar .header-nav > a,
+html body .sidebar-mini-link,
+html body .sidebar-policy-link {
+    color: var(--nx13-text) !important;
+    background: transparent !important;
+    background-image: none !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+}
+
+html body .app-sidebar .header-nav > a .nav-copy strong,
+html body .header.app-sidebar .header-nav > a .nav-copy strong,
+html body .sidebar-mini-link strong,
+html body .sidebar-policy-link strong {
+    color: var(--nx13-text) !important;
+}
+html body .app-sidebar .header-nav > a .nav-copy small,
+html body .header.app-sidebar .header-nav > a .nav-copy small,
+html body .sidebar-mini-link small,
+html body .sidebar-policy-link small {
+    color: var(--nx13-muted) !important;
+}
+html body .app-sidebar .header-nav > a .nav-icon,
+html body .header.app-sidebar .header-nav > a .nav-icon,
+html body .sidebar-mini-link > span,
+html body .sidebar-policy-link > span {
+    color: var(--nx13-blue-text) !important;
+    background: #f4f9fd !important;
+    border-color: var(--nx13-border) !important;
+}
+html body .app-sidebar .header-nav > a svg,
+html body .header.app-sidebar .header-nav > a svg,
+html body .sidebar-mini-link svg,
+html body .sidebar-policy-link svg {
+    color: var(--nx13-blue-text) !important;
+    stroke: var(--nx13-blue-text) !important;
+}
+
+/* Selected menu: light blue surface + dark blue copy. */
+html body .app-sidebar .header-nav > a.active,
+html body .header.app-sidebar .header-nav > a.active,
+html body .app-sidebar .header-nav > a[aria-current="page"],
+html body .header.app-sidebar .header-nav > a[aria-current="page"],
+html body .sidebar-mini-link.active {
+    color: var(--nx13-blue-text) !important;
+    background: var(--nx13-selected) !important;
+    background-color: var(--nx13-selected) !important;
+    background-image: none !important;
+    border-color: #a9cdeb !important;
+    box-shadow: inset 4px 0 0 var(--nx13-blue) !important;
+}
+html body .app-sidebar .header-nav > a.active *,
+html body .header.app-sidebar .header-nav > a.active *,
+html body .app-sidebar .header-nav > a[aria-current="page"] *,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] *,
+html body .sidebar-mini-link.active * {
+    color: var(--nx13-blue-text) !important;
+    opacity: 1 !important;
+}
+html body .app-sidebar .header-nav > a.active .nav-icon,
+html body .header.app-sidebar .header-nav > a.active .nav-icon,
+html body .app-sidebar .header-nav > a[aria-current="page"] .nav-icon,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] .nav-icon {
+    color: var(--nx13-blue-text) !important;
+    background: #f3f9ff !important;
+    border-color: #a8cae7 !important;
+}
+html body .app-sidebar .header-nav > a.active svg,
+html body .header.app-sidebar .header-nav > a.active svg,
+html body .app-sidebar .header-nav > a[aria-current="page"] svg,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] svg {
+    color: var(--nx13-blue-text) !important;
+    stroke: var(--nx13-blue-text) !important;
+}
+
+/* Hover: medium sky blue + white copy. */
+html body .app-sidebar .header-nav > a:hover,
+html body .header.app-sidebar .header-nav > a:hover,
+html body .sidebar-mini-link:hover,
+html body .sidebar-policy-link:hover {
+    color: #ffffff !important;
+    background: var(--nx13-blue) !important;
+    border-color: var(--nx13-blue) !important;
+}
+html body .app-sidebar .header-nav > a:hover *,
+html body .header.app-sidebar .header-nav > a:hover *,
+html body .sidebar-mini-link:hover *,
+html body .sidebar-policy-link:hover * {
+    color: #ffffff !important;
+}
+html body .app-sidebar .header-nav > a:hover svg,
+html body .header.app-sidebar .header-nav > a:hover svg,
+html body .sidebar-mini-link:hover svg,
+html body .sidebar-policy-link:hover svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+}
+
+/* Main light surfaces */
+html body .card,
+html body .page-hero,
+html body .acc-topbar,
+html body .dash-topbar,
+html body .groups-page-header,
+html body .groups-sidebar-card,
+html body .groups-detail-card,
+html body .groups-main-card,
+html body .members-data-topbar,
+html body .members-data-card,
+html body .schedmon-topbar,
+html body .schedmon-all-card,
+html body .group-copy-jobs-card,
+html body .guide-section-pro,
+html body .guide-principle-panel,
+html body .activation-hero,
+html body .message-kpi-card,
+html body .account-card,
+html body .gc-job-card {
+    color: var(--nx13-text) !important;
+    background: var(--nx13-panel) !important;
+    border-color: var(--nx13-border) !important;
+    box-shadow: var(--nx13-shadow) !important;
+}
+
+html body .dash-stat,
+html body .acc-stat,
+html body .gc-stat,
+html body .gc-job-metric,
+html body .gc-job-operator,
+html body .gc-job-route-node,
+html body .group-copy-account-trigger,
+html body .group-copy-account-menu,
+html body .group-copy-account-option,
+html body .group-copy-toggle-card,
+html body .group-copy-detail-item,
+html body .gc-picker-row,
+html body .guide-step-card,
+html body .guide-menu-item,
+html body .guide-process-card,
+html body .guide-help-card,
+html body .groups-list-item,
+html body .conversation-item {
+    color: var(--nx13-text) !important;
+    background: var(--nx13-item) !important;
+    border-color: var(--nx13-border) !important;
+}
+html body .dash-stat:hover,
+html body .acc-stat:hover,
+html body .gc-stat:hover,
+html body .gc-job-card:hover,
+html body .group-copy-account-option:hover,
+html body .gc-picker-row:hover,
+html body .guide-step-card:hover,
+html body .guide-menu-item:hover,
+html body .guide-process-card:hover,
+html body .guide-help-card:hover,
+html body .groups-list-item:hover,
+html body .conversation-item:hover {
+    color: var(--nx13-text) !important;
+    background: var(--nx13-item-hover) !important;
+    border-color: #a5c6df !important;
+}
+html body .dash-stat *,
+html body .acc-stat *,
+html body .gc-stat *,
+html body .gc-job-card *,
+html body .group-copy-account-trigger *,
+html body .group-copy-account-option *,
+html body .guide-step-card *,
+html body .guide-menu-item *,
+html body .guide-process-card *,
+html body .groups-list-item *,
+html body .conversation-item * {
+    color: inherit !important;
+}
+
+/* Inputs */
+html body input,
+html body select,
+html body textarea,
+html body .form-group input,
+html body .form-group select,
+html body .form-group textarea,
+html body .af-input,
+html body .ig-search,
+html body .overlay-textarea,
+html body .group-copy-account-search,
+html body .schedmon-search-field,
+html body .schedmon-select-field select {
+    color: var(--nx13-text) !important;
+    background: #ffffff !important;
+    border-color: var(--nx13-border-strong) !important;
+    box-shadow: none !important;
+}
+html body input::placeholder,
+html body textarea::placeholder {
+    color: #8798a6 !important;
+}
+html body input:focus,
+html body select:focus,
+html body textarea:focus {
+    border-color: var(--nx13-blue) !important;
+    box-shadow: 0 0 0 3px rgba(77, 152, 211, .18) !important;
+}
+
+/* Buttons: light by default, sky-blue hover. */
+html body button:not(:disabled),
+html body .btn:not(:disabled),
+html body a.btn,
+html body [role="button"]:not([aria-disabled="true"]),
+html body [role="tab"]:not([aria-disabled="true"]) {
+    color: var(--nx13-blue-text) !important;
+    background: var(--nx13-blue-soft) !important;
+    background-color: var(--nx13-blue-soft) !important;
+    background-image: none !important;
+    border-color: #a7cbed !important;
+    box-shadow: none !important;
+}
+html body .btn-primary:not(:disabled),
+html body button.btn-primary:not(:disabled),
+html body .policy-button:not(:disabled),
+html body .gc-run-btn:not(:disabled),
+html body .nexus-update-toast-btn {
+    color: #ffffff !important;
+    background: var(--nx13-blue) !important;
+    border-color: var(--nx13-blue) !important;
+}
+html body .btn-danger:not(:disabled),
+html body .btn-icon-danger:not(:disabled) {
+    color: var(--nx13-red-text) !important;
+    background: var(--nx13-red-soft) !important;
+    border-color: #e9b8c0 !important;
+}
+html body .btn-success:not(:disabled) {
+    color: var(--nx13-green-text) !important;
+    background: var(--nx13-green-soft) !important;
+    border-color: #a9d7bf !important;
+}
+html body button:not(:disabled):hover,
+html body .btn:not(:disabled):hover,
+html body a.btn:hover,
+html body [role="button"]:not([aria-disabled="true"]):hover,
+html body [role="tab"]:not([aria-disabled="true"]):hover,
+html body .guide-anchor-nav a:hover,
+html body .guide-anchor-nav a:focus-visible {
+    color: #ffffff !important;
+    background: var(--nx13-blue-hover) !important;
+    background-color: var(--nx13-blue-hover) !important;
+    border-color: var(--nx13-blue-hover) !important;
+}
+html body button:not(:disabled):hover *,
+html body .btn:not(:disabled):hover *,
+html body a.btn:hover *,
+html body [role="button"]:not([aria-disabled="true"]):hover *,
+html body [role="tab"]:not([aria-disabled="true"]):hover * {
+    color: #ffffff !important;
+}
+html body button:not(:disabled):hover svg,
+html body .btn:not(:disabled):hover svg,
+html body a.btn:hover svg,
+html body [role="button"]:not([aria-disabled="true"]):hover svg,
+html body [role="tab"]:not([aria-disabled="true"]):hover svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+}
+html body button:disabled,
+html body .btn:disabled {
+    color: #8a9aa6 !important;
+    background: #e6edf1 !important;
+    border-color: #cfdae1 !important;
+    opacity: .72 !important;
+}
+
+/* Selected tabs/items: light blue + dark blue text. */
+html body button.active,
+html body [role="tab"][aria-selected="true"],
+html body [aria-pressed="true"],
+html body .tab-btn.active,
+html body .tab-nav button.active,
+html body .gc-segmented button.active,
+html body .gc-jobs-filter button.active,
+html body .groups-filter-pill.active,
+html body .group-copy-mode-switch button.active,
+html body .groups-list-item.active,
+html body .group-copy-account-option.active,
+html body .groups-account-option.active,
+html body .conversation-item.active,
+html body .plan-item.active {
+    color: var(--nx13-blue-text) !important;
+    background: var(--nx13-selected) !important;
+    border-color: #9fc9eb !important;
+    box-shadow: inset 0 -3px 0 var(--nx13-blue) !important;
+}
+html body button.active *,
+html body [role="tab"][aria-selected="true"] *,
+html body [aria-pressed="true"] *,
+html body .tab-btn.active *,
+html body .tab-nav button.active *,
+html body .gc-segmented button.active *,
+html body .gc-jobs-filter button.active *,
+html body .groups-filter-pill.active *,
+html body .group-copy-mode-switch button.active *,
+html body .groups-list-item.active *,
+html body .group-copy-account-option.active *,
+html body .groups-account-option.active *,
+html body .conversation-item.active *,
+html body .plan-item.active * {
+    color: var(--nx13-blue-text) !important;
+}
+
+/* Guide — all light. */
+html body.guide-page .guide-hero-main {
+    color: var(--nx13-text) !important;
+    background: linear-gradient(135deg, #f8fbfd, #eaf3f9) !important;
+}
+html body.guide-page .guide-start-panel {
+    color: var(--nx13-text) !important;
+    background: linear-gradient(180deg, #e7f3fc, #dceefb) !important;
+    border-color: #b8d4e8 !important;
+}
+html body.guide-page .guide-start-panel *,
+html body.guide-page .guide-start-panel .guide-panel-label,
+html body.guide-page .guide-start-panel strong,
+html body.guide-page .guide-start-panel small {
+    color: var(--nx13-text) !important;
+    opacity: 1 !important;
+}
+html body.guide-page .guide-start-panel .guide-start-list small {
+    color: var(--nx13-text-2) !important;
+}
+html body.guide-page .guide-start-list > li > span,
+html body.guide-page .guide-section-number,
+html body.guide-page .guide-step-index,
+html body.guide-page .guide-process-label {
+    color: var(--nx13-blue-text) !important;
+    background: #f5faff !important;
+    border-color: #a8cdea !important;
+}
+html body.guide-page .guide-anchor-nav {
+    color: var(--nx13-text) !important;
+    background: #f5f9fc !important;
+    border-color: var(--nx13-border) !important;
+}
+html body.guide-page .guide-anchor-nav a {
+    color: var(--nx13-text-2) !important;
+    background: transparent !important;
+}
+html body.guide-page .guide-kicker,
+html body.guide-page .guide-section-eyebrow {
+    color: #a56f2f !important;
+}
+
+/* Policy and splash — light editorial version. */
+html body.policy-masterise {
+    background: linear-gradient(135deg, #edf3f7, #e4edf3) !important;
+}
+html body.policy-masterise .nexus-splash {
+    color: var(--nx13-text) !important;
+    background: linear-gradient(145deg, #edf6fc, #dcecf7) !important;
+}
+html body.policy-masterise .nexus-splash::before,
+html body.policy-masterise .nexus-splash::after {
+    border-color: rgba(73, 139, 190, .24) !important;
+}
+html body.policy-masterise .splash-word {
+    color: var(--nx13-text) !important;
+}
+html body.policy-masterise .splash-caption {
+    color: var(--nx13-text-2) !important;
+}
+html body.policy-masterise .splash-line {
+    background: #7fb7de !important;
+}
+html body.policy-masterise .policy-shell,
+html body.policy-masterise .policy-document {
+    color: var(--nx13-text) !important;
+    background: var(--nx13-panel) !important;
+    border-color: var(--nx13-border) !important;
+}
+html body.policy-masterise .policy-story {
+    color: var(--nx13-text) !important;
+    background: linear-gradient(160deg, #e7f3fc, #d8ebf8) !important;
+}
+html body.policy-masterise .policy-story *,
+html body.policy-masterise .policy-brand strong,
+html body.policy-masterise .policy-brand span,
+html body.policy-masterise .policy-title,
+html body.policy-masterise .policy-lead,
+html body.policy-masterise .policy-value span,
+html body.policy-masterise .policy-version {
+    color: var(--nx13-text) !important;
+    opacity: 1 !important;
+}
+html body.policy-masterise .policy-brand span,
+html body.policy-masterise .policy-lead,
+html body.policy-masterise .policy-version {
+    color: var(--nx13-text-2) !important;
+}
+html body.policy-masterise .policy-eyebrow,
+html body.policy-masterise .eyebrow {
+    color: #9b6a2c !important;
+}
+html body.policy-masterise .policy-head,
+html body.policy-masterise .policy-actions {
+    color: var(--nx13-text) !important;
+    background: #eaf2f7 !important;
+    border-color: var(--nx13-border) !important;
+}
+html body.policy-masterise .policy-confirm,
+html body.policy-masterise .policy-warning {
+    color: var(--nx13-text) !important;
+    background: #f6f9fb !important;
+    border-color: var(--nx13-border) !important;
+}
+html body.policy-masterise .policy-number {
+    color: var(--nx13-blue-text) !important;
+    background: var(--nx13-blue-soft) !important;
+    border-color: #a4cae9 !important;
+}
+html body.policy-masterise .policy-section h3 {
+    color: var(--nx13-text) !important;
+}
+html body.policy-masterise .policy-section p {
+    color: var(--nx13-text-2) !important;
+}
+
+/* Tables — light header, dark text. */
+html body table,
+html body tbody,
+html body .table-scroll,
+html body .table-container,
+html body .members-table-stage,
+html body .groups-members-table-wrap,
+html body .personal-groups-table-wrap,
+html body .schedmon-table-shell,
+html body .accounts-table-wrap,
+html body .message-table-wrap,
+html body .group-copy-member-wrap {
+    color: var(--nx13-text) !important;
+    background: #f9fbfc !important;
+    border-color: var(--nx13-border) !important;
+}
+html body thead,
+html body thead tr,
+html body th,
+html body .schedmon-table-head {
+    color: var(--nx13-blue-text) !important;
+    background: #dcecf8 !important;
+    border-color: #b9d1e1 !important;
+}
+html body thead *,
+html body th * {
+    color: var(--nx13-blue-text) !important;
+}
+html body td {
+    color: var(--nx13-text-2) !important;
+    border-color: #dbe4ea !important;
+}
+html body tbody tr { background: #fbfcfd !important; }
+html body tbody tr:nth-child(even) { background: #f1f6f9 !important; }
+html body tbody tr:hover { background: #e0eff9 !important; }
+html body tbody tr.selected,
+html body tbody tr.is-selected {
+    background: #d8ebf8 !important;
+    box-shadow: inset 4px 0 0 var(--nx13-blue) !important;
+}
+
+/* Overlays/popups — light, low glare. */
+html body .overlay-backdrop,
+html body #msgOverlayBackdrop,
+html body .member-data-overlay,
+html body .nexus-update-backdrop,
+html body .groups-modal-backdrop,
+html body .group-copy-modal {
+    background: rgba(93, 111, 125, .28) !important;
+    backdrop-filter: blur(7px) saturate(108%) !important;
+}
+html body .overlay-card,
+html body .nexus-update-modal,
+html body .log-drawer,
+html body .detail-modal-content,
+html body .groups-modal-card {
+    color: var(--nx13-text) !important;
+    background: #f8fbfd !important;
+    border-color: var(--nx13-border) !important;
+    box-shadow: 0 28px 70px rgba(55, 85, 107, .18) !important;
+}
+html body .overlay-header,
+html body .overlay-footer,
+html body .gc-create-head,
+html body .log-drawer-header,
+html body .nexus-update-head,
+html body .nexus-update-actions,
+html body .groups-modal-head {
+    color: var(--nx13-text) !important;
+    background: #eaf3f9 !important;
+    border-color: var(--nx13-border) !important;
+}
+html body .overlay-body,
+html body .gc-create-body,
+html body .group-copy-detail-body,
+html body .nexus-update-body,
+html body .groups-modal-body {
+    color: var(--nx13-text) !important;
+    background: #f8fbfd !important;
+}
+html body .overlay-name,
+html body .overlay-title,
+html body .pf-user-name,
+html body .gc-create-head strong,
+html body .nexus-update-head h3,
+html body .groups-modal-head strong {
+    color: var(--nx13-text) !important;
+}
+html body .overlay-uid,
+html body .overlay-label,
+html body .pf-user-uid,
+html body .gc-create-head small,
+html body .nexus-update-head p,
+html body .groups-modal-head small {
+    color: var(--nx13-muted) !important;
+}
+
+/* Status chips and notices */
+html body .status-badge,
+html body .badge,
+html body .pill,
+html body .members-count-chip,
+html body .schedmon-count-pill,
+html body .gc-health-chip,
+html body .account-card-status,
+html body .dashboard-status-pill,
+html body .schedule-status-badge,
+html body .status-chip {
+    color: var(--nx13-blue-text) !important;
+    background: var(--nx13-blue-soft) !important;
+    border-color: #afd0ea !important;
+}
+html body .status-badge.success,
+html body .status-badge.done,
+html body .account-card-status.ok,
+html body .account-card-status.running,
+html body .dashboard-status-pill.success,
+html body .schedule-status-badge.done {
+    color: var(--nx13-green-text) !important;
+    background: var(--nx13-green-soft) !important;
+    border-color: #a9d5bd !important;
+}
+html body .status-badge.error,
+html body .status-badge.failed,
+html body .dashboard-status-pill.danger,
+html body .schedule-status-badge.failed {
+    color: var(--nx13-red-text) !important;
+    background: var(--nx13-red-soft) !important;
+    border-color: #e4b6bf !important;
+}
+html body .status-badge.pending,
+html body .status-badge.warning,
+html body .account-card-status.wait,
+html body .dashboard-status-pill.running,
+html body .schedule-status-badge.pending,
+html body .schedule-status-badge.partial {
+    color: var(--nx13-yellow-text) !important;
+    background: var(--nx13-yellow-soft) !important;
+    border-color: #ddc699 !important;
+}
+
+/* Notifications bottom-right, light card. */
+html body .member-toast-stack,
+html body .groups-toast,
+html body .notification-overlay,
+html body .nexus-update-toast {
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+    z-index: 10020 !important;
+}
+html body .notification-overlay {
+    background: transparent !important;
+    backdrop-filter: none !important;
+}
+html body .member-toast,
+html body .groups-toast,
+html body .notification-card,
+html body .nexus-update-toast {
+    color: var(--nx13-text) !important;
+    background: #f8fbfd !important;
+    border: 1px solid var(--nx13-border) !important;
+    box-shadow: 0 16px 42px rgba(53, 83, 105, .18) !important;
+}
+html body .member-toast *,
+html body .groups-toast *,
+html body .notification-card *,
+html body .nexus-update-toast * {
+    color: var(--nx13-text) !important;
+}
+html body .notification-message {
+    color: var(--nx13-text-2) !important;
+}
+html body .member-toast.success { border-left: 5px solid #67b78b !important; }
+html body .member-toast.error { border-left: 5px solid #d97782 !important; }
+html body .member-toast.warning,
+html body .member-toast.warn { border-left: 5px solid #d6a14f !important; }
+html body .member-toast.info { border-left: 5px solid var(--nx13-blue) !important; }
+
+@media (max-width: 980px) {
+    html body:not(.policy-masterise) > .page,
+    html body:not(.policy-masterise) > main.page,
+    html body:not(.policy-masterise) .page.guide-shell {
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+}
+@media (max-width: 700px) {
+    html body .member-toast-stack,
+    html body .groups-toast,
+    html body .notification-overlay,
+    html body .nexus-update-toast {
+        right: 10px !important;
+        bottom: 10px !important;
+        left: 10px !important;
+        max-width: none !important;
+    }
+}
+
+
+/* ==========================================================================\n   Nexus V14 — white surfaces use bold black text; all interactive hover is\n   blue with white copy. Loaded last to override every page-specific stylesheet.\n   ========================================================================== */
+:root,
+html[data-theme="light"] {
+    --nx14-black: #0b1220;
+    --nx14-text: #111827;
+    --nx14-text-2: #263445;
+    --nx14-muted: #526273;
+    --nx14-white: #ffffff;
+    --nx14-page: #eaf0f4;
+    --nx14-soft: #f4f7f9;
+    --nx14-soft-2: #e8eef2;
+    --nx14-border: #b9c6cf;
+    --nx14-blue: #246fa2;
+    --nx14-blue-hover: #175b8a;
+    --nx14-blue-active: #15527d;
+}
+
+html body,
+html body[data-theme="light"] {
+    color: var(--nx14-text) !important;
+    background: linear-gradient(135deg, #e6edf2, #edf2f5) fixed !important;
+}
+
+/* Typography: white and pale surfaces always use dark, bold copy. */
+html body h1,
+html body h2,
+html body h3,
+html body h4,
+html body h5,
+html body h6,
+html body strong,
+html body b,
+html body .title,
+html body .card-title,
+html body .page-title,
+html body .section-title,
+html body .account-card-name,
+html body .gc-job-title,
+html body .schedmon-topbar-title,
+html body .members-data-heading,
+html body .groups-page-title {
+    color: var(--nx14-black) !important;
+    font-weight: 800 !important;
+}
+
+html body p,
+html body small,
+html body label,
+html body .muted,
+html body .subtitle,
+html body .description,
+html body .helper-text,
+html body .hint {
+    color: var(--nx14-text-2) !important;
+    font-weight: 600 !important;
+}
+
+/* Main white/pale surfaces. */
+html body .card,
+html body .page-hero,
+html body .acc-topbar,
+html body .dash-topbar,
+html body .groups-page-header,
+html body .groups-sidebar-card,
+html body .groups-detail-card,
+html body .groups-main-card,
+html body .members-data-topbar,
+html body .members-data-card,
+html body .schedmon-topbar,
+html body .schedmon-all-card,
+html body .schedmon-side-card,
+html body .group-copy-jobs-card,
+html body .guide-section-pro,
+html body .guide-principle-panel,
+html body .activation-hero,
+html body .message-kpi-card,
+html body .account-card,
+html body .gc-job-card,
+html body .overlay-card,
+html body .nexus-update-modal,
+html body .groups-modal-card,
+html body .detail-modal-content {
+    color: var(--nx14-text) !important;
+    background: var(--nx14-soft) !important;
+    border-color: var(--nx14-border) !important;
+}
+
+html body .card h1,
+html body .card h2,
+html body .card h3,
+html body .card h4,
+html body .card strong,
+html body .card b,
+html body .account-card strong,
+html body .gc-job-card strong,
+html body .schedmon-all-card strong,
+html body .members-data-card strong {
+    color: var(--nx14-black) !important;
+    font-weight: 800 !important;
+}
+
+html body .card p,
+html body .card small,
+html body .account-card small,
+html body .gc-job-card small,
+html body .schedmon-all-card small,
+html body .members-data-card small {
+    color: var(--nx14-text-2) !important;
+    font-weight: 600 !important;
+}
+
+/* Sidebar: normal item = white + black; selected/hover = blue + white. */
+html body .app-sidebar.header,
+html body .header.app-sidebar {
+    background: #f7fafc !important;
+}
+
+html body .app-sidebar .header-nav > a,
+html body .header.app-sidebar .header-nav > a,
+html body .sidebar-mini-link,
+html body .sidebar-policy-link {
+    color: var(--nx14-text) !important;
+    background: #ffffff !important;
+    border-color: #d3dde4 !important;
+}
+
+html body .app-sidebar .header-nav > a .nav-copy strong,
+html body .header.app-sidebar .header-nav > a .nav-copy strong,
+html body .sidebar-mini-link strong,
+html body .sidebar-policy-link strong {
+    color: var(--nx14-black) !important;
+    font-weight: 800 !important;
+}
+
+html body .app-sidebar .header-nav > a .nav-copy small,
+html body .header.app-sidebar .header-nav > a .nav-copy small,
+html body .sidebar-mini-link small,
+html body .sidebar-policy-link small {
+    color: #34485a !important;
+    font-weight: 600 !important;
+}
+
+html body .app-sidebar .header-nav > a .nav-icon,
+html body .header.app-sidebar .header-nav > a .nav-icon,
+html body .sidebar-mini-link > span,
+html body .sidebar-policy-link > span {
+    color: #174d71 !important;
+    background: #eef4f8 !important;
+    border-color: #afc2cf !important;
+}
+
+html body .app-sidebar .header-nav > a svg,
+html body .header.app-sidebar .header-nav > a svg,
+html body .sidebar-mini-link svg,
+html body .sidebar-policy-link svg {
+    color: #174d71 !important;
+    stroke: #174d71 !important;
+}
+
+html body .app-sidebar .header-nav > a.active,
+html body .header.app-sidebar .header-nav > a.active,
+html body .app-sidebar .header-nav > a[aria-current="page"],
+html body .header.app-sidebar .header-nav > a[aria-current="page"],
+html body .sidebar-mini-link.active {
+    color: #ffffff !important;
+    background: var(--nx14-blue) !important;
+    border-color: var(--nx14-blue) !important;
+    box-shadow: inset 4px 0 0 #0f4e78 !important;
+}
+
+html body .app-sidebar .header-nav > a.active *,
+html body .header.app-sidebar .header-nav > a.active *,
+html body .app-sidebar .header-nav > a[aria-current="page"] *,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] *,
+html body .sidebar-mini-link.active * {
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+
+html body .app-sidebar .header-nav > a.active .nav-icon,
+html body .header.app-sidebar .header-nav > a.active .nav-icon,
+html body .app-sidebar .header-nav > a[aria-current="page"] .nav-icon,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] .nav-icon,
+html body .sidebar-mini-link.active > span {
+    color: #ffffff !important;
+    background: rgba(255,255,255,.14) !important;
+    border-color: rgba(255,255,255,.46) !important;
+}
+
+html body .app-sidebar .header-nav > a.active svg,
+html body .header.app-sidebar .header-nav > a.active svg,
+html body .app-sidebar .header-nav > a[aria-current="page"] svg,
+html body .header.app-sidebar .header-nav > a[aria-current="page"] svg,
+html body .sidebar-mini-link.active svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+}
+
+html body .app-sidebar .header-nav > a:hover,
+html body .header.app-sidebar .header-nav > a:hover,
+html body .sidebar-mini-link:hover,
+html body .sidebar-policy-link:hover {
+    color: #ffffff !important;
+    background: var(--nx14-blue-hover) !important;
+    border-color: var(--nx14-blue-hover) !important;
+}
+
+html body .app-sidebar .header-nav > a:hover *,
+html body .header.app-sidebar .header-nav > a:hover *,
+html body .sidebar-mini-link:hover *,
+html body .sidebar-policy-link:hover * {
+    color: #ffffff !important;
+}
+
+/* Prevent the icon from becoming a white square on hover. */
+html body .app-sidebar .header-nav > a:hover .nav-icon,
+html body .header.app-sidebar .header-nav > a:hover .nav-icon,
+html body .sidebar-mini-link:hover > span,
+html body .sidebar-policy-link:hover > span {
+    color: #ffffff !important;
+    background: rgba(255,255,255,.14) !important;
+    border-color: rgba(255,255,255,.48) !important;
+    box-shadow: none !important;
+}
+
+html body .app-sidebar .header-nav > a:hover svg,
+html body .header.app-sidebar .header-nav > a:hover svg,
+html body .sidebar-mini-link:hover svg,
+html body .sidebar-policy-link:hover svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+    fill: none !important;
+}
+
+/* Inputs and comboboxes: white surface, black bold content. */
+html body input,
+html body select,
+html body textarea,
+html body .form-group input,
+html body .form-group select,
+html body .form-group textarea,
+html body .af-input,
+html body .ig-search,
+html body .overlay-textarea,
+html body .group-copy-account-search,
+html body .schedmon-search-field,
+html body .schedmon-select-field select {
+    color: var(--nx14-black) !important;
+    background: #ffffff !important;
+    border-color: #aebdc7 !important;
+    font-weight: 700 !important;
+}
+
+html body input::placeholder,
+html body textarea::placeholder {
+    color: #687887 !important;
+    font-weight: 500 !important;
+}
+
+html body option {
+    color: var(--nx14-black) !important;
+    background: #ffffff !important;
+    font-weight: 700 !important;
+}
+
+/* Every button: white + black by default; blue + white on hover. */
+html body button:not(:disabled),
+html body .btn:not(:disabled),
+html body a.btn,
+html body [role="button"]:not([aria-disabled="true"]),
+html body [role="tab"]:not([aria-disabled="true"]),
+html body .schedmon-quick-btn,
+html body .schedmon-calendar-nav-btn,
+html body .schedmon-today-btn {
+    color: var(--nx14-black) !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    border-color: #aebdc7 !important;
+    font-weight: 800 !important;
+    box-shadow: none !important;
+}
+
+html body .btn-primary:not(:disabled),
+html body button.btn-primary:not(:disabled),
+html body .policy-button:not(:disabled),
+html body .gc-run-btn:not(:disabled),
+html body .nexus-update-toast-btn,
+html body .btn-info:not(:disabled) {
+    color: #ffffff !important;
+    background: var(--nx14-blue) !important;
+    border-color: var(--nx14-blue) !important;
+}
+
+html body button:not(:disabled):hover,
+html body .btn:not(:disabled):hover,
+html body a.btn:hover,
+html body [role="button"]:not([aria-disabled="true"]):hover,
+html body [role="tab"]:not([aria-disabled="true"]):hover,
+html body .schedmon-quick-btn:hover,
+html body .schedmon-calendar-nav-btn:hover,
+html body .schedmon-today-btn:hover {
+    color: #ffffff !important;
+    background: var(--nx14-blue-hover) !important;
+    background-color: var(--nx14-blue-hover) !important;
+    border-color: var(--nx14-blue-hover) !important;
+}
+
+html body button:not(:disabled):hover *,
+html body .btn:not(:disabled):hover *,
+html body a.btn:hover *,
+html body [role="button"]:not([aria-disabled="true"]):hover *,
+html body [role="tab"]:not([aria-disabled="true"]):hover * {
+    color: #ffffff !important;
+}
+
+html body button:not(:disabled):hover svg,
+html body .btn:not(:disabled):hover svg,
+html body a.btn:hover svg,
+html body [role="button"]:not([aria-disabled="true"]):hover svg,
+html body [role="tab"]:not([aria-disabled="true"]):hover svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+    fill: none !important;
+}
+
+html body button:not(:disabled):hover .nav-icon,
+html body button:not(:disabled):hover .btn-icon,
+html body .btn:not(:disabled):hover .btn-icon,
+html body [role="button"]:not([aria-disabled="true"]):hover .nav-icon {
+    color: #ffffff !important;
+    background: rgba(255,255,255,.14) !important;
+    border-color: rgba(255,255,255,.45) !important;
+}
+
+/* Selected tabs and filter buttons are unmistakably blue with white copy. */
+html body button.active,
+html body [role="tab"][aria-selected="true"],
+html body [aria-pressed="true"],
+html body .tab-btn.active,
+html body .tab-nav button.active,
+html body .gc-segmented button.active,
+html body .gc-jobs-filter button.active,
+html body .groups-filter-pill.active,
+html body .group-copy-mode-switch button.active,
+html body .groups-list-item.active,
+html body .group-copy-account-option.active,
+html body .groups-account-option.active,
+html body .conversation-item.active,
+html body .plan-item.active,
+html body .log-drawer-tab.active {
+    color: #ffffff !important;
+    background: var(--nx14-blue-active) !important;
+    border-color: var(--nx14-blue-active) !important;
+    box-shadow: none !important;
+}
+
+html body button.active *,
+html body [role="tab"][aria-selected="true"] *,
+html body [aria-pressed="true"] *,
+html body .tab-btn.active *,
+html body .tab-nav button.active *,
+html body .gc-segmented button.active *,
+html body .gc-jobs-filter button.active *,
+html body .groups-filter-pill.active *,
+html body .group-copy-mode-switch button.active *,
+html body .groups-list-item.active *,
+html body .group-copy-account-option.active *,
+html body .groups-account-option.active *,
+html body .conversation-item.active *,
+html body .plan-item.active *,
+html body .log-drawer-tab.active * {
+    color: #ffffff !important;
+}
+
+/* Table data: black, bold and readable on every data page. */
+html body table,
+html body tbody,
+html body .table-scroll,
+html body .table-container,
+html body .members-table-stage,
+html body .groups-members-table-wrap,
+html body .personal-groups-table-wrap,
+html body .schedmon-table-shell,
+html body .accounts-table-wrap,
+html body .message-table-wrap,
+html body .group-copy-member-wrap,
+html body .sched-table-wrap {
+    color: var(--nx14-black) !important;
+    background: #ffffff !important;
+    border-color: var(--nx14-border) !important;
+}
+
+html body thead,
+html body thead tr,
+html body th,
+html body .schedmon-table-head {
+    color: #ffffff !important;
+    background: var(--nx14-blue) !important;
+    border-color: #3e7da8 !important;
+    font-weight: 800 !important;
+}
+
+html body thead *,
+html body th *,
+html body .schedmon-table-head * {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+}
+
+html body td,
+html body td *,
+html body tbody .cell,
+html body .account-card-id,
+html body .account-card-proxy-cell,
+html body .schedmon-table-row,
+html body .schedmon-table-row *,
+html body .members-table td,
+html body .groups-members-table td,
+html body .personal-groups-table td,
+html body .recipient-table td,
+html body .group-copy-member-table td {
+    color: var(--nx14-black) !important;
+    font-weight: 700 !important;
+}
+
+html body tbody tr { background: #ffffff !important; }
+html body tbody tr:nth-child(even) { background: #f2f6f8 !important; }
+html body tbody tr:hover { background: #dcebf5 !important; }
+html body tbody tr.selected,
+html body tbody tr.is-selected {
+    color: var(--nx14-black) !important;
+    background: #cfe4f2 !important;
+    box-shadow: inset 4px 0 0 var(--nx14-blue) !important;
+}
+
+/* Account page and schedule cards: data copy is always dark and bold. */
+html body .account-card,
+html body .account-card *,
+html body .accounts-list,
+html body .accounts-list *,
+html body .schedmon-all-card,
+html body .schedmon-all-card *,
+html body .schedmon-panel,
+html body .schedmon-panel *,
+html body .schedmon-stat,
+html body .schedmon-stat *,
+html body .schedule-list,
+html body .schedule-list * {
+    color: var(--nx14-black) !important;
+}
+
+html body .account-card-name,
+html body .account-card-id,
+html body .account-card-proxy-cell,
+html body .schedmon-stat strong,
+html body .schedmon-table-row strong,
+html body .schedule-list strong {
+    font-weight: 800 !important;
+}
+
+/* Re-apply button/status colors inside pages after the broad black data rule. */
+html body .account-card button:not(:disabled),
+html body .account-card .btn:not(:disabled),
+html body .schedmon-all-card button:not(:disabled),
+html body .schedmon-all-card .btn:not(:disabled),
+html body .schedmon-panel button:not(:disabled),
+html body .schedule-list button:not(:disabled) {
+    color: var(--nx14-black) !important;
+    background: #ffffff !important;
+}
+
+html body .account-card button:not(:disabled):hover,
+html body .account-card .btn:not(:disabled):hover,
+html body .schedmon-all-card button:not(:disabled):hover,
+html body .schedmon-all-card .btn:not(:disabled):hover,
+html body .schedmon-panel button:not(:disabled):hover,
+html body .schedule-list button:not(:disabled):hover {
+    color: #ffffff !important;
+    background: var(--nx14-blue-hover) !important;
+}
+
+/* Guide and policy are light surfaces with dark type. */
+html body.guide-page .guide-hero-main,
+html body.guide-page .guide-start-panel,
+html body.policy-masterise .policy-story,
+html body.policy-masterise .policy-document,
+html body.policy-masterise .policy-shell {
+    color: var(--nx14-text) !important;
+    background: linear-gradient(135deg, #f8fbfd, #e7f0f5) !important;
+    border-color: var(--nx14-border) !important;
+}
+
+html body.guide-page .guide-hero-main *,
+html body.guide-page .guide-start-panel *,
+html body.policy-masterise .policy-story *,
+html body.policy-masterise .policy-document * {
+    color: var(--nx14-black) !important;
+    opacity: 1 !important;
+}
+
+html body.guide-page .guide-start-list > li > span,
+html body.guide-page .guide-section-number,
+html body.guide-page .guide-step-index,
+html body.guide-page .guide-process-label,
+html body.policy-masterise .policy-number {
+    color: #124b73 !important;
+    background: #ffffff !important;
+    border-color: #8eb2ca !important;
+    font-weight: 900 !important;
+}
+
+html body.guide-page .guide-anchor-nav a {
+    color: var(--nx14-black) !important;
+    background: #ffffff !important;
+    font-weight: 800 !important;
+}
+
+html body.guide-page .guide-anchor-nav a:hover,
+html body.guide-page .guide-anchor-nav a:focus-visible,
+html body.guide-page .guide-anchor-nav a.active {
+    color: #ffffff !important;
+    background: var(--nx14-blue-hover) !important;
+}
+
+/* Group-copy dashboard cards and metrics. */
+html body .gc-job-card,
+html body .gc-job-metric,
+html body .gc-stat,
+html body .gc-job-operator,
+html body .gc-job-route-node,
+html body .group-copy-account-trigger,
+html body .group-copy-account-menu,
+html body .group-copy-account-option,
+html body .group-copy-toggle-card,
+html body .group-copy-detail-item,
+html body .gc-picker-row {
+    color: var(--nx14-text) !important;
+    background: #ffffff !important;
+    border-color: var(--nx14-border) !important;
+}
+
+html body .gc-job-card strong,
+html body .gc-job-metric strong,
+html body .gc-stat strong,
+html body .gc-job-route-node strong,
+html body .group-copy-account-option strong,
+html body .group-copy-detail-item strong {
+    color: var(--nx14-black) !important;
+    font-weight: 800 !important;
+}
+
+html body .gc-job-card small,
+html body .gc-job-metric small,
+html body .gc-stat small,
+html body .gc-job-route-node small,
+html body .group-copy-account-option small,
+html body .group-copy-detail-item span {
+    color: var(--nx14-text-2) !important;
+    font-weight: 600 !important;
+}
+
+/* Overlays/popups: low glare, dark bold copy. */
+html body .overlay-header,
+html body .overlay-footer,
+html body .gc-create-head,
+html body .log-drawer-header,
+html body .nexus-update-head,
+html body .nexus-update-actions,
+html body .groups-modal-head {
+    color: var(--nx14-text) !important;
+    background: #e1e9ee !important;
+    border-color: var(--nx14-border) !important;
+}
+
+html body .overlay-body,
+html body .gc-create-body,
+html body .group-copy-detail-body,
+html body .nexus-update-body,
+html body .groups-modal-body {
+    color: var(--nx14-text) !important;
+    background: var(--nx14-soft) !important;
+}
+
+html body .overlay-name,
+html body .overlay-title,
+html body .pf-user-name,
+html body .gc-create-head strong,
+html body .nexus-update-head h3,
+html body .groups-modal-head strong {
+    color: var(--nx14-black) !important;
+    font-weight: 800 !important;
+}
+
+/* Status colors remain semantic and readable. */
+html body .status-badge,
+html body .badge,
+html body .pill,
+html body .members-count-chip,
+html body .schedmon-count-pill,
+html body .gc-health-chip,
+html body .account-card-status,
+html body .dashboard-status-pill,
+html body .schedule-status-badge,
+html body .status-chip {
+    font-weight: 800 !important;
+}
+
+html body .status-badge.success,
+html body .status-badge.done,
+html body .account-card-status.ok,
+html body .account-card-status.running,
+html body .dashboard-status-pill.success,
+html body .schedule-status-badge.done {
+    color: #145b42 !important;
+    background: #d9f0e4 !important;
+}
+
+html body .status-badge.error,
+html body .status-badge.failed,
+html body .dashboard-status-pill.danger,
+html body .schedule-status-badge.failed {
+    color: #842f39 !important;
+    background: #f2dde0 !important;
+}
+
+html body .status-badge.pending,
+html body .status-badge.warning,
+html body .account-card-status.wait,
+html body .dashboard-status-pill.running,
+html body .schedule-status-badge.pending,
+html body .schedule-status-badge.partial {
+    color: #735017 !important;
+    background: #f2e8d0 !important;
+}
+
+/* Toasts stay at bottom-right. */
+html body .member-toast-stack,
+html body .groups-toast,
+html body .notification-overlay,
+html body .nexus-update-toast {
+    top: auto !important;
+    right: 18px !important;
+    bottom: 18px !important;
+    left: auto !important;
+}
+
+/* ==========================================================================
+   Nexus V15 — lịch tháng hover rõ + chuyển tab chỉ thay vùng làm việc
+   ========================================================================== */
+:root,
+html[data-theme="light"] {
+    --nx15-hover-blue: #2679b4;
+    --nx15-hover-blue-strong: #1d6599;
+    --nx15-loader-surface: rgba(239, 246, 251, .82);
+}
+
+/* Thẻ nhanh Lịch hoạt động: hover phải là xanh rõ, chữ và icon trắng. */
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):hover,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):focus-visible,
+html body.schedmon-page .schedmon-quick-btn.is-calendar:not(:disabled):hover,
+html body.schedmon-page .schedmon-quick-btn.is-calendar:not(:disabled):focus-visible {
+    color: #ffffff !important;
+    background: linear-gradient(180deg, var(--nx15-hover-blue), var(--nx15-hover-blue-strong)) !important;
+    background-color: var(--nx15-hover-blue) !important;
+    border-color: var(--nx15-hover-blue-strong) !important;
+    box-shadow: 0 7px 18px rgba(38, 121, 180, .22) !important;
+    transform: translateY(-1px) !important;
+}
+
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):hover .schedmon-quick-copy,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):hover .schedmon-quick-copy small,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):hover .schedmon-quick-copy strong,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):focus-visible .schedmon-quick-copy,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):focus-visible .schedmon-quick-copy small,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):focus-visible .schedmon-quick-copy strong {
+    color: #ffffff !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+}
+
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):hover .schedmon-quick-icon,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):focus-visible .schedmon-quick-icon,
+html body.schedmon-page .schedmon-quick-btn.is-calendar:not(:disabled):hover .schedmon-quick-icon,
+html body.schedmon-page .schedmon-quick-btn.is-calendar:not(:disabled):focus-visible .schedmon-quick-icon {
+    color: #ffffff !important;
+    background: rgba(11, 58, 91, .24) !important;
+    border: 1px solid rgba(255, 255, 255, .42) !important;
+    box-shadow: none !important;
+}
+
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):hover svg,
+html body.schedmon-page .schedmon-quick-btn:not(:disabled):focus-visible svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+    fill: none !important;
+}
+
+/* Vùng làm việc chuyển mượt, sidebar không biến mất và không nhảy lại cả trang. */
+main.page {
+    transition: opacity .16s ease, transform .16s ease, filter .16s ease !important;
+}
+body.nexus-workspace-loading main.page {
+    opacity: .55 !important;
+    filter: saturate(.82) !important;
+    pointer-events: none !important;
+}
+
+.nexus-workspace-loader {
+    position: fixed;
+    z-index: 8900;
+    top: 18px;
+    right: 22px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 8px 13px;
+    color: #14344d;
+    background: var(--nx15-loader-surface);
+    border: 1px solid #afc5d4;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(35, 73, 100, .15);
+    backdrop-filter: blur(10px) saturate(120%);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+    pointer-events: none;
+}
+.nexus-workspace-loader.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+.nexus-workspace-loader strong {
+    color: #14344d !important;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.nexus-workspace-loader-spinner {
+    width: 17px;
+    height: 17px;
+    border: 2px solid #b9d6e9;
+    border-top-color: #2679b4;
+    border-radius: 50%;
+    animation: nexusWorkspaceSpin .72s linear infinite;
+}
+@keyframes nexusWorkspaceSpin { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+    .nexus-workspace-loader { top: 76px; right: 12px; }
+}

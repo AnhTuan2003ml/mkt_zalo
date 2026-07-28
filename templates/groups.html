@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quản lý nhóm - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=groups-profile-sync-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
 <body>
 
@@ -38,7 +39,7 @@
                             <strong id="groupsAccountName">Đang tải tài khoản...</strong>
                             <small id="groupsAccountState">Vui lòng chờ</small>
                         </span>
-                        <span class="groups-account-chevron" aria-hidden="true">⌄</span>
+                        <span class="groups-account-chevron nexus-lucide nexus-lucide-chevron" aria-hidden="true"></span>
                     </button>
                     <div id="groupsAccountMenu" class="groups-account-menu" role="listbox" hidden></div>
                 </div>
@@ -196,6 +197,6 @@
 <div id="groupsToast" class="groups-toast" style="display:none"></div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
-<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-profile-sync-1"></script>
+<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-profile-sync-v6-20260728"></script>
 </body>
 </html>

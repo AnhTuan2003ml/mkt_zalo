@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or "Chiến dịch gửi" }} - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260726-split">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}" >
     <style>
         .tab-nav { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
@@ -150,8 +150,9 @@
         .view-btn { padding: 4px 10px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s ease; }
         .view-btn:hover { background: var(--accent); opacity: 0.8; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
-<body>
+<body class="campaign-builder-page">
 
 {% include '_nav.html' %}
 

@@ -47,7 +47,7 @@
     }
 
     function accountReady(account) {
-        return !!(account && account.cookies && account.zpwEnk && account.imei);
+        return !!(window.NexusSession && NexusSession.accountReady(account, true));
     }
 
     function accountStateText(account) {
@@ -71,7 +71,8 @@
         element.innerHTML = '';
 
         var fallback = document.createElement('span');
-        fallback.textContent = initials(name);
+        fallback.className = 'nexus-lucide nexus-lucide-user';
+        fallback.setAttribute('aria-hidden', 'true');
         element.appendChild(fallback);
 
         if (!avatarUrl) return;
@@ -237,7 +238,12 @@
 
             var mark = document.createElement('span');
             mark.className = 'groups-account-option-mark';
-            mark.textContent = id === state.accountId ? '✓' : '';
+            if (id === state.accountId) {
+                var checkIcon = document.createElement('span');
+                checkIcon.className = 'nexus-lucide nexus-lucide-check';
+                checkIcon.setAttribute('aria-hidden', 'true');
+                mark.appendChild(checkIcon);
+            }
 
             button.appendChild(avatar);
             button.appendChild(info);

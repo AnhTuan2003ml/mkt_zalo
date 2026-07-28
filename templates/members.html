@@ -1,181 +1,172 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lấy thành viên - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=9999">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-masterise.css') }}?v=nexus-masterise-v6-20260728">
 </head>
 <body class="members-page">
 
 {% set active_page = 'members' %}
 {% include '_nav.html' %}
 
-<div class="page">
-    <!-- Compact input card -->
-    <div class="card members-fetch-card members-fetch-compact">
-        <div class="members-fetch-head">
-            <div class="members-fetch-title">
-                <span class="members-fetch-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                </span>
-                <div>
-                    <strong>Lấy thành viên nhóm</strong>
-                    <span>Chọn tài khoản, nhập link hoặc ID nhóm rồi chạy quét.</span>
-                </div>
-            </div>
-            <div class="status-bar members-inline-status" id="statusBar"></div>
-        </div>
-
-        <div class="members-fetch-form">
-            <div class="form-group compact-field account-field">
-                <label>Tài khoản thực hiện</label>
-                <div id="memberAccountDropdown" class="account-dropdown"></div>
-                <input type="hidden" id="memberAccountId">
-            </div>
-
-            <div class="form-group compact-field group-link-field">
-                <label>Link nhóm Zalo hoặc ID nhóm</label>
-                <input type="text" id="groupLinkInput" placeholder="Ví dụ: https://zalo.me/g/abcd... hoặc 7418372753930442350">
-            </div>
-
-            <div class="members-fetch-actions">
-                <button class="btn btn-primary" id="runBtn" onclick="runFetch()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Lấy thành viên
-                </button>
-                <button class="btn btn-secondary btn-log-inline" type="button" onclick="toggleMemberLogDrawer()" title="Mở/đóng lịch sử hoạt động">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-                    </svg>
-                    Lịch sử hoạt động
-                </button>
+<div class="page members-data-page">
+    <section class="members-data-topbar" aria-labelledby="membersPageTitle">
+        <div class="members-data-heading">
+            <span class="members-data-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M8 11h6"/>
+                </svg>
+            </span>
+            <div>
+                <h1 id="membersPageTitle">Dữ liệu thành viên</h1>
+                <p>Bảng thành viên là khu vực làm việc chính. Các thao tác mở riêng theo dạng cửa sổ.</p>
             </div>
         </div>
-    </div>
-    <!-- Main content: left (group info + results) | right (log) -->
-    <div class="main-layout">
-        <!-- Left column -->
+        <div class="members-top-actions">
+            <div class="status-bar members-inline-status" id="statusBar" aria-live="polite"></div>
+            <button class="btn btn-secondary" type="button" id="memberGroupInfoBtn" onclick="openMemberGroupInfoOverlay()" disabled>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+                Thông tin nhóm
+            </button>
+            <button class="btn btn-secondary" type="button" onclick="toggleMemberLogDrawer()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                Hoạt động
+            </button>
+            <button class="btn btn-primary" type="button" onclick="openMemberFetchOverlay()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Lấy thành viên
+            </button>
+        </div>
+    </section>
+
+    <div class="main-layout members-data-layout">
         <div class="main-left">
-            <!-- Group Info Card -->
-            <div class="card" id="groupInfoCard" style="display:none">
-                <div class="card-title">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                    </svg>
-                    Thông tin nhóm
-                </div>
-                <div class="group-info-content">
-                    <img id="groupAvatar" class="group-avatar" src="" alt="Avatar" style="display:none">
-                    <div class="group-details">
-                        <h3 id="groupName">-</h3>
-                        <p id="groupDesc" class="group-desc">-</p>
-                <div class="group-meta">
-                    <div class="meta-item">
-                        <span class="meta-label">Group ID</span>
-                        <span class="meta-value mono" id="groupId">-</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">Tổng thành viên</span>
-                        <span class="meta-value" id="totalMember">0</span>
-                    </div>
-                </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Results -->
-            <div id="resultsSection" style="display:none">
+            <section id="resultsSection" class="members-data-card" style="display:flex">
                 <div class="results-header members-results-header">
-                    <div>
-                        <h3>Kết quả</h3>
-                        <p class="results-subtitle">Danh sách thành viên đã lấy được. Bấm “Xem” để mở thông tin chi tiết khi cần.</p>
+                    <div class="members-result-title">
+                        <div>
+                            <h2>Danh sách thành viên</h2>
+                            <p class="results-subtitle">Tìm kiếm, chọn và xử lý trực tiếp trên bảng. Tiêu đề cột được giữ cố định khi cuộn.</p>
+                        </div>
+                        <span class="members-count-chip"><strong id="totalCount">0</strong> thành viên</span>
                     </div>
                     <div class="results-head-right">
-                        <div class="stat-group">
-                            <div class="stat"><span class="num" id="totalCount">0</span><span class="lbl">Thành viên</span></div>
-                        </div>
                         <button class="btn btn-icon-danger btn-sm members-clear-btn" id="clearMembersBtn" style="display:none" onclick="openClearMembersConfirm()" title="Xóa danh sách thành viên đã lưu">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                            </svg>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                             <span>Xóa dữ liệu</span>
                         </button>
                     </div>
                 </div>
-                <div class="results-toolbar">
-                    <div class="search-box">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                        <input type="text" id="searchInput" placeholder="Tìm kiếm theo tên..." oninput="filterResults()">
+
+                <div class="results-toolbar members-data-toolbar">
+                    <div class="search-box members-search-wide">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="searchInput" placeholder="Tìm theo tên thành viên..." oninput="filterResults()">
                     </div>
-                    <button class="btn btn-success btn-sm" id="createGroupBtn" onclick="openCreateGroupModal()" disabled title="Hãy lấy danh sách thành viên trước">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                        Tạo Nhóm Mới
-                    </button>
-                    <button class="btn btn-warning btn-sm" id="inviteGroupBtn" onclick="openInviteGroupModal()" disabled title="Hãy lấy danh sách thành viên trước">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                            <line x1="18" y1="8" x2="23" y2="8"/><line x1="20.5" y1="5.5" x2="20.5" y2="10.5"/>
-                        </svg>
-                        Mời vào nhóm
-                    </button>
-                    <button class="btn btn-info btn-sm" id="addFriendBtn" onclick="openAddFriendModal()" disabled title="Hãy lấy danh sách thành viên trước">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
-                        </svg>
-                        Gửi Kết Bạn
-                    </button>
+                    <div class="members-data-actions">
+                        <button class="btn btn-success btn-sm" id="createGroupBtn" onclick="openCreateGroupModal()" disabled title="Hãy lấy danh sách thành viên trước">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Tạo nhóm
+                        </button>
+                        <button class="btn btn-warning btn-sm" id="inviteGroupBtn" onclick="openInviteGroupModal()" disabled title="Hãy lấy danh sách thành viên trước">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="8"/><line x1="20.5" y1="5.5" x2="20.5" y2="10.5"/></svg>
+                            Mời vào nhóm
+                        </button>
+                        <button class="btn btn-info btn-sm" id="addFriendBtn" onclick="openAddFriendModal()" disabled title="Hãy lấy danh sách thành viên trước">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                            Gửi kết bạn
+                        </button>
+                    </div>
                 </div>
-                <div class="table-scroll">
+
+                <div class="table-scroll members-table-stage">
+                    <div id="emptyState" class="empty-state members-table-empty">
+                        <span class="members-empty-icon" aria-hidden="true">
+                            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v14H4z"/><path d="M4 10h16M9 5v14"/></svg>
+                        </span>
+                        <strong>Chưa có dữ liệu thành viên</strong>
+                        <p>Bấm “Lấy thành viên” để chọn tài khoản và nhóm cần quét.</p>
+                        <button class="btn btn-primary btn-sm" type="button" onclick="openMemberFetchOverlay()">Lấy thành viên</button>
+                    </div>
                     <table class="members-table members-table-optimized">
                         <colgroup>
-                            <col class="member-select-col">
-                            <col class="member-avatar-col">
-                            <col class="member-name-col">
-                            <col class="member-gender-col">
-                            <col class="member-dob-col">
-                            <col class="member-phone-col">
-                            <col class="member-status-col">
-                            <col class="member-friend-col">
-                            <col class="member-view-col">
+                            <col class="member-select-col"><col class="member-avatar-col"><col class="member-name-col"><col class="member-gender-col"><col class="member-dob-col"><col class="member-phone-col"><col class="member-status-col"><col class="member-friend-col"><col class="member-view-col">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th class="member-select-col" style="text-align:center"><input type="checkbox" id="selectAllMembers" style="cursor:pointer"></th>
-                                <th class="member-avatar-col">AVATAR</th>
-                                <th class="member-name-col">TÊN</th>
-                                <th class="member-gender-col">GIỚI TÍNH</th>
-                                <th class="member-dob-col">NGÀY SINH</th>
-                                <th class="member-phone-col">SỐ ĐIỆN THOẠI</th>
-                                <th class="member-status-col">TRẠNG THÁI</th>
-                                <th class="member-friend-col">KẾT BẠN</th>
-                                <th class="member-view-col">XEM</th>
+                                <th class="member-avatar-col">AVATAR</th><th class="member-name-col">TÊN</th><th class="member-gender-col">GIỚI TÍNH</th><th class="member-dob-col">NGÀY SINH</th><th class="member-phone-col">SỐ ĐIỆN THOẠI</th><th class="member-status-col">TRẠNG THÁI</th><th class="member-friend-col">KẾT BẠN</th><th class="member-view-col">XEM</th>
                             </tr>
                         </thead>
                         <tbody id="resultsBody"></tbody>
                     </table>
                 </div>
-            </div>
+            </section>
+        </div>
+    </div>
+</div>
 
-            <!-- Empty state -->
-            <div id="emptyState" class="empty-state">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <p>Chưa có dữ liệu</p>
-                <p class="hint">Nhập Link nhóm Zalo và nhấn "Lấy danh sách thành viên"</p>
+<!-- Overlay lấy thành viên: form thao tác tách khỏi vùng dữ liệu -->
+<div class="overlay-backdrop member-data-overlay" id="memberFetchBackdrop" aria-hidden="true">
+    <div class="overlay-card member-fetch-overlay-card" role="dialog" aria-modal="true" aria-labelledby="memberFetchTitle">
+        <div class="overlay-header">
+            <div class="overlay-user-info">
+                <span class="overlay-name" id="memberFetchTitle">Lấy thành viên nhóm</span>
+                <span class="overlay-uid">Chọn tài khoản, nhập link hoặc ID nhóm rồi bắt đầu quét.</span>
+            </div>
+            <button class="overlay-close" type="button" onclick="closeMemberFetchOverlay()" aria-label="Đóng">×</button>
+        </div>
+        <div class="overlay-body">
+            <div class="members-fetch-form member-overlay-form">
+                <div class="form-group compact-field account-field">
+                    <label>Tài khoản thực hiện</label>
+                    <div id="memberAccountDropdown" class="account-dropdown"></div>
+                    <input type="hidden" id="memberAccountId">
+                </div>
+                <div class="form-group compact-field group-link-field">
+                    <label>Link nhóm Zalo hoặc ID nhóm</label>
+                    <input type="text" id="groupLinkInput" placeholder="Ví dụ: https://zalo.me/g/abcd... hoặc ID nhóm">
+                </div>
             </div>
         </div>
+        <div class="overlay-footer member-fetch-overlay-footer">
+            <button class="btn btn-secondary" type="button" onclick="closeMemberFetchOverlay()">Hủy</button>
+            <button class="btn btn-primary" id="runBtn" type="button" onclick="runFetch()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Lấy thành viên
+            </button>
+        </div>
+    </div>
+</div>
 
+<!-- Overlay thông tin nhóm -->
+<div class="overlay-backdrop member-data-overlay" id="memberGroupInfoBackdrop" aria-hidden="true">
+    <div class="overlay-card member-group-overlay-card" role="dialog" aria-modal="true" aria-labelledby="memberGroupInfoTitle">
+        <div class="overlay-header">
+            <div class="overlay-user-info"><span class="overlay-name" id="memberGroupInfoTitle">Thông tin nhóm</span><span class="overlay-uid">Thông tin nguồn của bảng thành viên hiện tại.</span></div>
+            <button class="overlay-close" type="button" onclick="closeMemberGroupInfoOverlay()" aria-label="Đóng">×</button>
+        </div>
+        <div class="overlay-body">
+            <div class="card member-group-info-card" id="groupInfoCard" style="display:none">
+                <div class="group-info-content">
+                    <img id="groupAvatar" class="group-avatar" src="" alt="Avatar nhóm" style="display:none">
+                    <div class="group-details">
+                        <h3 id="groupName">-</h3>
+                        <p id="groupDesc" class="group-desc">-</p>
+                        <div class="group-meta">
+                            <div class="meta-item"><span class="meta-label">Group ID</span><span class="meta-value mono" id="groupId">-</span></div>
+                            <div class="meta-item"><span class="meta-label">Tổng thành viên</span><span class="meta-value" id="totalMember">0</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -543,6 +534,6 @@
 
 <script src="{{ url_for('static', filename='js/avatar-preview.js') }}?v=107"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
-<script src="{{ url_for('static', filename='js/members.js') }}?v=10010-group-invite-visible-actions"></script>
+<script src="{{ url_for('static', filename='js/members.js') }}?v=nexus-light-v3-20260728"></script>
 </body>
 </html>

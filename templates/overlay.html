@@ -16,7 +16,7 @@ function getCurrentSelectedAccountIdForMessage() {
     return '';
 }
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -73,6 +73,8 @@ function getCurrentSelectedAccountIdForMessage() {
             font-size: 13px;
         }
     </style>
+<script src="{{ url_for('static', filename='js/theme.js') }}?v=nexus-data-light-20260728"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
 <body>
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -73,12 +73,16 @@
         .table-container {
             background: white;
             border-radius: 10px;
-            overflow: hidden;
+            max-height: calc(100vh - 330px);
+            overflow: auto;
+            overscroll-behavior: auto;
+            -webkit-overflow-scrolling: touch;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
         
         table {
             width: 100%;
+            min-width: 980px;
             border-collapse: collapse;
         }
         
@@ -88,6 +92,9 @@
         }
         
         th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
             padding: 15px;
             text-align: left;
             font-weight: 600;
@@ -245,7 +252,13 @@
         button, .btn { border-radius: 12px !important; background: linear-gradient(135deg, #38bdf8, #2563eb) !important; color: #fff !important; border: 0 !important; font-weight: 750 !important; box-shadow: 0 12px 28px rgba(37,99,235,.26) !important; }
         input, select, textarea { background:#07111f !important; color:var(--nexus-text) !important; border:1px solid var(--nexus-border) !important; border-radius:12px !important; }
     
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .table-container { max-height: min(65vh, 620px); }
+        }
     </style>
+<script src="{{ url_for('static', filename='js/theme.js') }}?v=nexus-data-light-20260728"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
 <body>
     <div class="container">

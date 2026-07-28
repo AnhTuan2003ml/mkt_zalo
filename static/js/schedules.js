@@ -348,7 +348,7 @@ function createAccountDropdownForSched(container, hiddenInputId) {
             var av = normalizeAvatarUrlSchedules(a.avatarUrl || a.avatar || '');
             var id = schedGetAccountIdValue(a);
             var nm = a.name || a.zaloName || a.displayName || a.phone || id || 'Không tên';
-            var rd = a.cookies && a.zpwEnk && a.imei;
+            var rd = !!(window.NexusSession && NexusSession.accountReady(a, true));
             var active = (sel && schedGetAccountIdValue(sel) === id) ? ' active' : '';
             return '<button type="button" class="account-dropdown-item' + (rd ? '' : ' disabled') + active + '" data-account-id="' + escapeHtmlSchedules(id) + '"' + (rd ? '' : ' disabled') + '>' +
                 (av ? '<img src="' + escapeHtmlSchedules(av) + '" class="account-dropdown-avatar" />' : '<span class="account-dropdown-avatar placeholder"></span>') +

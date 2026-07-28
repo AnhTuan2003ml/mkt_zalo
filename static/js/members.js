@@ -14,6 +14,22 @@ function escapeHtmlMembers(str) {
 }
 
 
+function memberCookieHas(cookieString, cookieName) {
+    var target = String(cookieName || '').toLowerCase();
+    return String(cookieString || '').split(';').some(function(part) {
+        var idx = part.indexOf('=');
+        if (idx < 0) return false;
+        return part.slice(0, idx).trim().toLowerCase() === target && part.slice(idx + 1).trim().length > 0;
+    });
+}
+
+function memberAccountSessionReady(acc, requireImei) {
+    if (!acc || !acc.accountId || !acc.loginCaptured || !acc.zpwEnk) return false;
+    if (!memberCookieHas(acc.cookies, 'zpw_sek')) return false;
+    return requireImei ? !!acc.imei : true;
+}
+
+
 // UX: thông báo nổi + trạng thái thân thiện trên trang lấy thành viên
 var _memberLastToastKey = '';
 var _memberLastToastAt = 0;
@@ -88,6 +104,8 @@ function updateMemberActionState() {
     var inviteBtn = document.getElementById('inviteGroupBtn');
     var clearBtn = document.getElementById('clearMembersBtn');
     var selectAll = document.getElementById('selectAllMembers');
+    var groupInfoBtn = document.getElementById('memberGroupInfoBtn');
+    var hasGroupInfo = !!(_savedGroupInfo && (_savedGroupInfo.name || _savedGroupInfo.groupId));
 
     [createBtn, inviteBtn, addBtn].forEach(function(btn) {
         if (!btn) return;
@@ -103,6 +121,11 @@ function updateMemberActionState() {
     if (selectAll) {
         selectAll.disabled = !hasData;
         selectAll.checked = false;
+    }
+    if (groupInfoBtn) {
+        groupInfoBtn.disabled = !hasGroupInfo;
+        groupInfoBtn.classList.toggle('is-disabled', !hasGroupInfo);
+        groupInfoBtn.title = hasGroupInfo ? '' : 'Chưa có thông tin nhóm';
     }
 }
 
@@ -173,7 +196,10 @@ async function loadMemberAccounts() {
         }
 
         var currentId = String((hiddenInput && hiddenInput.value) || getStoredMemberAccountId() || '').trim();
-        var selectedAcc = findAccountById(currentId) || accounts[0] || null;
+        var selectedAcc = findAccountById(currentId) || accounts.find(function(acc) { return memberAccountSessionReady(acc, false); }) || accounts[0] || null;
+        if (selectedAcc && !memberAccountSessionReady(selectedAcc, false)) {
+            selectedAcc = accounts.find(function(acc) { return memberAccountSessionReady(acc, false); }) || selectedAcc;
+        }
 
         function renderSelected(acc) {
             if (!acc) {
@@ -203,11 +229,11 @@ async function loadMemberAccounts() {
                         var avatar = normalizeAvatarUrlMembers(acc.avatarUrl || acc.avatar || "");
                         var name = acc.name || acc.zaloName || acc.displayName || acc.phone || getAccountId(acc) || "Không tên";
                         var id = getAccountId(acc);
-                        var ready = acc.cookies && acc.zpwEnk && acc.imei;
+                        var ready = memberAccountSessionReady(acc, false);
                         var missing = [];
-                        if (!acc.cookies) missing.push('cookies');
+                        if (!acc.loginCaptured) missing.push('phiên đăng nhập');
                         if (!acc.zpwEnk) missing.push('zpwEnk');
-                        if (!acc.imei) missing.push('imei');
+                        if (!memberCookieHas(acc.cookies, 'zpw_sek')) missing.push('zpw_sek');
                         var active = sel && getAccountId(sel) === id ? ' active' : '';
 
                         return `
@@ -422,6 +448,42 @@ function appendMemberLogLine(msg, type) {
 
 
 
+
+function setMemberOverlayOpen(backdrop, open) {
+    if (!backdrop) return;
+    backdrop.classList.toggle('visible', !!open);
+    backdrop.classList.toggle('open', !!open);
+    backdrop.style.display = open ? 'flex' : 'none';
+    backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.classList.toggle('nexus-modal-open', !!open);
+}
+
+function openMemberFetchOverlay() {
+    var backdrop = document.getElementById('memberFetchBackdrop');
+    setMemberOverlayOpen(backdrop, true);
+    window.setTimeout(function() {
+        var input = document.getElementById('groupLinkInput');
+        if (input) input.focus();
+    }, 40);
+}
+
+function closeMemberFetchOverlay() {
+    var backdrop = document.getElementById('memberFetchBackdrop');
+    setMemberOverlayOpen(backdrop, false);
+}
+
+function openMemberGroupInfoOverlay() {
+    if (!_savedGroupInfo || (!_savedGroupInfo.name && !_savedGroupInfo.groupId)) {
+        setStatus('Chưa có thông tin nhóm để hiển thị.', 'info');
+        return;
+    }
+    setMemberOverlayOpen(document.getElementById('memberGroupInfoBackdrop'), true);
+}
+
+function closeMemberGroupInfoOverlay() {
+    setMemberOverlayOpen(document.getElementById('memberGroupInfoBackdrop'), false);
+}
+
 async function runFetch() {
     var accountId = document.getElementById('memberAccountId') ? document.getElementById('memberAccountId').value : '';
     var groupLink = document.getElementById('groupLinkInput').value.trim();
@@ -520,6 +582,9 @@ async function runFetch() {
             // Render NGAY kết quả /run trả về, không chờ enrich/single-profile.
             // Tránh tình trạng log báo hoàn thành nhưng bảng vẫn "Chưa có dữ liệu".
             renderResults(_lastFetchedData);
+            closeMemberFetchOverlay();
+            var memberTableScroll = document.querySelector('.members-table-stage');
+            if (memberTableScroll) memberTableScroll.scrollTop = 0;
 
             // ─── Persist to localStorage ─────────────────────────────────
             _savedGroupInfo = groupInfo;
@@ -566,6 +631,8 @@ function displayGroupInfo(info) {
     } else {
         avatar.style.display = 'none';
     }
+    _savedGroupInfo = info || null;
+    updateMemberActionState();
 }
 
 // ─── Enrich Members with Profile Details ────────────────────────────────────
@@ -746,17 +813,17 @@ function renderResults(members) {
     var resultsSection = document.getElementById('resultsSection');
     var emptyState = document.getElementById('emptyState');
 
+    resultsSection.style.display = 'flex';
+
     if (!members || members.length === 0) {
         tbody.innerHTML = '';
         totalCount.textContent = '0';
-        resultsSection.style.display = 'none';
         emptyState.style.display = 'flex';
         updateMemberActionState();
         return;
     }
 
     totalCount.textContent = members.length;
-    resultsSection.style.display = 'block';
     emptyState.style.display = 'none';
 
     var html = '';
@@ -1598,9 +1665,10 @@ function clearSavedMembers() {
 
     document.getElementById('resultsBody').innerHTML = '';
     document.getElementById('totalCount').textContent = '0';
-    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('resultsSection').style.display = 'flex';
     document.getElementById('emptyState').style.display = 'flex';
     document.getElementById('groupInfoCard').style.display = 'none';
+    closeMemberGroupInfoOverlay();
     
     // Clear search input
     var searchInput = document.getElementById('searchInput');
@@ -1668,10 +1736,10 @@ async function loadAddFriendAccounts() {
         var memberAcc = document.getElementById('memberAccountId');
         if (memberAcc && memberAcc.value) currentAccountId = memberAcc.value.trim();
 
-        var readyAccounts = accounts.filter(function(acc) { return acc && acc.accountId && acc.cookies && acc.zpwEnk; });
+        var readyAccounts = accounts.filter(function(acc) { return memberAccountSessionReady(acc, false); });
         var html = '';
         if (!readyAccounts.length) {
-            html = '<option value="">Chưa có tài khoản đủ cookies/zpwEnk</option>';
+            html = '<option value="">Chưa có tài khoản đủ zpwEnk và zpw_sek</option>';
         } else {
             readyAccounts.forEach(function(acc) {
                 var name = acc.name || acc.accountId || 'Không tên';
@@ -1854,6 +1922,19 @@ function closeAddFriendModal() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    var fetchBackdrop = document.getElementById('memberFetchBackdrop');
+    if (fetchBackdrop) {
+        fetchBackdrop.addEventListener('click', function(e) {
+            if (e.target === fetchBackdrop) closeMemberFetchOverlay();
+        });
+    }
+    var groupInfoBackdrop = document.getElementById('memberGroupInfoBackdrop');
+    if (groupInfoBackdrop) {
+        groupInfoBackdrop.addEventListener('click', function(e) {
+            if (e.target === groupInfoBackdrop) closeMemberGroupInfoOverlay();
+        });
+    }
+
     // Invite Group Modal close button
     var igCloseBtn = document.getElementById('igCloseBtn');
     if (igCloseBtn) {
@@ -1905,6 +1986,8 @@ document.addEventListener('keydown', function(e) {
         closeAddFriendModal();
         closeMemberProfile();
         closeMemberLogDrawer();
+        closeMemberFetchOverlay();
+        closeMemberGroupInfoOverlay();
     }
 });
 
@@ -2031,6 +2114,7 @@ function submitAddFriend() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    renderResults([]);
     updateMemberActionState();
     loadMemberAccounts().then(function() {
         restoreMembersOnLoad();

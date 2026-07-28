@@ -1,171 +1,85 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html data-theme="light" lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hướng dẫn sử dụng - Nexus</title>
+    <title>Giới thiệu Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-glass-updater-20260709">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-masterise-v10-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-masterise-v10-20260728">
 </head>
-<body class="guide-page">
+<body class="guide-page guide-page-professional">
+{% set active_page = 'guide' %}
 {% include '_nav.html' %}
-<div class="page">
-    <section class="guide-hero-v2">
-        <div class="guide-hero-copy">
-            <div class="eyebrow">Nexus Operation Guide</div>
-            <h2>Hướng dẫn vận hành Nexus</h2>
-            <p>Nexus gom toàn bộ quy trình quản lý tài khoản, đồng bộ nhóm, lấy thành viên, lập lịch gửi kết bạn, mời vào nhóm và theo dõi chiến dịch vào một luồng làm việc rõ ràng. Đúng, cuối cùng giao diện cũng nói tiếng người.</p>
+<main class="page guide-shell">
+    <section class="guide-hero-pro" aria-labelledby="guide-title">
+        <div class="guide-hero-main">
+            <span class="guide-kicker">Nexus · Trung tâm vận hành</span>
+            <h1 id="guide-title" class="guide-display-title">Dữ liệu rõ ràng.<br>Thao tác tinh gọn.</h1>
+            <p class="guide-hero-lead">Nexus đưa tài khoản, nhóm, thành viên và chiến dịch về một không gian thống nhất. Bảng dữ liệu luôn là khu vực trung tâm; các thao tác phụ chỉ xuất hiện khi bạn cần.</p>
             <div class="guide-hero-actions">
-                <a class="btn btn-primary" href="{{ url_for('accounts_page') }}">Bắt đầu từ tài khoản</a>
-                <a class="btn btn-ghost" href="{{ url_for('marketing_schedules_page') }}">Xem lịch gửi</a>
+                <a class="btn btn-primary" href="{{ url_for('dashboard_page') }}">Vào trung tâm điều hành</a>
+                <a class="btn btn-secondary" href="{{ url_for('accounts_page') }}">Kết nối tài khoản</a>
             </div>
         </div>
-        <div class="guide-hero-panel">
-            <span class="guide-panel-label">Quy trình chuẩn</span>
-            <strong>Account → Group → Member → Schedule → Progress</strong>
-            <p>Đi theo đúng thứ tự này để tránh cảnh dữ liệu chạy một nơi, tài khoản mở một nẻo, rồi tất cả cùng nhìn nhau bất lực.</p>
+        <aside class="guide-start-panel" aria-label="Quy trình sử dụng cơ bản">
+            <span class="guide-panel-label">Bắt đầu trong 3 bước</span>
+            <ol class="guide-start-list">
+                <li><span>01</span><div><strong>Kết nối tài khoản</strong><small>Mở và đăng nhập tài khoản Zalo cần vận hành.</small></div></li>
+                <li><span>02</span><div><strong>Chọn nguồn dữ liệu</strong><small>Đồng bộ nhóm hoặc lấy danh sách thành viên.</small></div></li>
+                <li><span>03</span><div><strong>Theo dõi kết quả</strong><small>Kiểm tra tiến độ tại Lịch hoạt động.</small></div></li>
+            </ol>
+        </aside>
+    </section>
+
+    <nav class="guide-anchor-nav" aria-label="Điều hướng giới thiệu">
+        <a href="#triết-lý">Triết lý giao diện</a>
+        <a href="#chức-năng">Khu vực chính</a>
+        <a href="#quy-trình">Quy trình sử dụng</a>
+        <a href="#an-toàn">Vận hành an toàn</a>
+    </nav>
+
+    <section class="guide-section-pro" id="triết-lý">
+        <header class="guide-section-heading">
+            <span class="guide-section-number">01</span>
+            <div><span class="guide-section-eyebrow">Thiết kế lấy dữ liệu làm trung tâm</span><h2>Nhìn thấy điều quan trọng trước tiên</h2><p>Không gian làm việc ưu tiên bảng, trạng thái và kết quả. Form cấu hình, thông tin phụ và lịch sử được mở trong overlay để không đẩy dữ liệu xuống dưới.</p></div>
+        </header>
+        <div class="guide-step-grid">
+            <article class="guide-step-card"><span class="guide-step-index">1</span><div class="guide-step-copy"><h3>Bảng luôn ở vị trí chính</h3><p>Danh sách thành viên, nhóm và lịch chạy chiếm vùng làm việc lớn nhất, có cuộn riêng và tiêu đề cố định.</p></div></article>
+            <article class="guide-step-card"><span class="guide-step-index">2</span><div class="guide-step-copy"><h3>Ít màu, tương phản rõ</h3><p>Nền trung tính ấm, chữ xanh than và điểm nhấn màu đồng giúp đọc lâu mà không chói mắt.</p></div></article>
+            <article class="guide-step-card"><span class="guide-step-index">3</span><div class="guide-step-copy"><h3>Thao tác chỉ xuất hiện khi cần</h3><p>Các bước lấy dữ liệu, xem thông tin và thiết lập chiến dịch mở dạng cửa sổ nổi, đóng nhanh bằng Esc.</p></div></article>
         </div>
     </section>
 
-    <section class="guide-section-v2">
-        <div class="guide-section-head">
-            <span class="guide-section-index">01</span>
-            <div>
-                <h3>Bắt đầu nhanh</h3>
-                <p>4 bước cơ bản để chạy được một chiến dịch sạch, dễ kiểm soát và có lịch theo dõi.</p>
-            </div>
-        </div>
-        <div class="guide-quick-grid">
-            <article class="guide-tile-v2">
-                <div class="guide-icon-v2">🔐</div>
-                <h4>Kích hoạt</h4>
-                <p>Vào trang <b>Kích hoạt</b>, đăng ký thiết bị và nhập mã kích hoạt. Nếu email không gửi được, kiểm tra Gmail App Password trong file <code>.env</code>.</p>
-            </article>
-            <article class="guide-tile-v2">
-                <div class="guide-icon-v2">👤</div>
-                <h4>Thêm tài khoản</h4>
-                <p>Vào <b>Quản lý tài khoản</b>, thêm profile, bấm <b>Mở</b> và đăng nhập Zalo Web. Mỗi tài khoản dùng profile/cookie riêng.</p>
-            </article>
-            <article class="guide-tile-v2">
-                <div class="guide-icon-v2">👥</div>
-                <h4>Đồng bộ nhóm</h4>
-                <p>Vào <b>Quản lý nhóm</b>, chọn tài khoản rồi bấm <b>Làm mới</b>. Nexus mở đúng tài khoản, bắt API nhóm và cập nhật danh sách.</p>
-            </article>
-            <article class="guide-tile-v2">
-                <div class="guide-icon-v2">📅</div>
-                <h4>Tạo lịch</h4>
-                <p>Lấy thành viên, chọn người nhận, rồi lập lịch gửi kết bạn, mời nhóm hoặc gửi tin nhắn theo số lượng mỗi ngày.</p>
-            </article>
-        </div>
-    </section>
-
-    <section class="guide-section-v2">
-        <div class="guide-section-head">
-            <span class="guide-section-index">02</span>
-            <div>
-                <h3>Các khu vực chức năng</h3>
-                <p>Mỗi trang xử lý một việc. Trộn lẫn chúng là cách nhanh nhất để biến dữ liệu thành món lẩu lỗi.</p>
-            </div>
-        </div>
-        <div class="guide-feature-list">
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Quản lý tài khoản</div>
-                <div class="guide-feature-desc">Tạo, mở, dừng, sửa proxy và kiểm tra trạng thái profile. Đây là điểm bắt đầu của mọi thao tác cần phiên đăng nhập Zalo.</div>
-            </div>
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Quản lý nhóm</div>
-                <div class="guide-feature-desc">Đồng bộ danh sách nhóm cá nhân từ tài khoản đang chọn. Dữ liệu nhóm dùng cho mời nhóm, gửi theo nhóm và kiểm tra thông tin.</div>
-            </div>
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Lấy thành viên nhóm</div>
-                <div class="guide-feature-desc">Nhập link hoặc ID nhóm để lấy UID, avatar, tên và dữ liệu thành viên. Có thể chọn từng người để lập lịch kết bạn hoặc mời nhóm.</div>
-            </div>
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Gửi theo nhóm / SĐT</div>
-                <div class="guide-feature-desc">Tạo chiến dịch nhắn tin theo nhóm đã đồng bộ hoặc danh sách số điện thoại đã tra cứu UID.</div>
-            </div>
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Tự động sao chép nhóm</div>
-                <div class="guide-feature-desc">Dán link hoặc ID nhóm nguồn, tạo nhóm mới hoặc chọn nhóm hiện tại, đặt số người mời mỗi ngày và giờ bắt đầu. Tiến độ được lưu để tiếp tục sau khi mở lại ứng dụng.</div>
-            </div>
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Lịch gửi</div>
-                <div class="guide-feature-desc">Xem lịch gửi tin nhắn, lịch gửi kết bạn, lịch mời nhóm và cập nhật tiến độ batch theo ngày.</div>
-            </div>
-            <div class="guide-feature-row">
-                <div class="guide-feature-name">Quản lý tin nhắn</div>
-                <div class="guide-feature-desc">Khu vực theo dõi hội thoại, ghi chú và chuẩn bị quy trình chăm sóc lại sau khi có phản hồi.</div>
+    <section class="guide-section-pro" id="chức-năng">
+        <header class="guide-section-heading">
+            <span class="guide-section-number">02</span>
+            <div><span class="guide-section-eyebrow">Một hệ thống, một luồng làm việc</span><h2>Các khu vực chính</h2><p>Mỗi menu phục vụ một mục tiêu rõ ràng và liên kết trực tiếp với dữ liệu liên quan.</p></div>
+        </header>
+        <div class="guide-menu-group">
+            <div class="guide-menu-list">
+                <article class="guide-menu-item"><div class="guide-menu-copy"><h4>Tài khoản</h4><p><span>Mục đích</span>Kết nối, mở và theo dõi trạng thái tài khoản Zalo.</p></div></article>
+                <article class="guide-menu-item"><div class="guide-menu-copy"><h4>Nhóm Zalo</h4><p><span>Mục đích</span>Đồng bộ nhóm và kiểm tra danh sách thành viên.</p></div></article>
+                <article class="guide-menu-item"><div class="guide-menu-copy"><h4>Thành viên</h4><p><span>Mục đích</span>Lấy, tìm kiếm, chọn và xử lý dữ liệu thành viên.</p></div></article>
+                <article class="guide-menu-item"><div class="guide-menu-copy"><h4>Lịch hoạt động</h4><p><span>Mục đích</span>Theo dõi lịch chạy, kết quả và mục cần xử lý.</p></div></article>
             </div>
         </div>
     </section>
 
-    <section class="guide-section-v2 guide-flow-section">
-        <div class="guide-section-head">
-            <span class="guide-section-index">03</span>
-            <div>
-                <h3>Luồng gửi kết bạn và mời vào nhóm</h3>
-                <p>Luồng này nên chạy theo ngày, theo hạn mức, theo danh sách đã chọn. Không ai cần một cái nút “mời 900 người ngay lập tức”, trừ khi mục tiêu là tự bắn vào chân.</p>
-            </div>
-        </div>
-        <div class="guide-flow-grid">
-            <div class="guide-flow-card">
-                <span>1</span>
-                <h4>Chọn người nhận</h4>
-                <p>Trong trang <b>Lấy thành viên nhóm</b>, tick người cần xử lý. Nếu không tick, hệ thống có thể dùng toàn bộ danh sách hiện có tùy popup chức năng.</p>
-            </div>
-            <div class="guide-flow-card">
-                <span>2</span>
-                <h4>Lập lịch</h4>
-                <p>Bấm <b>Gửi Kết Bạn</b> hoặc <b>Mời vào nhóm</b>, chọn tài khoản, ngày bắt đầu và số người mỗi ngày.</p>
-            </div>
-            <div class="guide-flow-card">
-                <span>3</span>
-                <h4>Chọn nhóm đích</h4>
-                <p>Với lịch mời nhóm, chọn nhóm đã đồng bộ. Nếu danh sách nhóm trống, quay lại <b>Quản lý nhóm</b> và bấm <b>Làm mới</b>.</p>
-            </div>
-            <div class="guide-flow-card">
-                <span>4</span>
-                <h4>Theo dõi tiến độ</h4>
-                <p>Vào <b>Lịch gửi</b> để xem batch từng ngày, tiến độ hoàn thành, lỗi và trạng thái đang chờ.</p>
-            </div>
+    <section class="guide-section-pro" id="quy-trình">
+        <header class="guide-section-heading"><span class="guide-section-number">03</span><div><span class="guide-section-eyebrow">Hoàn thành trong ít bước</span><h2>Quy trình sử dụng đề xuất</h2></div></header>
+        <div class="guide-process-grid">
+            <article class="guide-process-card"><span class="guide-process-label">Bước 1</span><h3>Chọn tài khoản</h3><p>Kiểm tra tài khoản đã đăng nhập và ở trạng thái sẵn sàng.</p></article>
+            <article class="guide-process-card"><span class="guide-process-label">Bước 2</span><h3>Lấy dữ liệu</h3><p>Đồng bộ nhóm hoặc nhập link nhóm để lấy thành viên.</p></article>
+            <article class="guide-process-card"><span class="guide-process-label">Bước 3</span><h3>Thực hiện công việc</h3><p>Chọn dữ liệu cần xử lý và cấu hình thao tác trong overlay.</p></article>
+            <article class="guide-process-card"><span class="guide-process-label">Bước 4</span><h3>Kiểm tra kết quả</h3><p>Mở Lịch hoạt động để xem trạng thái, tiến độ và lỗi.</p></article>
         </div>
     </section>
 
-    <section class="guide-section-v2">
-        <div class="guide-section-head">
-            <span class="guide-section-index">04</span>
-            <div>
-                <h3>Lỗi thường gặp và cách xử lý</h3>
-                <p>Những lỗi này không mới, chúng chỉ thay phiên nhau xuất hiện để thử lòng kiên nhẫn của loài người.</p>
-            </div>
-        </div>
-        <div class="guide-trouble-grid">
-            <article class="guide-trouble-card">
-                <h4>Không gửi được mã kích hoạt</h4>
-                <p>Kiểm tra <code>SENDMAIL_USER</code> là Gmail gửi và <code>SENDMAIL_PASS</code> là App Password 16 ký tự. Không dùng mật khẩu Gmail thường.</p>
-            </article>
-            <article class="guide-trouble-card">
-                <h4>Danh sách nhóm không cập nhật</h4>
-                <p>Mở đúng tài khoản trong combobox, bấm <b>Làm mới</b>, chờ Zalo Web gọi API nhóm. Nếu trình duyệt còn cache, hard refresh lại giao diện.</p>
-            </article>
-            <article class="guide-trouble-card">
-                <h4>Chỉ lấy được vài thành viên</h4>
-                <p>Nhóm có thể khóa xem thành viên, tài khoản không đủ quyền hoặc Zalo giới hạn request. Thử tài khoản khác hoặc kiểm tra quyền trong nhóm.</p>
-            </article>
-            <article class="guide-trouble-card">
-                <h4>Lịch đã tạo nhưng chưa chạy</h4>
-                <p>Kiểm tra tài khoản còn đủ cookies, zpwEnk và IMEI; sau đó xem trạng thái trong <b>Lịch gửi</b> hoặc <b>Tự động sao chép nhóm</b>. Các worker tự động được khởi động sau khi người dùng đồng ý chính sách và phần mềm đã kích hoạt hợp lệ.</p>
-            </article>
-        </div>
+    <section class="guide-principle-panel" id="an-toàn">
+        <div><span class="guide-section-eyebrow">Nguyên tắc vận hành an toàn</span><h2>Đúng quyền, đúng đối tượng, đúng tần suất.</h2><p>Chỉ thao tác với tài khoản và dữ liệu bạn có quyền quản lý. Kiểm tra danh sách người nhận trước khi chạy và luôn tôn trọng chính sách của nền tảng.</p></div>
+        <a class="btn btn-secondary" href="{{ url_for('policy_page') }}">Xem lại chính sách</a>
     </section>
-
-    <section class="guide-section-v2 guide-note-panel">
-        <div>
-            <h3>Nguyên tắc vận hành nên giữ</h3>
-            <p>Chạy theo hạn mức thấp, chia ngày rõ ràng, kiểm tra danh sách trước khi lưu lịch, không gửi trùng một người nhiều lần và luôn theo dõi phản hồi sau chiến dịch. Phần mềm chỉ giúp thao tác gọn hơn, không biến spam thành chiến lược.</p>
-        </div>
-        <div class="guide-note-badge">Nexus</div>
-    </section>
-</div>
+</main>
 </body>
 </html>
