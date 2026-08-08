@@ -495,6 +495,12 @@ def create_job(
 
     target_mode = str(payload.get("targetMode") or "existing").strip()
     target_group_id = str(payload.get("targetGroupId") or "").strip()
+    target_group_link = str(payload.get("targetGroupLink") or "").strip()
+    if target_group_link.startswith("//"):
+        target_group_link = "https:" + target_group_link
+    elif target_group_link and not target_group_link.lower().startswith(("http://", "https://")):
+        token = target_group_link.strip().strip("/")
+        target_group_link = ("https://" + token) if token.lower().startswith("zalo.me/g/") else ("https://zalo.me/g/" + token)
     try:
         campaign_end_at = (datetime.fromisoformat(start_at) + timedelta(days=campaign_days)).isoformat(timespec="seconds")
     except (TypeError, ValueError):
@@ -538,10 +544,11 @@ def create_job(
         "lastVerifiedAt": "",
         "lastVerificationError": "",
         "targetMemberCount": 0,
-        "groupLink": "",
+        "groupLink": target_group_link if target_mode == "existing" else "",
         "groupLinkExpirationDate": 0,
-        "groupLinkEnabled": 0,
-        "groupLinkUpdatedAt": "",
+        "groupLinkEnabled": 1 if (target_mode == "existing" and target_group_link) else 0,
+        "groupLinkUpdatedAt": datetime.now().isoformat(timespec="seconds") if (target_mode == "existing" and target_group_link) else "",
+        "groupLinkSource": "personal_groups" if (target_mode == "existing" and target_group_link) else "",
         "members": clean_members,
         "runs": [],
     }

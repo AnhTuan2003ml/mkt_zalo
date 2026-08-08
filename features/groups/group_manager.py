@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.zalo.dec import zalo_decode
 from core.zalo.zalo_config import get_zpw_ver
+from features.groups.group_link import create_group_link, get_group_link_detail
 
 
 def extract_groups_from_getlg_response(response_data: str, zpw_enk: str) -> list:
@@ -94,6 +95,66 @@ _fetching_accounts = set()
 _fetching_lock = threading.Lock()
 
 
+def _normalize_public_group_link(value: str) -> str:
+    """Chuẩn hóa link nhóm Zalo thành URL có thể bấm/copy trực tiếp."""
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    if value.startswith("//"):
+        return "https:" + value
+    if value.lower().startswith(("http://", "https://")):
+        return value
+    token = value.strip().strip("/")
+    if token.lower().startswith("zalo.me/g/"):
+        return "https://" + token
+    return f"https://zalo.me/g/{token}"
+
+
+def _fetch_or_create_group_link(group_id: str, imei: str, zpw_enk: str, cookies: str, zpw_ver: str = None) -> dict:
+    """Lấy link nhóm hiện tại; nếu nhóm chưa bật link thì tự kích hoạt link mới."""
+    detail_error = ""
+    try:
+        result = get_group_link_detail(
+            group_id, imei, zpw_enk, cookies, zpw_ver=get_zpw_ver(zpw_ver), timeout=15
+        )
+        link = _normalize_public_group_link(result.get("link"))
+        if link:
+            return {
+                "groupLink": link,
+                "linkStatus": "ready",
+                "linkExpirationDate": int(result.get("expirationDate") or 0),
+                "linkCreatedAutomatically": False,
+                "linkError": "",
+            }
+    except Exception as exc:
+        detail_error = str(exc)
+
+    try:
+        result = create_group_link(
+            group_id, imei, zpw_enk, cookies, zpw_ver=get_zpw_ver(zpw_ver), timeout=15
+        )
+        link = _normalize_public_group_link(result.get("link"))
+        if not link:
+            raise RuntimeError("Zalo không trả về link nhóm sau khi kích hoạt.")
+        return {
+            "groupLink": link,
+            "linkStatus": "ready",
+            "linkExpirationDate": int(result.get("expirationDate") or 0),
+            "linkCreatedAutomatically": True,
+            "linkError": "",
+        }
+    except Exception as exc:
+        create_error = str(exc)
+        combined = create_error if not detail_error else f"Lấy link hiện có lỗi: {detail_error}; tạo link mới lỗi: {create_error}"
+        return {
+            "groupLink": "",
+            "linkStatus": "error",
+            "linkExpirationDate": 0,
+            "linkCreatedAutomatically": False,
+            "linkError": combined,
+        }
+
+
 def _normalize_group_ids(group_ids: list) -> list:
     """Loại trùng group_id, giữ đúng thứ tự ban đầu."""
     clean_ids = []
@@ -130,16 +191,36 @@ def _merge_old_group_info(account_id: str, group_ids: list) -> list:
             "avatar": old.get("avatar") or "",
             "fullAvt": old.get("fullAvt") or "",
             "memberCount": old.get("memberCount") or 0,
+            "groupLink": _normalize_public_group_link(
+                old.get("groupLink") or old.get("group_link") or old.get("inviteLink") or old.get("link")
+            ),
+            "linkStatus": old.get("linkStatus") or ("ready" if (old.get("groupLink") or old.get("group_link") or old.get("inviteLink") or old.get("link")) else "pending"),
+            "linkExpirationDate": int(old.get("linkExpirationDate") or old.get("expirationDate") or 0),
+            "linkCreatedAutomatically": bool(old.get("linkCreatedAutomatically", False)),
+            "linkError": old.get("linkError") or "",
             "fetchStatus": old.get("fetchStatus") or "pending",
         })
     return detailed_groups
 
 
 def _fetch_one_group_detail(group_id: str, zpw_enk: str, cookies: str, zpw_ver: str = None, imei: str = "") -> dict:
-    """
-    Chỉ lấy thông tin nhóm từ getmg-v2.
-    Không lấy profile từng thành viên, không gọi get_single_profile.
-    """
+    """Lấy chi tiết nhóm và tự bảo đảm nhóm có link tham gia dùng được."""
+    result = {
+        "groupId": str(group_id),
+        "name": f"Group {str(group_id)[:8]}",
+        "desc": "",
+        "avatar": "",
+        "fullAvt": "",
+        "memberCount": 0,
+        "fetchStatus": "error",
+        "error": "",
+        "groupLink": "",
+        "linkStatus": "pending",
+        "linkExpirationDate": 0,
+        "linkCreatedAutomatically": False,
+        "linkError": "",
+    }
+
     try:
         try:
             from features.members.get_members import get_members
@@ -147,7 +228,7 @@ def _fetch_one_group_detail(group_id: str, zpw_enk: str, cookies: str, zpw_ver: 
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from features.members.get_members import get_members
 
-        _response_json, _decoded_data, group_info, mem_list = get_members(
+        response_json, _decoded_data, group_info, mem_list = get_members(
             group_id, zpw_enk, cookies,
             imei=imei,
             timeout=15,
@@ -161,31 +242,41 @@ def _fetch_one_group_detail(group_id: str, zpw_enk: str, cookies: str, zpw_ver: 
         full_avt = group_info.get("grid_fullAvt") or ""
         member_count = group_info.get("grid_totalMember") or len(mem_list) or 0
 
-        # Nếu API không trả được thông tin thật thì không đánh dấu done.
-        # Tránh UI thấy pending/placeholder mãi mà không biết lỗi.
         if not name and not avatar and not full_avt and not member_count:
-            raise RuntimeError(f"getmg-v2 không trả chi tiết nhóm. Có thể cookie/zpwEnk hết hạn hoặc mạng máy này không gọi được Zalo API. response={_response_json}")
+            raise RuntimeError(
+                "getmg-v2 không trả chi tiết nhóm. Có thể cookie/zpwEnk hết hạn "
+                f"hoặc mạng máy này không gọi được Zalo API. response={response_json}"
+            )
 
-        return {
-            "groupId": str(group_id),
-            "name": name or f"Group {str(group_id)[:8]}",
+        result.update({
+            "name": name or result["name"],
             "desc": group_info.get("grid_desc") or "",
             "avatar": avatar,
             "fullAvt": full_avt,
             "memberCount": member_count,
             "fetchStatus": "done",
-        }
-    except Exception as e:
-        print(f"[group_manager] Fetch detail failed group={group_id}: {e}", flush=True)
-        return {
-            "groupId": str(group_id),
-            "name": f"Group {str(group_id)[:8]}",
-            "avatar": "",
-            "fullAvt": "",
-            "memberCount": 0,
-            "fetchStatus": "error",
-            "error": str(e),
-        }
+            "error": "",
+        })
+    except Exception as exc:
+        result["error"] = str(exc)
+        print(f"[group_manager] Fetch detail failed group={group_id}: {exc}", flush=True)
+
+    if imei and zpw_enk and cookies:
+        link_info = _fetch_or_create_group_link(
+            str(group_id), str(imei), str(zpw_enk), str(cookies), zpw_ver=get_zpw_ver(zpw_ver)
+        )
+        result.update(link_info)
+        if result.get("groupLink"):
+            print(f"[group_manager] Link ready group={group_id}: {result['groupLink']}", flush=True)
+        else:
+            print(f"[group_manager] Link failed group={group_id}: {result.get('linkError')}", flush=True)
+    else:
+        result.update({
+            "linkStatus": "error",
+            "linkError": "Thiếu IMEI, cookies hoặc zpwEnk nên chưa thể lấy link nhóm.",
+        })
+
+    return result
 
 
 def fetch_and_update_group_details_parallel(account_id: str, group_ids: list, zpw_enk: str, cookies: str = "",
@@ -216,6 +307,11 @@ def fetch_and_update_group_details_parallel(account_id: str, group_ids: list, zp
                     "avatar": old.get("avatar") or "",
                     "fullAvt": old.get("fullAvt") or "",
                     "memberCount": old.get("memberCount") or 0,
+                    "groupLink": _normalize_public_group_link(old.get("groupLink") or old.get("group_link") or old.get("inviteLink") or old.get("link")),
+                    "linkStatus": old.get("linkStatus") or "error",
+                    "linkExpirationDate": int(old.get("linkExpirationDate") or old.get("expirationDate") or 0),
+                    "linkCreatedAutomatically": bool(old.get("linkCreatedAutomatically", False)),
+                    "linkError": old.get("linkError") or "Thiếu cookies, IMEI hoặc zpwEnk nên chưa thể lấy link nhóm.",
                     "fetchStatus": "error",
                     "error": "Thiếu cookies hoặc zpwEnk nên chưa lấy được chi tiết nhóm. Hãy mở lại tài khoản Zalo để monitor bắt lại session."
                 })
@@ -260,6 +356,11 @@ def fetch_and_update_group_details_parallel(account_id: str, group_ids: list, zp
                         "avatar": "",
                         "fullAvt": "",
                         "memberCount": 0,
+                        "groupLink": "",
+                        "linkStatus": "error",
+                        "linkExpirationDate": 0,
+                        "linkCreatedAutomatically": False,
+                        "linkError": str(e),
                         "fetchStatus": "error",
                         "error": str(e),
                     }
@@ -285,6 +386,13 @@ def fetch_and_update_group_details_parallel(account_id: str, group_ids: list, zp
                 "avatar": new.get("avatar") or old.get("avatar") or "",
                 "fullAvt": new.get("fullAvt") or old.get("fullAvt") or "",
                 "memberCount": new.get("memberCount") or old.get("memberCount") or 0,
+                "groupLink": _normalize_public_group_link(
+                    new.get("groupLink") or old.get("groupLink") or old.get("group_link") or old.get("inviteLink") or old.get("link")
+                ),
+                "linkStatus": new.get("linkStatus") or old.get("linkStatus") or ("ready" if (new.get("groupLink") or old.get("groupLink")) else "error"),
+                "linkExpirationDate": int(new.get("linkExpirationDate") or old.get("linkExpirationDate") or old.get("expirationDate") or 0),
+                "linkCreatedAutomatically": bool(new.get("linkCreatedAutomatically", old.get("linkCreatedAutomatically", False))),
+                "linkError": new.get("linkError") or old.get("linkError") or "",
                 "fetchStatus": new.get("fetchStatus") or old.get("fetchStatus") or "done",
             })
 
@@ -351,6 +459,132 @@ def save_account_groups(account_id: str, group_ids: list, zpw_enk: str = "", coo
 
     return True
 
+
+
+def ensure_group_link_for_account(account_id: str, group_id: str, force: bool = False) -> dict:
+    """Ưu tiên lấy/tạo link cho đúng nhóm người dùng vừa chọn.
+
+    Worker đồng bộ toàn bộ danh sách có thể phải xử lý nhiều nhóm nên link của
+    nhóm đang xem dễ bị xếp sau. Hàm này chạy riêng cho một group_id, cập nhật
+    ``personalGroups`` ngay sau khi Zalo trả link và giữ nguyên toàn bộ dữ liệu
+    khác của tài khoản.
+    """
+    try:
+        from features.accounts.account_manager import get_account, update_account
+    except ImportError:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from features.accounts.account_manager import get_account, update_account
+
+    account_id = str(account_id or "").strip()
+    group_id = str(group_id or "").strip()
+    if not account_id:
+        raise ValueError("Thiếu accountId.")
+    if not group_id:
+        raise ValueError("Thiếu Group ID.")
+
+    account = get_account(account_id) or {}
+    if not account:
+        raise ValueError("Không tìm thấy tài khoản Zalo.")
+
+    raw_groups = account.get("personalGroups") or []
+    if isinstance(raw_groups, dict):
+        raw_groups = list(raw_groups.values())
+
+    current_group = next(
+        (
+            item for item in raw_groups
+            if isinstance(item, dict)
+            and str(item.get("groupId") or item.get("gridId") or item.get("id") or "").strip() == group_id
+        ),
+        {},
+    )
+    existing_link = _normalize_public_group_link(
+        current_group.get("groupLink")
+        or current_group.get("group_link")
+        or current_group.get("inviteLink")
+        or current_group.get("link")
+    )
+    if existing_link and not force:
+        return {
+            "success": True,
+            "groupId": group_id,
+            "groupLink": existing_link,
+            "linkStatus": "ready",
+            "linkExpirationDate": int(current_group.get("linkExpirationDate") or current_group.get("expirationDate") or 0),
+            "linkCreatedAutomatically": bool(current_group.get("linkCreatedAutomatically", False)),
+            "cached": True,
+            "linkError": "",
+        }
+
+    imei = str(account.get("imei") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or account.get("zpw_enk") or "").strip()
+    cookies = str(account.get("cookies") or "").strip()
+    if not imei or not zpw_enk or not cookies:
+        missing = []
+        if not imei:
+            missing.append("IMEI")
+        if not zpw_enk:
+            missing.append("zpwEnk")
+        if not cookies:
+            missing.append("cookies")
+        raise ValueError(
+            "Thiếu " + ", ".join(missing)
+            + ". Hãy mở lại tài khoản Zalo rồi bấm Làm mới tài khoản để bắt phiên đăng nhập mới."
+        )
+
+    link_info = _fetch_or_create_group_link(
+        group_id,
+        imei,
+        zpw_enk,
+        cookies,
+        zpw_ver=get_zpw_ver(account.get("zpwVer") or account.get("zpw_ver")),
+    )
+
+    updated_groups = []
+    found = False
+    for item in raw_groups:
+        if not isinstance(item, dict):
+            continue
+        item_copy = dict(item)
+        item_gid = str(
+            item_copy.get("groupId")
+            or item_copy.get("gridId")
+            or item_copy.get("id")
+            or ""
+        ).strip()
+        if item_gid == group_id:
+            found = True
+            item_copy.update(link_info)
+            item_copy["groupId"] = group_id
+            item_copy["group_link"] = link_info.get("groupLink") or ""
+            item_copy["inviteLink"] = link_info.get("groupLink") or ""
+        updated_groups.append(item_copy)
+
+    if not found:
+        updated_groups.append({
+            "groupId": group_id,
+            "name": f"Group {group_id[:8]}",
+            "avatar": "",
+            "fullAvt": "",
+            "memberCount": 0,
+            **link_info,
+            "group_link": link_info.get("groupLink") or "",
+            "inviteLink": link_info.get("groupLink") or "",
+            "fetchStatus": "pending",
+        })
+
+    update_account(
+        account_id,
+        personalGroups=updated_groups,
+        groupsSyncedAt=int(time.time() * 1000),
+    )
+
+    return {
+        "success": bool(link_info.get("groupLink")),
+        "groupId": group_id,
+        **link_info,
+        "cached": False,
+    }
 
 
 def get_account_groups(account_id: str) -> list:

@@ -80,7 +80,10 @@
                             <h3 id="groupsDetailName">Nhóm</h3>
                             <div class="group-detail-meta">
                                 <span id="groupsDetailMembers">0 thành viên</span>
-                                <span id="groupsDetailId" title="Bấm để copy ID nhóm" onclick="groupsCopyCurrentGroupId()">ID nhóm</span>
+                                <span class="group-detail-link-wrap">
+                                    <span class="group-detail-link-label">Link nhóm:</span>
+                                    <button id="groupsDetailId" class="group-detail-link" type="button" title="Bấm để sao chép link nhóm" onclick="groupsCopyCurrentGroupLink()">Đang lấy link nhóm...</button>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -197,6 +200,6 @@
 <div id="groupsToast" class="groups-toast" style="display:none"></div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
-<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-profile-sync-v6-20260728"></script>
+<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-selected-link-v2-20260731-1808"></script>
 </body>
 </html>

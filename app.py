@@ -60,6 +60,111 @@ def get_base_path():
     return os.path.dirname(os.path.abspath(__file__))
 
 app_root = get_app_root()
+
+# ─── Single activity log file ─────────────────────────────────────────────────
+# Mỗi lần ứng dụng khởi động, file này được xóa trắng và toàn bộ stdout/stderr
+# cùng log tác vụ SSE được ghi vào đúng một file duy nhất.
+ACTIVITY_LOG_FILE = os.path.join(app_root, "Nexus.log")
+_ACTIVITY_LOG_LOCK = threading.RLock()
+_ACTIVITY_LOG_INITIALIZED = False
+
+
+def _append_activity_log(message, level="INFO"):
+    """Append one normalized entry to the single activity log file."""
+    text = str(message or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not text:
+        return
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    normalized_level = str(level or "INFO").upper().replace("TASK:", "TASK-")
+    lines = text.split("\n")
+    try:
+        os.makedirs(os.path.dirname(ACTIVITY_LOG_FILE), exist_ok=True)
+        with _ACTIVITY_LOG_LOCK:
+            with open(ACTIVITY_LOG_FILE, "a", encoding="utf-8", newline="\n") as log_file:
+                for line in lines:
+                    if line:
+                        log_file.write(f"[{timestamp}] [{normalized_level}] {line}\n")
+                log_file.flush()
+    except Exception:
+        # Logging must never stop the application from starting.
+        pass
+
+
+class _ActivityLogWriter:
+    """Line-buffered stdout/stderr writer backed by Nexus.log."""
+    encoding = "utf-8"
+    errors = "replace"
+
+    def __init__(self, level="INFO", original_stream=None):
+        self.level = level
+        self.original_stream = original_stream
+        self._buffer = ""
+
+    def write(self, data):
+        if data is None:
+            return 0
+        if isinstance(data, bytes):
+            text = data.decode(self.encoding, errors=self.errors)
+        else:
+            text = str(data)
+        if not text:
+            return 0
+
+        if self.original_stream:
+            try:
+                self.original_stream.write(text)
+                self.original_stream.flush()
+            except Exception:
+                pass
+
+        self._buffer += text
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line.strip():
+                _append_activity_log(line, self.level)
+        return len(text)
+
+    def flush(self):
+        if self._buffer.strip():
+            _append_activity_log(self._buffer, self.level)
+        self._buffer = ""
+        if self.original_stream:
+            try:
+                self.original_stream.flush()
+            except Exception:
+                pass
+
+    def isatty(self):
+        return False
+
+    def writable(self):
+        return True
+
+
+def _initialize_activity_logging():
+    """Clear the previous run and redirect all process output to one log file."""
+    global _ACTIVITY_LOG_INITIALIZED
+    if _ACTIVITY_LOG_INITIALIZED:
+        return
+    try:
+        os.makedirs(os.path.dirname(ACTIVITY_LOG_FILE), exist_ok=True)
+        with _ACTIVITY_LOG_LOCK:
+            with open(ACTIVITY_LOG_FILE, "w", encoding="utf-8", newline="\n"):
+                pass
+    except Exception:
+        pass
+
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    sys.stdout = _ActivityLogWriter("INFO", original_stdout)
+    sys.stderr = _ActivityLogWriter("ERROR", original_stderr)
+    _ACTIVITY_LOG_INITIALIZED = True
+    _append_activity_log("Nexus started. Previous activity log was cleared.", "SYSTEM")
+
+
+if __name__ == "__main__":
+    _initialize_activity_logging()
+
 base_path = get_base_path()
 template_path = os.path.join(base_path, 'templates')
 static_path = os.path.join(base_path, 'static')
@@ -89,13 +194,14 @@ if module_root not in sys.path:
 if auth_path not in sys.path:
     sys.path.insert(0, auth_path)
 
-from features.members.group_member_service import fetch_group_members_by_input, format_group_info, resolve_group_input_to_group_id
+from features.members.group_member_service import fetch_group_members_by_input, format_group_info, normalize_group_input, resolve_group_input_to_group_id
 from features.profiles.profile_service import fetch_profiles_with_single_fallback, build_member_rows_from_uids, fetch_friend_relations
 from features.messaging.send_sms import send_sms
 from features.messaging.add_friend import send_friend_request
 from features.groups.add_group import create_group as _create_group
 from features.groups.invite_group import invite_members_to_group as _invite_members_to_group
 from features.groups.group_join_leave import join_group_by_link as _join_group_by_link, leave_group as _leave_group
+from features.groups.group_manager import start_fetch_group_details_parallel, ensure_group_link_for_account
 from features.profiles.get_single_profile import get_single_profile, ProfileRateLimitError
 from features.accounts.account_manager import (
     load_accounts,
@@ -159,6 +265,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
+APP_VERSION = "1.0.0"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -174,7 +281,7 @@ def _read_app_version():
                     return version.lstrip("v")
     except Exception as e:
         print("[updater] read VERSION error=", e)
-    return "1.0.0"
+    return APP_VERSION
 
 
 def _parse_version_parts(version):
@@ -765,7 +872,8 @@ _log_queue = queue.Queue()
 _sse_clients = []
 
 def sse_broadcast(msg, msg_type="info"):
-    """Broadcast message to all SSE clients."""
+    """Broadcast message to all SSE clients and persist it in Nexus.log."""
+    _append_activity_log(msg, msg_type)
     payload = json.dumps({"msg": msg, "type": msg_type}, ensure_ascii=False)
     for client_queue in _sse_clients[:]:
         try:
@@ -2467,6 +2575,16 @@ def _prepare_group_copy_job_worker(task, payload: dict):
     """Lấy thành viên nhóm nguồn và lưu tác vụ sao chép theo hạn mức mỗi ngày."""
     account_id = str(payload.get("accountId") or "").strip()
     source_input = str(payload.get("sourceInput") or "").strip()
+    source_input_type, normalized_source_input = normalize_group_input(source_input)
+    source_group_id_hint = str(payload.get("sourceGroupId") or "").strip()
+    if source_input_type == "group_id" and normalized_source_input:
+        # Luôn truyền Group ID sạch vào getmg; không để nhãn ``ID:``, tiền tố g
+        # hoặc khoảng trắng làm backend hiểu nhầm thành mã link mời.
+        source_input = normalized_source_input
+    elif not source_input and source_group_id_hint:
+        hint_type, normalized_hint = normalize_group_input(source_group_id_hint)
+        if hint_type == "group_id":
+            source_input = normalized_hint
     task.set_progress(10)
     task.log("Đang đọc thông tin và danh sách thành viên nhóm nguồn...")
     member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
@@ -2637,6 +2755,13 @@ def api_group_copy_start():
     data = request.get_json(silent=True) or {}
     account_id = str(data.get("accountId") or "").strip()
     source_input = str(data.get("sourceInput") or data.get("sourceGroup") or "").strip()
+    source_group_id = str(data.get("sourceGroupId") or data.get("resolvedSourceGroupId") or "").strip()
+    source_input_type, normalized_source_input = normalize_group_input(source_input)
+    if source_input_type == "group_id" and normalized_source_input:
+        source_input = normalized_source_input
+    if source_group_id:
+        hint_type, normalized_hint = normalize_group_input(source_group_id)
+        source_group_id = normalized_hint if hint_type == "group_id" else ""
     target_mode = str(data.get("targetMode") or "existing").strip().lower()
     target_group_id = str(data.get("targetGroupId") or "").strip()
     target_group_name = str(data.get("targetGroupName") or "").strip()
@@ -2689,6 +2814,8 @@ def api_group_copy_start():
         "title": str(data.get("title") or "Sao chép thành viên nhóm").strip(),
         "accountId": account_id,
         "sourceInput": source_input,
+        "sourceInputType": source_input_type,
+        "sourceGroupId": source_group_id or (source_input if source_input_type == "group_id" else ""),
         "targetMode": target_mode,
         "targetGroupId": target_group_id,
         "targetGroupName": target_group_name,
@@ -3329,15 +3456,56 @@ def api_get_account_groups():
                 or ("Group " + gid[:8])
             )
 
+            group_link = str(
+                g.get("groupLink")
+                or g.get("group_link")
+                or g.get("inviteLink")
+                or g.get("link")
+                or ""
+            ).strip()
+            if group_link and not group_link.lower().startswith(("http://", "https://")):
+                token = group_link.strip().strip("/")
+                group_link = ("https://" + token) if token.lower().startswith("zalo.me/g/") else ("https://zalo.me/g/" + token)
+
             groups.append({
                 "groupId": gid,
                 "name": name,
                 "avatar": g.get("avatar") or g.get("grid_avatar") or g.get("avt") or "",
                 "fullAvt": g.get("fullAvt") or g.get("grid_fullAvt") or g.get("fullAvatar") or "",
                 "memberCount": g.get("memberCount") or g.get("grid_totalMember") or g.get("totalMember") or g.get("total") or 0,
+                "groupLink": group_link,
+                "group_link": group_link,
+                "inviteLink": group_link,
+                "linkStatus": g.get("linkStatus") or ("ready" if group_link else "pending"),
+                "linkExpirationDate": int(g.get("linkExpirationDate") or g.get("expirationDate") or 0),
+                "linkCreatedAutomatically": bool(g.get("linkCreatedAutomatically", False)),
+                "linkError": g.get("linkError") or "",
                 "fetchStatus": g.get("fetchStatus") or "",
                 "error": g.get("error") or "",
             })
+
+        # Dữ liệu cũ chỉ có Group ID sẽ được bổ sung link tự động ở nền.
+        # Không khóa request UI; lần tải/poll kế tiếp sẽ nhận groupLink đã lưu.
+        missing_link_ids = [
+            item["groupId"] for item in groups
+            if not item.get("groupLink") and str(item.get("linkStatus") or "").lower() not in {"error", "ready"}
+        ]
+        sync_status = str(account.get("groupsSyncStatus") or "").lower()
+        if (
+            missing_link_ids
+            and sync_status not in {"refreshing", "ids_captured", "links_updating"}
+            and account.get("zpwEnk")
+            and account.get("cookies")
+            and account.get("imei")
+        ):
+            update_account(account_id, groupsSyncStatus="links_updating")
+            start_fetch_group_details_parallel(
+                account_id,
+                [item["groupId"] for item in groups],
+                str(account.get("zpwEnk") or ""),
+                str(account.get("cookies") or ""),
+                max_workers=4,
+            )
 
         print("[api_get_account_groups] account_id=", account_id, "groups=", len(groups))
 
@@ -3355,6 +3523,54 @@ def api_get_account_groups():
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e), "groups": []}), 500
+
+
+@app.route("/api/groups/link", methods=["POST"])
+def api_get_or_create_group_link():
+    """Lấy hoặc tự kích hoạt link cho nhóm đang được chọn trên giao diện."""
+    data = request.get_json(silent=True) or request.form or {}
+    account_id = str(
+        data.get("accountId")
+        or data.get("account_id")
+        or ""
+    ).strip()
+    group_id = str(
+        data.get("groupId")
+        or data.get("group_id")
+        or data.get("gridId")
+        or data.get("grid")
+        or ""
+    ).strip()
+    force_value = data.get("force", False)
+    force = str(force_value).strip().lower() in {"1", "true", "yes", "on"}
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản."}), 400
+    if not group_id:
+        return jsonify({"success": False, "error": "Thiếu Group ID."}), 400
+
+    try:
+        result = ensure_group_link_for_account(account_id, group_id, force=force)
+        status = 200 if result.get("success") else 400
+        return jsonify(result), status
+    except ValueError as error:
+        return jsonify({
+            "success": False,
+            "groupId": group_id,
+            "groupLink": "",
+            "linkStatus": "error",
+            "error": str(error),
+        }), 400
+    except Exception as error:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "groupId": group_id,
+            "groupLink": "",
+            "linkStatus": "error",
+            "error": str(error),
+        }), 500
 
 
 @app.route("/api/groups/refresh-account", methods=["POST"])
@@ -3922,67 +4138,7 @@ def after_request(response):
 
 
 
-# ─── Tkinter log launcher ─────────────────────────────────────────────────────
-class _GuiLogWriter:
-    """Redirect stdout/stderr into a thread-safe queue for the Tkinter log window.
-
-    Flask/Werkzeug/Click sometimes writes bytes instead of str when stdout is
-    replaced by a custom stream. This writer accepts both, keeps console output
-    if available, and mirrors everything to the GUI log box.
-    """
-    encoding = "utf-8"
-    errors = "replace"
-
-    def __init__(self, log_queue, original_stream=None):
-        self.log_queue = log_queue
-        self.original_stream = original_stream
-        self._buffer = ""
-
-    def _to_text(self, data):
-        if data is None:
-            return ""
-        if isinstance(data, bytes):
-            return data.decode(self.encoding, errors=self.errors)
-        return str(data)
-
-    def write(self, data):
-        text = self._to_text(data)
-        if not text:
-            return 0
-
-        if self.original_stream:
-            try:
-                self.original_stream.write(text)
-                self.original_stream.flush()
-            except Exception:
-                pass
-
-        self._buffer += text
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            self.log_queue.put(line + "\n")
-        return len(text)
-
-    def flush(self):
-        if self._buffer:
-            self.log_queue.put(self._buffer)
-            self._buffer = ""
-        if self.original_stream:
-            try:
-                self.original_stream.flush()
-            except Exception:
-                pass
-
-    def isatty(self):
-        try:
-            return bool(self.original_stream and self.original_stream.isatty())
-        except Exception:
-            return False
-
-    def writable(self):
-        return True
-
-
+# ─── Minimal Tkinter launcher ─────────────────────────────────────────────────
 def _get_app_icon_path():
     """Tìm icon .ico của ứng dụng cho Tkinter và PyInstaller.
 
@@ -4007,6 +4163,20 @@ def _get_app_icon_path():
     except Exception:
         pass
 
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
+def _get_app_logo_path():
+    """Return the bundled PNG logo used by the minimal launcher."""
+    candidates = [
+        os.path.join(static_path, "ico", "app_256.png"),
+        os.path.join(base_path, "static", "ico", "app_256.png"),
+        os.path.join(app_root, "static", "ico", "app_256.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "ico", "app_256.png"),
+    ]
     for path in candidates:
         if path and os.path.exists(path):
             return path
@@ -4098,122 +4268,280 @@ def _cleanup_update_script():
         pass
 
 
-def _launch_log_window():
+NEXUS_UI_URL = "http://127.0.0.1:5000/policy"
+NEXUS_UI_ORIGIN = "http://127.0.0.1:5000"
+NEXUS_UI_EDGE_DEBUG_PORT = 9322
+
+
+def _find_edge_executable():
+    """Tìm Microsoft Edge trên Windows; giao diện Nexus không dùng Chrome/default browser."""
+    candidates = [
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+
+    if sys.platform.startswith("win"):
+        try:
+            import winreg
+            registry_locations = (
+                (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe"),
+            )
+            for hive, key_path in registry_locations:
+                try:
+                    with winreg.OpenKey(hive, key_path) as key:
+                        value, _ = winreg.QueryValueEx(key, None)
+                    if value and os.path.isfile(value):
+                        return value
+                except OSError:
+                    continue
+        except Exception:
+            pass
+
+    return ""
+
+
+def _edge_ui_debug_ready():
+    try:
+        response = requests.get(
+            f"http://127.0.0.1:{NEXUS_UI_EDGE_DEBUG_PORT}/json/version",
+            timeout=0.6,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _edge_ui_targets():
+    try:
+        response = requests.get(
+            f"http://127.0.0.1:{NEXUS_UI_EDGE_DEBUG_PORT}/json/list",
+            timeout=0.8,
+        )
+        if response.status_code != 200:
+            return []
+        payload = response.json()
+        return payload if isinstance(payload, list) else []
+    except Exception:
+        return []
+
+
+def _find_existing_nexus_ui_target():
+    """Tìm bất kỳ tab Nexus đang mở, kể cả khi người dùng đã chuyển khỏi /policy."""
+    matches = []
+    for target in _edge_ui_targets():
+        if not isinstance(target, dict) or target.get("type") != "page":
+            continue
+        url = str(target.get("url") or "")
+        if url == NEXUS_UI_ORIGIN or url.startswith(NEXUS_UI_ORIGIN + "/"):
+            matches.append(target)
+
+    # /json/list thường trả target đang hoạt động gần đầu danh sách. Không điều hướng
+    # lại URL để giữ nguyên đúng trang người dùng đang xem trước đó.
+    return matches[0] if matches else None
+
+
+def _activate_edge_target(target):
+    target_id = str((target or {}).get("id") or "").strip()
+    if not target_id:
+        return False
+    try:
+        response = requests.get(
+            f"http://127.0.0.1:{NEXUS_UI_EDGE_DEBUG_PORT}/json/activate/{target_id}",
+            timeout=1.0,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _create_edge_ui_target():
+    """Tạo tab UI chỉ khi Edge đã chạy nhưng chưa hề có tab Nexus."""
+    try:
+        from urllib.parse import quote
+        response = requests.put(
+            f"http://127.0.0.1:{NEXUS_UI_EDGE_DEBUG_PORT}/json/new?{quote(NEXUS_UI_URL, safe='')}",
+            timeout=1.5,
+        )
+        if response.status_code != 200:
+            return None
+        payload = response.json()
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _open_nexus_ui_in_edge():
+    """Mở Nexus bằng Edge App mode: không tab/địa chỉ/thanh điều hướng và không mở trùng cửa sổ."""
+    existing = _find_existing_nexus_ui_target()
+    if existing and _activate_edge_target(existing):
+        return True, str(existing.get("url") or NEXUS_UI_URL), True
+
+    edge_exe = _find_edge_executable()
+    if not edge_exe:
+        return False, "Không tìm thấy Microsoft Edge trên máy.", False
+
+    # Dùng profile Edge riêng cho cửa sổ Nexus để CDP có thể nhận diện cửa sổ
+    # đang tồn tại ở lần bấm sau. --app=URL giúp giao diện hiển thị như ứng dụng:
+    # chỉ còn title bar của cửa sổ, không có tab, address bar, Back/Refresh hay menu trình duyệt.
+    profile_dir = os.path.join(app_root, "data", "nexus_edge_ui")
+    os.makedirs(profile_dir, exist_ok=True)
+
+    args = [
+        edge_exe,
+        f"--user-data-dir={profile_dir}",
+        f"--remote-debugging-port={NEXUS_UI_EDGE_DEBUG_PORT}",
+        "--remote-allow-origins=*",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-session-crashed-bubble",
+        f"--app={NEXUS_UI_URL}",
+    ]
+    creationflags = 0
+    if sys.platform.startswith("win"):
+        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+    # Kể cả Edge profile vẫn còn tiến trình nền/CDP sau khi đóng cửa sổ UI,
+    # luôn gọi lại --app để Edge tạo đúng cửa sổ app-mode; không dùng /json/new
+    # vì endpoint đó có thể sinh tab/cửa sổ trình duyệt thông thường có thanh điều hướng.
+    subprocess.Popen(args, creationflags=creationflags, close_fds=True)
+
+    for _ in range(40):
+        time.sleep(0.1)
+        target = _find_existing_nexus_ui_target()
+        if target:
+            _activate_edge_target(target)
+            return True, str(target.get("url") or NEXUS_UI_URL), False
+
+    # Edge có thể khởi động chậm hơn thời gian chờ nhưng lệnh --app đã được gửi thành công.
+    return True, NEXUS_UI_URL, False
+
+
+def _launch_wait_window():
+    """Show only the Nexus logo and the button that opens the web interface."""
     _cleanup_update_script()
-    """Mở cửa sổ Tkinter hiển thị log và nút mở giao diện."""
-    import webbrowser
+    import socket
     import tkinter as tk
     from tkinter import ttk
-    from tkinter.scrolledtext import ScrolledText
 
-    log_queue = queue.Queue()
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    sys.stdout = _GuiLogWriter(log_queue, original_stdout)
-    sys.stderr = _GuiLogWriter(log_queue, original_stderr)
-
-    # Đặt AppUserModelID trước khi tạo cửa sổ để Windows taskbar dùng icon riêng của app
-    # thay vì icon mặc định của python.exe / tkinter.
     try:
         if sys.platform.startswith("win"):
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "PhanMem.Nexus.CMDLog"
-            )
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("PhanMem.Nexus.Launcher")
     except Exception:
         pass
 
     root = tk.Tk()
-    root.title("Nexus - CMD Log")
-    root.geometry("1000x640")
-    root.minsize(760, 420)
-    root.configure(bg="#0c0c0c")
+    root.title("Nexus")
+    window_width = 420
+    window_height = 330
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    pos_x = max(0, (screen_width - window_width) // 2)
+    pos_y = max(0, (screen_height - window_height) // 2)
+    root.geometry(f"{window_width}x{window_height}+{pos_x}+{pos_y}")
+    root.resizable(False, False)
+    root.configure(bg="#F5F7FB")
+
+    try:
+        icon_path = _get_app_icon_path()
+        if icon_path and os.path.exists(icon_path):
+            root.iconbitmap(default=icon_path)
+    except Exception as error:
+        print(f"Không đặt được icon cửa sổ: {error}", flush=True)
 
     style = ttk.Style(root)
     try:
         style.theme_use("clam")
     except Exception:
         pass
-    style.configure("Cmd.TFrame", background="#0c0c0c")
-    style.configure("Cmd.TLabel", background="#0c0c0c", foreground="#cfcfcf", font=("Consolas", 10))
-    style.configure("CmdTitle.TLabel", background="#0c0c0c", foreground="#ffffff", font=("Consolas", 13, "bold"))
-    style.configure("Cmd.TButton", font=("Consolas", 10), padding=(12, 6))
-
-    try:
-        icon_path = _get_app_icon_path()
-        if icon_path and os.path.exists(icon_path):
-            # iconbitmap(default=...) áp dụng cho title bar và các cửa sổ con Tkinter.
-            root.iconbitmap(default=icon_path)
-    except Exception as e:
-        try:
-            original_stdout.write(f"⚠️ Không đặt được icon cửa sổ: {e}\n")
-        except Exception:
-            pass
-
-    header = ttk.Frame(root, padding=(12, 10, 12, 6), style="Cmd.TFrame")
-    header.pack(fill="x")
-
-    title = ttk.Label(header, text="Nexus - CMD Log", style="CmdTitle.TLabel")
-    title.pack(side="left")
-
-    status_var = tk.StringVar(value="Đang khởi động backend...")
-    status = ttk.Label(header, textvariable=status_var, style="Cmd.TLabel")
-    status.pack(side="right")
-
-    log_box = ScrolledText(
-        root,
-        wrap="word",
-        font=("Consolas", 10),
-        height=28,
-        bg="#0c0c0c",
-        fg="#e6e6e6",
-        insertbackground="#ffffff",
-        selectbackground="#264f78",
-        selectforeground="#ffffff",
-        relief="flat",
+    style.configure(
+        "Nexus.TButton",
+        background="#111827",
+        foreground="#FFFFFF",
         borderwidth=0,
+        focusthickness=0,
+        focuscolor="#111827",
+        font=("Segoe UI", 11, "bold"),
+        padding=(30, 14),
+        relief="flat",
     )
-    log_box.pack(fill="both", expand=True, padx=12, pady=(4, 8))
-    log_box.configure(state="disabled")
+    style.map(
+        "Nexus.TButton",
+        background=[("disabled", "#CBD5E1"), ("active", "#1F2937"), ("pressed", "#0F172A")],
+        foreground=[("disabled", "#64748B"), ("active", "#FFFFFF")],
+    )
 
-    buttons = ttk.Frame(root, padding=(12, 0, 12, 12), style="Cmd.TFrame")
-    buttons.pack(fill="x")
+    content = tk.Frame(root, bg="#F5F7FB", padx=42, pady=36)
+    content.pack(fill="both", expand=True)
+
+    logo_path = _get_app_logo_path()
+    if logo_path:
+        try:
+            logo_image = tk.PhotoImage(file=logo_path)
+            max_side = max(logo_image.width(), logo_image.height())
+            if max_side > 150:
+                factor = max(1, (max_side + 149) // 150)
+                logo_image = logo_image.subsample(factor, factor)
+            logo = tk.Label(content, image=logo_image, bg="#F5F7FB", borderwidth=0)
+            logo.image = logo_image
+            root._nexus_logo_image = logo_image
+            logo.pack(pady=(4, 42))
+        except Exception as error:
+            print(f"Không tải được logo launcher: {error}", flush=True)
+
+    open_button = ttk.Button(
+        content,
+        text="Đang khởi động…",
+        state="disabled",
+        style="Nexus.TButton",
+    )
+    open_button.pack(fill="x")
+
+    def backend_is_ready():
+        try:
+            with socket.create_connection(("127.0.0.1", 5000), timeout=0.08):
+                return True
+        except OSError:
+            return False
+
+    ui_open_lock = threading.Lock()
 
     def open_ui():
-        webbrowser.open("http://127.0.0.1:5000/policy")
-        print("🌐 Đã mở giao diện chính sách: http://127.0.0.1:5000/policy", flush=True)
+        if not backend_is_ready() or ui_open_lock.locked():
+            return
 
-    def clear_log():
-        log_box.configure(state="normal")
-        log_box.delete("1.0", "end")
-        log_box.configure(state="disabled")
+        def worker():
+            with ui_open_lock:
+                try:
+                    root.after(0, lambda: open_button.configure(text="Đang mở Edge…", state="disabled"))
+                    success, detail, reused = _open_nexus_ui_in_edge()
+                    if success:
+                        action = "Đã chuyển tới giao diện Edge đang mở" if reused else "Đã mở giao diện bằng Edge"
+                        print(f"{action}: {detail}", flush=True)
+                    else:
+                        print(f"Không thể mở giao diện bằng Edge: {detail}", flush=True)
+                except Exception as error:
+                    print(f"Không thể mở giao diện bằng Edge: {error}", flush=True)
+                finally:
+                    try:
+                        root.after(0, lambda: open_button.configure(text="Mở giao diện", state="normal"))
+                    except Exception:
+                        pass
 
-    open_btn = ttk.Button(buttons, text="Mở giao diện", command=open_ui, style="Cmd.TButton")
-    open_btn.pack(side="left")
+        threading.Thread(target=worker, daemon=True).start()
 
-    clear_btn = ttk.Button(buttons, text="Xóa log", command=clear_log, style="Cmd.TButton")
-    clear_btn.pack(side="left", padx=(8, 0))
+    open_button.configure(command=open_ui)
 
-    hint = ttk.Label(buttons, text="App không tự mở trình duyệt khi khởi động.", style="Cmd.TLabel")
-    hint.pack(side="right")
-
-    def pump_logs():
-        had_log = False
-        while True:
-            try:
-                text = log_queue.get_nowait()
-            except queue.Empty:
-                break
-            had_log = True
-            log_box.configure(state="normal")
-            log_box.insert("end", text)
-            log_box.see("end")
-            log_box.configure(state="disabled")
-            if "Backend đã sẵn sàng" in text or "Running on" in text:
-                status_var.set("Backend đang chạy")
-            elif "Lỗi khởi động backend" in text:
-                status_var.set("Backend lỗi")
-        root.after(120 if had_log else 250, pump_logs)
+    def poll_backend():
+        if backend_is_ready():
+            open_button.configure(text="Mở giao diện", state="normal")
+            return
+        root.after(250, poll_backend)
 
     def on_close():
         try:
@@ -4222,19 +4550,16 @@ def _launch_log_window():
         except Exception:
             pass
         root.destroy()
-        # Flask chạy nền bằng daemon thread; thoát GUI thì thoát app luôn.
         os._exit(0)
 
     root.protocol("WM_DELETE_WINDOW", on_close)
 
     server_thread = threading.Thread(target=_start_backend_server, daemon=True)
     server_thread.start()
-
-    print("🚀 Đang khởi động Nexus...", flush=True)
-    print("📌 Trình duyệt sẽ không tự mở. Bấm 'Mở giao diện' khi cần.", flush=True)
-    pump_logs()
+    print("Đang khởi động Nexus. Launcher không hiển thị log.", flush=True)
+    root.after(200, poll_backend)
     root.mainloop()
 
 
 if __name__ == "__main__":
-    _launch_log_window()
+    _launch_wait_window()

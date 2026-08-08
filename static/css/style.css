@@ -3221,7 +3221,7 @@ body.members-page .clear-confirm-actions,
 .groups-list-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
 .groups-list-info { min-width:0; }
 .groups-list-info b { display:block; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.groups-list-info span { display:block; font-size:12px; color:var(--text-muted); margin-top:3px; }
+.groups-list-info span { display:block; max-width:100%; margin-top:3px; overflow:hidden; color:var(--text-muted); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .groups-list-arrow { color:var(--text-muted); font-size:22px; }
 .groups-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:8px; color:var(--text-muted); border:1px dashed rgba(139,148,158,.28); border-radius:14px; padding:22px; min-height:150px; }
 .groups-empty b { color:var(--text); }
@@ -3236,7 +3236,13 @@ body.members-page .clear-confirm-actions,
 .group-detail-text { min-width:0; }
 .group-detail-text h3 { font-size:18px; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:520px; }
 .group-detail-meta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--text-muted); font-size:12px; }
-.group-detail-meta span:last-child { cursor:pointer; color:var(--accent); font-family:"Cascadia Code","Fira Code",monospace; }
+.group-detail-link-wrap { display:inline-flex; align-items:center; gap:6px; min-width:0; max-width:min(620px,72vw); }
+.group-detail-link-label { color:var(--text-muted); white-space:nowrap; }
+.group-detail-link { min-width:0; max-width:min(520px,62vw); height:28px; padding:3px 9px; overflow:hidden; border:1px solid rgba(88,166,255,.32); border-radius:8px; background:rgba(88,166,255,.08); color:var(--accent); font-family:"Cascadia Code","Fira Code",monospace; font-size:12px; line-height:20px; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; transition:border-color .16s ease, background .16s ease, opacity .16s ease; }
+.group-detail-link:hover { border-color:rgba(88,166,255,.72); background:rgba(88,166,255,.14); }
+.group-detail-link:focus-visible { outline:2px solid rgba(88,166,255,.5); outline-offset:2px; }
+.group-detail-link.is-loading { cursor:wait; opacity:.72; }
+.group-detail-link.is-error { border-color:rgba(248,81,73,.38); background:rgba(248,81,73,.08); color:var(--danger,#f85149); }
 .group-detail-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .groups-members-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
 .groups-members-search { min-width:280px; flex:1; }

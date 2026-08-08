@@ -39,21 +39,92 @@ def is_not_member_error(message: str) -> bool:
     )
 
 
+_ZERO_WIDTH_CHARS_RE = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+_GROUP_ID_MIN_DIGITS = 6
+_GROUP_ID_LABEL_PREFIX = r"""(?:
+    ["']?(?:group|grid)[\s_-]*id["']?
+    |
+    ["']?id[\s_-]*(?:nh[oó]m|nhom)?["']?
+    |
+    ["']?m[aã][\s_-]*(?:nh[oó]m|nhom)["']?
+)\s*(?:[:=：#-]\s*)?"""
+_GROUP_ID_LABEL_PATTERNS = (
+    # ID số bị format từ Excel/clipboard: ``ID: 123 456 789``.
+    re.compile(r"(?ix)" + _GROUP_ID_LABEL_PREFIX + r"[\"']?([g]?\d[\d\s,.]{5,179})[\"']?"),
+    # ID được dán từ JSON/log: ``{\"groupId\":\"abc_123\"}``.
+    re.compile(r"(?ix)" + _GROUP_ID_LABEL_PREFIX + r"[\"']?([a-z0-9_-]{6,160})[\"']?"),
+)
+
+
+def _clean_group_input_text(raw: str) -> str:
+    text = _ZERO_WIDTH_CHARS_RE.sub("", str(raw or ""))
+    return text.strip().strip("\"'`“”‘’")
+
+
+def _normalize_group_id_candidate(value: str, *, explicit: bool = False) -> str:
+    """Chuẩn hóa Group ID được dán từ UI, JSON, Excel hoặc nhãn ``ID:``.
+
+    Zalo thường trả Group ID dạng số. Một số màn hình/đoạn log cũ thêm tiền tố
+    ``g`` hoặc chèn khoảng trắng/dấu phân cách khi sao chép, vì vậy cần làm sạch
+    trước khi gọi ``/api/group/getmg``. Mã link mời dạng chữ-số không nhãn vẫn
+    được giữ là link code để không phá luồng nhập link hiện có.
+    """
+    candidate = _clean_group_input_text(value).strip("[](){}<>")
+    if not candidate:
+        return ""
+
+    # Dạng g123456... từng được các module getmg cũ chấp nhận.
+    if re.fullmatch(r"[gG]\d+", candidate):
+        candidate = candidate[1:]
+
+    # ID bị định dạng từ bảng tính hoặc copy có khoảng trắng: 123 456 789.
+    if re.fullmatch(r"\d[\d\s,\.]*", candidate):
+        compact = re.sub(r"[\s,\.]", "", candidate)
+        if compact.isdigit() and len(compact) >= _GROUP_ID_MIN_DIGITS:
+            return compact
+
+    if candidate.isdigit() and len(candidate) >= _GROUP_ID_MIN_DIGITS:
+        return candidate
+
+    # Chỉ chấp nhận ID chữ-số khi người dùng ghi rõ groupId/gridId/ID nhóm.
+    if explicit and re.fullmatch(r"[A-Za-z0-9_-]{6,160}", candidate):
+        if candidate[:1].lower() == "g" and candidate[1:].isdigit():
+            return candidate[1:]
+        return candidate
+    return ""
+
+
 def normalize_group_input(raw: str) -> Tuple[str, str]:
-    raw = (raw or "").strip()
-    if not raw:
+    """Nhận link, mã link hoặc Group ID ở nhiều định dạng dán phổ biến."""
+    text = _clean_group_input_text(raw)
+    if not text:
         return "", ""
-    low = raw.lower()
-    if low.startswith("http://") or low.startswith("https://"):
-        return "link", raw
+
+    low = text.lower()
+    if low.startswith(("http://", "https://")):
+        return "link", text
+    if low.startswith("www."):
+        return "link", "https://" + text
     if "zalo.me/g/" in low:
         if not low.startswith("http"):
-            raw = "https://" + raw
-        return "link", raw
-    if re.fullmatch(r"\d+", raw):
-        return "group_id", raw
-    return "link", "https://zalo.me/g/" + raw
+            text = "https://" + text.lstrip("/")
+        return "link", text
 
+    # Hỗ trợ: ID: 123..., Group ID = g123..., {"groupId":"123..."}.
+    for pattern in _GROUP_ID_LABEL_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            group_id = _normalize_group_id_candidate(match.group(1), explicit=True)
+            if group_id:
+                return "group_id", group_id
+
+    # Hỗ trợ ID thuần, ID có tiền tố g và số bị chèn khoảng trắng/dấu chấm.
+    direct_group_id = _normalize_group_id_candidate(text)
+    if direct_group_id:
+        return "group_id", direct_group_id
+
+    # Chuỗi chữ-số không nhãn tiếp tục được hiểu là mã link mời như phiên bản cũ.
+    return "link", "https://zalo.me/g/" + text.lstrip("/")
 
 def _extract_member_uid(member) -> str:
     if isinstance(member, dict):

@@ -13,7 +13,11 @@
         inviteSelectedGroups: new Set(),
         loadingMembers: false,
         membersRequestSeq: 0,
-        refreshingGroups: false
+        refreshingGroups: false,
+        groupLinkPollCount: 0,
+        groupLinkPollTimer: null,
+        selectedLinkRequestSeq: 0,
+        selectedLinkLoadingGroupId: ''
     };
 
     function $(id) { return document.getElementById(id); }
@@ -86,6 +90,60 @@
 
     function getGroupId(g) {
         return String((g && (g.groupId || g.gridId || g.id || g.gid)) || '').trim();
+    }
+
+    function getGroupLink(g) {
+        var link = String((g && (g.groupLink || g.group_link || g.inviteLink || g.link)) || '').trim();
+        if (!link) return '';
+        if (link.indexOf('//') === 0) return 'https:' + link;
+        if (/^https?:\/\//i.test(link)) return link;
+        link = link.replace(/^\/+|\/+$/g, '');
+        return /^zalo\.me\/g\//i.test(link) ? ('https://' + link) : ('https://zalo.me/g/' + link);
+    }
+
+    function getGroupLinkLabel(g) {
+        var link = getGroupLink(g);
+        if (link) return link;
+        var status = String((g && g.linkStatus) || '').toLowerCase();
+        if (status === 'loading' || status === 'pending') return 'Đang lấy link nhóm...';
+        if (status === 'error') return 'Chưa lấy được link · bấm để thử lại';
+        return 'Đang lấy link nhóm...';
+    }
+
+    function getCompactGroupLink(g) {
+        var link = getGroupLink(g);
+        if (!link) return getGroupLinkLabel(g);
+        return link.replace(/^https?:\/\//i, '');
+    }
+
+    function groupsScheduleLinkRefresh(accountId) {
+        var hasPending = (state.groups || []).some(function (g) {
+            return !getGroupLink(g) && String(g.linkStatus || '').toLowerCase() !== 'error';
+        });
+        if (!hasPending || state.groupLinkPollCount >= 16) {
+            state.groupLinkPollCount = 0;
+            clearTimeout(state.groupLinkPollTimer);
+            state.groupLinkPollTimer = null;
+            return;
+        }
+        state.groupLinkPollCount += 1;
+        clearTimeout(state.groupLinkPollTimer);
+        state.groupLinkPollTimer = setTimeout(async function () {
+            if (state.accountId !== accountId) return;
+            try {
+                var data = await fetchPersonalGroups(accountId);
+                if (state.accountId !== accountId) return;
+                state.groups = data.groups || [];
+                if (state.selectedGroupId) {
+                    state.selectedGroup = state.groups.find(function (g) { return getGroupId(g) === state.selectedGroupId; }) || state.selectedGroup;
+                    renderGroupDetail();
+                }
+                groupsRenderList();
+                groupsScheduleLinkRefresh(accountId);
+            } catch (error) {
+                groupsScheduleLinkRefresh(accountId);
+            }
+        }, 2500);
     }
 
     function getGroupName(g) {
@@ -352,6 +410,7 @@
                 setStatus('Chưa có dữ liệu nhóm. Bấm Làm mới để mở tài khoản Zalo và đồng bộ nhóm.', 'warn');
             }
             groupsRenderList();
+            groupsScheduleLinkRefresh(state.accountId);
         } catch (err) {
             setStatus('Lỗi tải nhóm: ' + err.message, 'error');
             groupsRenderList();
@@ -377,10 +436,13 @@
                 var fresh = groupsSyncedAt && (!startedAt || groupsSyncedAt >= Number(startedAt || 0));
                 var total = state.groups.length;
                 var pending = state.groups.filter(function (g) {
-                    return String(g.fetchStatus || '').toLowerCase() === 'pending';
+                    var detailPending = String(g.fetchStatus || '').toLowerCase() === 'pending';
+                    var linkPending = !getGroupLink(g) && String(g.linkStatus || '').toLowerCase() !== 'error';
+                    return detailPending || linkPending;
                 }).length;
                 var errored = state.groups.filter(function (g) {
-                    return String(g.fetchStatus || '').toLowerCase() === 'error';
+                    return String(g.fetchStatus || '').toLowerCase() === 'error'
+                        || String(g.linkStatus || '').toLowerCase() === 'error';
                 }).length;
 
                 if (fresh) {
@@ -430,6 +492,9 @@
         }
 
         state.refreshingGroups = true;
+        state.groupLinkPollCount = 0;
+        clearTimeout(state.groupLinkPollTimer);
+        state.groupLinkPollTimer = null;
         state.groups = [];
         state.selectedGroupId = '';
         state.selectedGroup = null;
@@ -464,6 +529,72 @@
         }
     }
 
+
+    async function groupsEnsureSelectedLink(groupId, force) {
+        groupId = String(groupId || '').trim();
+        if (!state.accountId || !groupId) return;
+
+        var group = state.groups.find(function (item) { return getGroupId(item) === groupId; });
+        if (!group) return;
+        if (getGroupLink(group) && !force) return;
+        if (state.selectedLinkLoadingGroupId === groupId) return;
+
+        var requestSeq = ++state.selectedLinkRequestSeq;
+        state.selectedLinkLoadingGroupId = groupId;
+        group.linkStatus = 'loading';
+        group.linkError = '';
+        if (state.selectedGroupId === groupId) {
+            state.selectedGroup = group;
+            renderGroupDetail();
+        }
+        groupsRenderList();
+
+        try {
+            var response = await fetch('/api/groups/link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accountId: state.accountId,
+                    groupId: groupId,
+                    force: !!force
+                })
+            });
+            var data = await response.json();
+            if (requestSeq !== state.selectedLinkRequestSeq) return;
+            if (!response.ok || !data.success || !data.groupLink) {
+                throw new Error(data.error || data.linkError || 'Zalo chưa trả về link nhóm.');
+            }
+
+            group.groupLink = data.groupLink;
+            group.group_link = data.groupLink;
+            group.inviteLink = data.groupLink;
+            group.linkStatus = 'ready';
+            group.linkExpirationDate = data.linkExpirationDate || 0;
+            group.linkCreatedAutomatically = !!data.linkCreatedAutomatically;
+            group.linkError = '';
+            if (state.selectedGroupId === groupId) {
+                state.selectedGroup = group;
+                renderGroupDetail();
+            }
+            groupsRenderList();
+            showToast('Đã lấy link của nhóm đang chọn.', 'success');
+        } catch (error) {
+            if (requestSeq !== state.selectedLinkRequestSeq) return;
+            group.linkStatus = 'error';
+            group.linkError = error.message || 'Không lấy được link nhóm.';
+            if (state.selectedGroupId === groupId) {
+                state.selectedGroup = group;
+                renderGroupDetail();
+            }
+            groupsRenderList();
+            showToast('Không lấy được link nhóm: ' + group.linkError, 'error');
+        } finally {
+            if (requestSeq === state.selectedLinkRequestSeq) {
+                state.selectedLinkLoadingGroupId = '';
+            }
+        }
+    }
+
     function groupsRenderList() {
         var list = $('groupsList');
         var empty = $('groupsEmpty');
@@ -471,7 +602,10 @@
         if (!list) return;
         var q = String(($('groupsSearchInput') || {}).value || '').toLowerCase().trim();
         var groups = (state.groups || []).filter(function (g) {
-            return !q || getGroupName(g).toLowerCase().indexOf(q) >= 0 || getGroupId(g).indexOf(q) >= 0;
+            return !q
+                || getGroupName(g).toLowerCase().indexOf(q) >= 0
+                || getGroupId(g).indexOf(q) >= 0
+                || getGroupLink(g).toLowerCase().indexOf(q) >= 0;
         });
         if (totalText) totalText.textContent = (state.groups || []).length + ' nhóm';
         if (!groups.length) {
@@ -490,7 +624,7 @@
                 : '<div class="groups-list-avatar fallback">👥</div>';
             return '<button type="button" class="groups-list-item ' + (gid === state.selectedGroupId ? 'active' : '') + '" onclick="groupsSelectGroup(\'' + esc(gid) + '\')">'
                 + '<div class="groups-list-avatar">' + avt + '</div>'
-                + '<div class="groups-list-info"><b>' + esc(name) + '</b><span>' + esc(count) + ' thành viên</span></div>'
+                + '<div class="groups-list-info"><b>' + esc(name) + '</b><span title="' + esc(getGroupLinkLabel(g)) + '">' + esc(count) + ' thành viên · ' + esc(getCompactGroupLink(g)) + '</span></div>'
                 + '<div class="groups-list-arrow">›</div>'
                 + '</button>';
         }).join('');
@@ -508,6 +642,7 @@
         groupsRenderList();
         renderGroupDetail();
         groupsRenderMembers();
+        groupsEnsureSelectedLink(groupId, false);
         groupsLoadMembers();
     }
 
@@ -532,7 +667,16 @@
 
         if ($('groupsDetailName')) $('groupsDetailName').textContent = name;
         if ($('groupsDetailMembers')) $('groupsDetailMembers').textContent = count + ' thành viên';
-        if ($('groupsDetailId')) $('groupsDetailId').textContent = 'ID: ' + gid;
+        if ($('groupsDetailId')) {
+            var detailLink = getGroupLinkLabel(g);
+            var linkError = String(g.linkError || '').trim();
+            $('groupsDetailId').textContent = detailLink;
+            $('groupsDetailId').classList.toggle('is-loading', String(g.linkStatus || '').toLowerCase() === 'loading');
+            $('groupsDetailId').classList.toggle('is-error', String(g.linkStatus || '').toLowerCase() === 'error');
+            $('groupsDetailId').title = getGroupLink(g)
+                ? 'Bấm để sao chép link nhóm'
+                : (linkError || detailLink);
+        }
         var img = $('groupsDetailAvatar');
         var fallback = $('groupsDetailAvatarFallback');
         if (avatar && img) {
@@ -789,8 +933,20 @@
         showToast('Tạo nhóm mới đang nằm ở trang Lấy thành viên. Bản vá này tập trung quản lý nhóm và mời vào nhóm có sẵn.', 'info');
     }
 
+    function groupsCopyCurrentGroupLink() {
+        var group = state.selectedGroup || {};
+        var link = getGroupLink(group);
+        if (!link) {
+            showToast('Đang thử lấy link cho nhóm này...', 'info');
+            groupsEnsureSelectedLink(getGroupId(group), true);
+            return;
+        }
+        groupsCopyText(link);
+    }
+
+    // Giữ alias cũ để các template cache trước đó không phát sinh lỗi JavaScript.
     function groupsCopyCurrentGroupId() {
-        groupsCopyText(state.selectedGroupId || '');
+        groupsCopyCurrentGroupLink();
     }
 
     function groupsCopyText(text) {
@@ -1001,6 +1157,7 @@
     window.groupsToggleInviteGroup = groupsToggleInviteGroup;
     window.groupsSubmitInvite = groupsSubmitInvite;
     window.groupsOpenCreateGroupHint = groupsOpenCreateGroupHint;
+    window.groupsCopyCurrentGroupLink = groupsCopyCurrentGroupLink;
     window.groupsCopyCurrentGroupId = groupsCopyCurrentGroupId;
     window.groupsCopyText = groupsCopyText;
     window.groupsShowMemberProfile = groupsShowMemberProfile;

@@ -23,6 +23,8 @@
         sourcePreviewController: null,
         sourceDebounceTimer: null,
         targetGroup: null,
+        groupLinkPollCount: 0,
+        groupLinkPollTimer: null,
         pickerOpen: false,
         pickerSearch: '',
         pickerSort: 'name',
@@ -128,6 +130,22 @@
 
     function getGroupId(group) {
         return String((group && (group.groupId || group.gridId || group.id || group.gid)) || '').trim();
+    }
+
+    function getGroupLink(group) {
+        var link = String((group && (group.groupLink || group.group_link || group.inviteLink || group.link)) || '').trim();
+        if (!link) return '';
+        if (link.indexOf('//') === 0) return 'https:' + link;
+        if (/^https?:\/\//i.test(link)) return link;
+        link = link.replace(/^\/+|\/+$/g, '');
+        return /^zalo\.me\/g\//i.test(link) ? ('https://' + link) : ('https://zalo.me/g/' + link);
+    }
+
+    function getGroupLinkLabel(group) {
+        var link = getGroupLink(group);
+        if (link) return link;
+        var status = String((group && group.linkStatus) || '').toLowerCase();
+        return status === 'error' ? 'Chưa lấy được link nhóm' : 'Đang tự tạo link nhóm...';
     }
 
     function getGroupName(group) {
@@ -336,8 +354,11 @@
         renderAccountMenu();
         setAccountMenu(false);
         if (changed) {
-            // Đổi tài khoản: bỏ nhóm đích đã chọn của tài khoản cũ, nạp lại danh sách nhóm mới.
+            // Đổi tài khoản: bỏ nhóm đích và tiến trình lấy link của tài khoản cũ.
             state.targetGroup = null;
+            state.groupLinkPollCount = 0;
+            clearTimeout(state.groupLinkPollTimer);
+            state.groupLinkPollTimer = null;
             renderTargetPreview();
         }
         await loadGroups();
@@ -385,22 +406,44 @@
     }
 
     var _groupsFetchToken = 0;
-    async function loadGroups() {
+    async function loadGroups(options) {
+        options = options || {};
         var accountId = (($('groupCopyAccount') || {}).value || '').trim();
         var token = ++_groupsFetchToken;
-        state.groups = [];
+        if (!options.keepCurrent) state.groups = [];
         if (!accountId) return;
         try {
             var response = await fetch('/api/groups/personal?accountId=' + encodeURIComponent(accountId));
             var data = await response.json();
-            if (token !== _groupsFetchToken) return; // Đã đổi tài khoản khác trong lúc chờ — bỏ kết quả cũ.
+            if (token !== _groupsFetchToken) return;
             if (!response.ok || !data.success) throw new Error(data.error || 'Không tải được danh sách nhóm.');
             state.groups = data.groups || [];
+
+            var pendingLinks = state.groups.some(function (g) {
+                return !getGroupLink(g) && String(g.linkStatus || '').toLowerCase() !== 'error';
+            });
+            if (pendingLinks && state.groupLinkPollCount < 16) {
+                state.groupLinkPollCount += 1;
+                clearTimeout(state.groupLinkPollTimer);
+                state.groupLinkPollTimer = setTimeout(function () {
+                    var currentAccountId = (($('groupCopyAccount') || {}).value || '').trim();
+                    if (currentAccountId === accountId) loadGroups({ keepCurrent: true });
+                }, 2500);
+            } else {
+                state.groupLinkPollCount = 0;
+                clearTimeout(state.groupLinkPollTimer);
+                state.groupLinkPollTimer = null;
+            }
         } catch (error) {
             if (token !== _groupsFetchToken) return;
             if (state.targetMode === 'existing') setStatus(friendlyFetchError(error, 'Không thể tải danh sách nhóm hiện tại.'), 'error');
         }
         if (state.pickerOpen) renderPickerList();
+        if (state.targetGroup) {
+            var selectedId = getGroupId(state.targetGroup);
+            var refreshed = state.groups.find(function (g) { return getGroupId(g) === selectedId; });
+            if (refreshed) { state.targetGroup = refreshed; renderTargetPreview(); }
+        }
     }
 
     // ─── Preview nhóm nguồn (link/ID) — gọi /api/groups/info, huỷ request cũ ─
@@ -493,8 +536,9 @@
             var g = state.targetGroup;
             el.className = 'gc-target-preview';
             var count = getGroupMemberCount(g);
+            var linkLabel = getGroupLinkLabel(g);
             el.innerHTML = '<span class="gc-gp-avatar">' + (g.avatar ? '<img src="' + esc(safeImageUrl(g.avatar)) + '" alt="">' : '') + '<span>' + esc(initials(getGroupName(g))) + '</span></span>' +
-                '<span class="gc-gp-copy"><strong>' + esc(getGroupName(g)) + '</strong><small>' + (count ? count + ' thành viên · ' : '') + 'ID ' + esc(shortId(getGroupId(g))) + '</small></span>';
+                '<span class="gc-gp-copy"><strong>' + esc(getGroupName(g)) + '</strong><small title="' + esc(linkLabel) + '">' + (count ? count + ' thành viên · ' : '') + esc(linkLabel) + '</small></span>';
         }
         $('groupCopyExistingGroup').value = state.targetGroup ? getGroupId(state.targetGroup) : '';
         updateRunButtonState();
@@ -527,7 +571,9 @@
         var query = state.pickerSearch.trim().toLowerCase();
         var groups = state.groups.filter(function (g) {
             if (!query) return true;
-            return getGroupName(g).toLowerCase().indexOf(query) !== -1 || getGroupId(g).toLowerCase().indexOf(query) !== -1;
+            return getGroupName(g).toLowerCase().indexOf(query) !== -1
+                || getGroupId(g).toLowerCase().indexOf(query) !== -1
+                || getGroupLink(g).toLowerCase().indexOf(query) !== -1;
         });
         groups = groups.slice().sort(function (a, b) {
             if (state.pickerSort === 'members') return getGroupMemberCount(b) - getGroupMemberCount(a);
@@ -546,9 +592,10 @@
             var gid = getGroupId(g);
             var count = getGroupMemberCount(g);
             var selected = gid === selectedId;
+            var linkLabel = getGroupLinkLabel(g);
             return '<button type="button" class="gc-picker-row' + (selected ? ' selected' : '') + '" data-pick-group="' + esc(gid) + '">' +
                 '<span class="gc-gp-avatar">' + (g.avatar ? '<img src="' + esc(safeImageUrl(g.avatar)) + '" alt="">' : '') + '<span>' + esc(initials(getGroupName(g))) + '</span></span>' +
-                '<span class="gc-picker-row-name"><strong>' + esc(getGroupName(g)) + '</strong><small>' + esc(shortId(gid)) + '</small></span>' +
+                '<span class="gc-picker-row-name"><strong>' + esc(getGroupName(g)) + '</strong><small title="' + esc(linkLabel) + '">' + esc(linkLabel) + '</small></span>' +
                 '<span class="gc-picker-row-members">' + (count ? count + ' thành viên' : '-') + '</span>' +
                 '<span class="gc-picker-row-mark">' + (selected ? '✓' : '') + '</span>' +
             '</button>';
@@ -601,6 +648,9 @@
         var payload = {
             accountId: accountId,
             sourceInput: sourceInput,
+            // Khi preview đã xác minh được nhóm, gửi thêm ID đầy đủ cho backend.
+            // Backend vẫn giữ sourceInput gốc để link có thể tự join khi cần.
+            sourceGroupId: state.sourceGroupInfo ? getGroupId(state.sourceGroupInfo) : '',
             targetMode: state.targetMode,
             startAt: startAt,
             dailyLimit: limit,
@@ -616,6 +666,7 @@
             payload.title = payload.newGroupName ? ('Sao chép vào ' + payload.newGroupName) : 'Sao chép thành viên nhóm';
         } else {
             payload.targetGroupId = state.targetGroup ? getGroupId(state.targetGroup) : '';
+            payload.targetGroupLink = state.targetGroup ? getGroupLink(state.targetGroup) : '';
             payload.targetGroupName = state.targetGroup ? getGroupName(state.targetGroup) : '';
             payload.title = payload.targetGroupName ? ('Sao chép vào ' + payload.targetGroupName) : 'Sao chép thành viên nhóm';
         }
