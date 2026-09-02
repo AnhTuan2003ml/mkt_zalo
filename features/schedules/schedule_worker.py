@@ -14,7 +14,26 @@ from core.zalo.zalo_config import get_zpw_ver
 from features.accounts.account_manager import load_accounts
 from features.groups.send_sms_group import send_group_msg
 from features.messaging.send_sms import send_sms
-from features.schedules.schedule_manager import load_schedules, update_schedule, append_schedule_result
+from features.messaging.send_photo import send_photo
+from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result
+
+
+def _load_schedule_photo(schedule: dict):
+    """Đọc bytes ảnh đính kèm của lịch (nếu có). Trả (bytes|None, tên file)."""
+    photo_path = str(schedule.get("photoPath") or "").strip()
+    if not photo_path:
+        return None, ""
+    abs_path = photo_path if os.path.isabs(photo_path) else os.path.join(DATA_DIR, photo_path)
+    try:
+        with open(abs_path, "rb") as f:
+            data = f.read()
+        if not data:
+            raise ValueError("file rỗng")
+        name = schedule.get("photoName") or os.path.basename(abs_path)
+        return data, name
+    except Exception as e:
+        print(f"[schedule_worker] Không đọc được ảnh đính kèm '{abs_path}': {e}")
+        return None, ""
 
 class ScheduleWorker:
     def __init__(self):
@@ -69,16 +88,28 @@ class ScheduleWorker:
         batch_config = schedule.get("batchConfig", {})
         schedule_source = schedule.get("source", "")  # 'group', 'phone', or 'personal-groups'
 
+        # Ảnh đính kèm (tùy chọn): đọc 1 lần cho cả lịch.
+        photo_bytes, photo_name = _load_schedule_photo(schedule)
+
         # Validate
         if not recipients:
             print(f"[schedule_worker] Schedule {sch_id}: No recipients")
             update_schedule(sch_id, {"status": "failed"})
             return
 
-        if not message:
-            print(f"[schedule_worker] Schedule {sch_id}: Empty message")
+        if not message and photo_bytes is None:
+            print(f"[schedule_worker] Schedule {sch_id}: Empty message and no photo")
             update_schedule(sch_id, {"status": "failed"})
             return
+
+        if schedule.get("photoPath") and photo_bytes is None:
+            # Lịch có khai báo ảnh nhưng file mất/hỏng: nếu còn text thì gửi
+            # text-only kèm cảnh báo, nếu không thì fail rõ ràng.
+            if not message:
+                print(f"[schedule_worker] Schedule {sch_id}: Photo file missing and no message -> failed")
+                update_schedule(sch_id, {"status": "failed"})
+                return
+            print(f"[schedule_worker] Schedule {sch_id}: Photo file missing, fallback to text-only")
 
         # Lấy account
         accounts = load_accounts()
@@ -110,7 +141,8 @@ class ScheduleWorker:
 
         # Handle personal groups
         if schedule_source == "personal-groups":
-            self._run_schedule_groups(sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result)
+            self._run_schedule_groups(sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result,
+                                      photo_bytes=photo_bytes, photo_name=photo_name)
             return
 
         # Handle individual users (group or phone source)
@@ -150,12 +182,30 @@ class ScheduleWorker:
                 avatar = recipient.get("avatar", "")
 
                 try:
-                    print(f"[schedule_worker] Sending to {uid} ({zalo_name})...")
-                    _, decoded = send_sms(cookies, zpw_enk, uid, imei, message, zpw_ver=zpw_ver)
+                    if photo_bytes is not None:
+                        # Gửi ảnh TRƯỚC (không caption), rồi gửi text thành tin riêng sau.
+                        print(f"[schedule_worker] Sending photo to {uid} ({zalo_name})...")
+                        photo_result = send_photo(
+                            photo_bytes, photo_name or "image.jpg", uid,
+                            zpw_enk, cookies, imei,
+                            desc="", is_group=False, zpw_ver=zpw_ver,
+                        )
+                        sent_ok = bool(photo_result.get("ok"))
+                        send_error = photo_result.get("message", "Gửi ảnh thất bại")
+                        if sent_ok and message:
+                            _, decoded = send_sms(cookies, zpw_enk, uid, imei, message, zpw_ver=zpw_ver)
+                            error_code = decoded.get("error_code", -1) if isinstance(decoded, dict) else -1
+                            if error_code != 0:
+                                sent_ok = False
+                                send_error = f"Ảnh đã gửi nhưng text lỗi error_code={error_code}"
+                    else:
+                        print(f"[schedule_worker] Sending to {uid} ({zalo_name})...")
+                        _, decoded = send_sms(cookies, zpw_enk, uid, imei, message, zpw_ver=zpw_ver)
+                        error_code = decoded.get("error_code", -1) if isinstance(decoded, dict) else -1
+                        sent_ok = error_code == 0
+                        send_error = f"Error code: {error_code}"
 
-                    error_code = decoded.get("error_code", -1) if isinstance(decoded, dict) else -1
-
-                    if error_code == 0:
+                    if sent_ok:
                         success_count += 1
                         consecutive_errors = 0
                         result = {
@@ -173,7 +223,7 @@ class ScheduleWorker:
                             "zaloName": zalo_name,
                             "avatar": avatar,
                             "status": "failed",
-                            "error": f"Error code: {error_code}",
+                            "error": send_error,
                             "sentAt": int(time.time() * 1000)
                         }
 
@@ -214,7 +264,8 @@ class ScheduleWorker:
         print(f"[schedule_worker] Schedule {sch_id} completed: {success_count} success, {failed_count} failed -> {final_status}")
         update_schedule(sch_id, {"status": final_status})
     
-    def _run_schedule_groups(self, sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result):
+    def _run_schedule_groups(self, sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result,
+                             photo_bytes=None, photo_name=""):
         """Run schedule for personal groups - xử lý theo batch."""
         cookies = account.get("cookies", "")
         zpw_enk = account.get("zpwEnk", "")
@@ -261,13 +312,32 @@ class ScheduleWorker:
                     continue
 
                 try:
-                    print(f"[schedule_worker] Sending to group {group_id}...")
-                    response_json, decoded_data = send_group_msg(
-                        cookies, zpw_enk, group_id, imei, message,
-                        zpw_ver=zpw_ver
-                    )
-
-                    error_code = decoded_data.get("error_code", -1) if isinstance(decoded_data, dict) else -1
+                    if photo_bytes is not None:
+                        # Gửi ảnh vào nhóm TRƯỚC (không caption), rồi gửi text thành tin riêng.
+                        print(f"[schedule_worker] Sending photo to group {group_id}...")
+                        photo_result = send_photo(
+                            photo_bytes, photo_name or "image.jpg", group_id,
+                            zpw_enk, cookies, imei,
+                            desc="", is_group=True, zpw_ver=zpw_ver,
+                        )
+                        error_code = 0 if photo_result.get("ok") else -1
+                        if error_code != 0:
+                            print(f"[schedule_worker] Photo to group {group_id} failed: {photo_result.get('message')}")
+                        elif message:
+                            response_json, decoded_data = send_group_msg(
+                                cookies, zpw_enk, group_id, imei, message,
+                                zpw_ver=zpw_ver
+                            )
+                            error_code = decoded_data.get("error_code", -1) if isinstance(decoded_data, dict) else -1
+                            if error_code != 0:
+                                print(f"[schedule_worker] Text after photo to group {group_id} failed: error_code={error_code}")
+                    else:
+                        print(f"[schedule_worker] Sending to group {group_id}...")
+                        response_json, decoded_data = send_group_msg(
+                            cookies, zpw_enk, group_id, imei, message,
+                            zpw_ver=zpw_ver
+                        )
+                        error_code = decoded_data.get("error_code", -1) if isinstance(decoded_data, dict) else -1
 
                     if error_code == 0:
                         success_count += 1

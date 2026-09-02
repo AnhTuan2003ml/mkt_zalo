@@ -786,9 +786,11 @@ tbody td { border-color: rgba(139,148,158,.14); }
 
 #schedPersonalGroupsTable.personal-groups-table {
     width: 100% !important;
-    min-width: 980px !important;
+    /* Bảng nằm trong cột trái của .sched-groups-layout nên phải co vừa khung;
+       cột co giãn bằng table-layout fixed + colgroup, chữ dài tự ellipsis. */
+    min-width: 0 !important;
     border-collapse: collapse !important;
-    table-layout: auto !important;
+    table-layout: fixed !important;
     margin: 0 !important;
 }
 
@@ -799,18 +801,23 @@ tbody td { border-color: rgba(139,148,158,.14); }
     font-weight: 700 !important;
     text-transform: uppercase !important;
     letter-spacing: .04em !important;
-    padding: 14px 12px !important;
+    padding: 10px !important;
     border-bottom: 1px solid var(--border) !important;
     white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
     text-align: left !important;
     vertical-align: middle !important;
 }
 
 #schedPersonalGroupsTable.personal-groups-table tbody td {
-    padding: 12px !important;
+    padding: 8px 10px !important;
     border-bottom: 1px solid var(--border) !important;
     vertical-align: middle !important;
     display: table-cell !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 #schedPersonalGroupsTable.personal-groups-table tbody tr {
@@ -1229,6 +1236,119 @@ td.personal-group-actions .action-btn {
     grid-template-columns: minmax(0, 1fr) minmax(340px, .9fr);
     gap: 16px;
     align-items: start;
+}
+
+/* Tab Nhóm cá nhân: bảng nhóm nằm TRÊN, BÊN TRÁI (cột rộng) để tiện click chọn;
+   cấu hình lịch gọn bên phải. Không đổi id/chức năng, chỉ đổi bố cục. */
+.sched-groups-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+.sched-groups-layout .sched-panel { margin-bottom: 0; }
+.sched-groups-left .sched-list-toolbar { margin-top: 4px; }
+@media (max-width: 1100px) {
+    /* Màn hẹp: xếp 1 cột, bảng nhóm vẫn ở trên cùng. */
+    .sched-groups-layout { grid-template-columns: 1fr; }
+}
+
+/* Tinh chỉnh bảng nhóm trong cột trái: bảng rộng 980px mặc định sẽ tràn cột,
+   nên ép vừa khung, cột co giãn bằng table-layout fixed + ellipsis, hàng gọn
+   hơn và header dính khi cuộn. Chỉ áp trong .sched-groups-left, không ảnh
+   hưởng bảng nhóm ở màn hình khác. */
+.sched-groups-left .personal-groups-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+}
+.sched-groups-left .personal-groups-table th,
+.sched-groups-left .personal-groups-table td {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    padding: 8px 10px !important;
+    vertical-align: middle !important;
+}
+.sched-groups-left .personal-groups-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 2 !important;
+    background: var(--ux-surface-solid, #f4f7fb) !important;
+}
+.sched-groups-left .personal-groups-table th:nth-child(1),
+.sched-groups-left .personal-groups-table td:nth-child(1) { width: 40px !important; text-align: center !important; }
+.sched-groups-left .personal-groups-table th:nth-child(2),
+.sched-groups-left .personal-groups-table td:nth-child(2) {
+    width: 52px !important;
+    /* Ô ảnh: padding gọn để avatar 32px không tràn sinh dấu ".." */
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    text-overflow: clip !important;
+}
+.sched-groups-left .personal-groups-table th:nth-child(4),
+.sched-groups-left .personal-groups-table td:nth-child(4) { width: 150px !important; }
+.sched-groups-left .personal-groups-table th:nth-child(5),
+.sched-groups-left .personal-groups-table td:nth-child(5) { width: 100px !important; }
+.sched-groups-left .personal-groups-table th:nth-child(6),
+.sched-groups-left .personal-groups-table td:nth-child(6) { width: 72px !important; text-align: center !important; }
+.sched-groups-left .personal-groups-table .recipient-avatar,
+.sched-groups-left .personal-groups-table .av-placeholder {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+    display: block !important;
+}
+.sched-groups-left .personal-groups-table .btn.btn-sm { padding: 5px 10px !important; min-width: 0 !important; }
+/* Toolbar bảng: pill "Chọn tất cả" và nút "Lưu lịch" phải CÙNG chiều cao 34px.
+   Pill cũ nền tối + chữ wrap 2 dòng làm nó cao 54px, khập khiễng với nút bên cạnh:
+   khóa height, cấm wrap và đưa pill về hệ màu sáng đồng bộ với button. */
+.sched-groups-left .sched-toolbar-actions .sched-check-pill {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 12px !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: var(--ux-surface-solid, #ffffff) !important;
+    border: 1px solid var(--ux-border, #d7e1ec) !important;
+    border-radius: 7px !important;
+    color: var(--ux-text, #172033) !important;
+    font-size: 12.5px !important;
+    font-weight: 600;
+}
+.sched-groups-left .sched-toolbar-actions .sched-check-pill input[type="checkbox"] {
+    width: 15px !important;
+    height: 15px !important;
+    margin: 0 !important;
+    flex: 0 0 auto;
+}
+.sched-groups-left .sched-toolbar-actions .btn {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    white-space: nowrap !important;
+}
+/* Cột phải: vùng soạn nội dung đủ cao, các khối cách đều */
+.sched-groups-right textarea { min-height: 110px; }
+/* "Cài đặt nâng cao": đưa về hệ màu sáng của panel, không dùng khối xám đậm nặng nề */
+.sched-groups-right .sched-details {
+    background: var(--ux-surface-solid, #ffffff) !important;
+    border: 1px solid var(--ux-border, #d7e1ec) !important;
+    border-radius: 7px !important;
+    padding: 10px 12px !important;
+    box-shadow: none !important;
+}
+.sched-groups-right .sched-details summary {
+    color: var(--ux-text, #172033) !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    min-height: 20px;
 }
 .sched-panel { padding: 16px !important; margin-bottom: 16px; }
 .sched-panel-head {
@@ -3827,6 +3947,24 @@ body.members-page .members-table .btn.btn-sm {
     min-width: 52px !important;
     padding-left: 10px !important;
     padding-right: 10px !important;
+}
+
+/* Badge vai trò nhóm (Trưởng nhóm / Phó nhóm) cạnh tên thành viên:
+   tên tự co với ellipsis, badge luôn hiển thị đầy đủ. */
+body.members-page .members-table .member-name-cell {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+body.members-page .members-table .member-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.members-page .members-table .member-role-badge {
+    flex: 0 0 auto;
+    line-height: 1.5;
 }
 
 @media (max-width: 1450px) {

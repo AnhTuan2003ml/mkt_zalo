@@ -1655,25 +1655,30 @@ def run():
         member_map = member_payload.get("memberMap") or {}
 
         sse_broadcast(f"Lấy được {len(uid_list)} UID. Đang lấy thông tin profile...", "loading")
-        profiles = fetch_profiles_with_single_fallback(
-            uid_list,
-            zpw_enk,
-            cookies,
-            imei=imei,
-            log_func=sse_broadcast,
-            zpw_ver=zpw_ver,
-        )
         auto_joined = bool(member_payload.get("autoJoined"))
         auto_left = False
         leave_result = None
 
-        result = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
-
-        # Nếu hệ thống tự join ngầm thì chỉ rời sau khi đã lấy xong UID + mini profile
-        # và build xong bảng kết quả. Không gọi profile chi tiết hàng loạt trong /run.
-        if auto_joined and uid_list:
-            leave_result = _leave_group([group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver)
-            auto_left = bool(isinstance(leave_result, dict) and leave_result.get("ok"))
+        try:
+            profiles = fetch_profiles_with_single_fallback(
+                uid_list,
+                zpw_enk,
+                cookies,
+                imei=imei,
+                log_func=sse_broadcast,
+                zpw_ver=zpw_ver,
+            )
+            result = build_member_rows_from_uids(uid_list, profiles, member_map=member_map, group_info=group_info)
+        finally:
+            # Nếu hệ thống tự join ngầm thì LUÔN rời nhóm sau khi đã có UID,
+            # kể cả khi lấy profile hoặc build bảng lỗi, để account không kẹt
+            # lại trong nhóm. Rời sau bước profile để mini profile lấy đủ dữ liệu.
+            if auto_joined and uid_list:
+                try:
+                    leave_result = _leave_group([group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver)
+                    auto_left = bool(isinstance(leave_result, dict) and leave_result.get("ok"))
+                except Exception as leave_error:
+                    sse_broadcast(f"Không rời được nhóm đã tự tham gia: {leave_error}", "warn")
 
         sse_broadcast(f"Hoàn thành! Tổng cộng {len(result)} thành viên.", "success")
         return jsonify({
@@ -2364,6 +2369,220 @@ def api_send_sms():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/send-photo", methods=["POST"])
+def api_send_photo():
+    """API: Gửi ảnh (kèm chú thích) tới user ID theo account được chọn.
+
+    Luồng 2 bước theo Zalo Web: upload chunk qua photo_original/upload để lấy
+    photoId + URL, sau đó POST photo_original/send để tạo tin nhắn ảnh.
+    Nhận multipart/form-data: accountId, to_uid, message (tùy chọn), photo (file).
+    """
+    account_id = str(request.form.get("accountId", request.form.get("account_id", "")) or "").strip()
+    to_uid = str(
+        request.form.get("to_uid")
+        or request.form.get("toid")
+        or request.form.get("toId")
+        or request.form.get("uid")
+        or request.form.get("userId")
+        or ""
+    ).strip()
+    message = str(request.form.get("message", request.form.get("msg", "")) or "").strip()
+
+    if to_uid.lower().startswith("id:"):
+        to_uid = to_uid.split(":", 1)[1].strip()
+    import re
+    m = re.search(r"\d{8,}", to_uid)
+    if m:
+        to_uid = m.group(0)
+
+    photo_file = request.files.get("photo") or request.files.get("image") or request.files.get("file")
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản gửi tin nhắn."}), 400
+    if not to_uid:
+        return jsonify({"success": False, "error": "Thiếu người nhận."}), 400
+    if not photo_file:
+        return jsonify({"success": False, "error": "Thiếu file ảnh cần gửi."}), 400
+
+    image_bytes = photo_file.read()
+    if not image_bytes:
+        return jsonify({"success": False, "error": "File ảnh rỗng."}), 400
+    if len(image_bytes) > 20 * 1024 * 1024:
+        return jsonify({"success": False, "error": "Ảnh vượt quá 20MB."}), 400
+
+    file_name = photo_file.filename or "image.jpg"
+
+    try:
+        _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
+
+        from features.messaging.send_photo import send_photo as _send_photo
+        # Gửi ảnh TRƯỚC (không caption), sau đó gửi text thành tin nhắn riêng.
+        result = _send_photo(
+            image_bytes,
+            file_name,
+            to_uid,
+            zpw_enk,
+            cookies,
+            imei,
+            desc="",
+            is_group=False,
+            zpw_ver=get_zpw_ver(),
+        )
+
+        if result.get("ok"):
+            text_sent = False
+            text_error = ""
+            if message:
+                try:
+                    _, text_decoded = send_sms(cookies, zpw_enk, to_uid, imei, message, zpw_ver=get_zpw_ver())
+                    text_code = text_decoded.get("error_code", -1) if isinstance(text_decoded, dict) else -1
+                    text_sent = text_code == 0
+                    if not text_sent:
+                        text_error = f"Gửi text sau ảnh lỗi error_code={text_code}"
+                except Exception as text_exc:
+                    text_error = f"Gửi text sau ảnh lỗi: {text_exc}"
+            return jsonify({
+                "success": True,
+                "message": "Đã gửi ảnh." + (" Đã gửi tin nhắn." if text_sent else ""),
+                "photoId": result.get("photoId"),
+                "urls": result.get("urls"),
+                "textSent": text_sent,
+                "textError": text_error,
+                "data": result.get("decoded"),
+            })
+
+        return jsonify({
+            "success": False,
+            "error": result.get("message", "Gửi ảnh thất bại."),
+            "step": result.get("step"),
+            "detail": result.get("decoded"),
+            "raw": result.get("response"),
+        }), 400
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/send-group-message", methods=["POST"])
+def api_send_group_message():
+    """API: Gửi tin nhắn vào nhóm Zalo, có thể kèm ảnh.
+
+    Nhận multipart/form-data: accountId, group_id, message (tùy chọn nếu có ảnh),
+    photo (file, tùy chọn). Có ảnh -> photo_original/upload + send (nhóm),
+    không ảnh -> /api/group/sendmsg như cũ.
+    """
+    account_id = str(request.form.get("accountId", request.form.get("account_id", "")) or "").strip()
+    group_id = str(
+        request.form.get("group_id")
+        or request.form.get("groupId")
+        or request.form.get("grid")
+        or ""
+    ).strip()
+    message = str(request.form.get("message", request.form.get("msg", "")) or "").strip()
+    photo_file = request.files.get("photo") or request.files.get("image") or request.files.get("file")
+
+    import re
+    m = re.search(r"\d{8,}", group_id)
+    if m:
+        group_id = m.group(0)
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Chưa chọn tài khoản gửi tin nhắn."}), 400
+    if not group_id:
+        return jsonify({"success": False, "error": "Thiếu ID nhóm nhận."}), 400
+    if not message and not photo_file:
+        return jsonify({"success": False, "error": "Thiếu nội dung tin nhắn hoặc ảnh."}), 400
+
+    try:
+        _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
+
+        if photo_file:
+            image_bytes = photo_file.read()
+            if not image_bytes:
+                return jsonify({"success": False, "error": "File ảnh rỗng."}), 400
+            if len(image_bytes) > 20 * 1024 * 1024:
+                return jsonify({"success": False, "error": "Ảnh vượt quá 20MB."}), 400
+
+            from features.messaging.send_photo import send_photo as _send_photo
+            # Gửi ảnh TRƯỚC (không caption), sau đó gửi text thành tin nhắn riêng.
+            result = _send_photo(
+                image_bytes,
+                photo_file.filename or "image.jpg",
+                group_id,
+                zpw_enk,
+                cookies,
+                imei,
+                desc="",
+                is_group=True,
+                zpw_ver=get_zpw_ver(),
+            )
+            if result.get("ok"):
+                text_sent = False
+                text_error = ""
+                if message:
+                    try:
+                        from features.groups.send_sms_group import send_group_msg as _send_group_msg_after
+                        _, text_decoded = _send_group_msg_after(
+                            cookies, zpw_enk, group_id, imei, message, zpw_ver=get_zpw_ver()
+                        )
+                        text_code = text_decoded.get("error_code", -1) if isinstance(text_decoded, dict) else -1
+                        text_sent = text_code == 0
+                        if not text_sent:
+                            text_error = f"Gửi text sau ảnh lỗi error_code={text_code}"
+                    except Exception as text_exc:
+                        text_error = f"Gửi text sau ảnh lỗi: {text_exc}"
+                return jsonify({
+                    "success": True,
+                    "message": "Đã gửi ảnh vào nhóm." + (" Đã gửi tin nhắn." if text_sent else ""),
+                    "photoId": result.get("photoId"),
+                    "urls": result.get("urls"),
+                    "textSent": text_sent,
+                    "textError": text_error,
+                    "data": result.get("decoded"),
+                })
+            return jsonify({
+                "success": False,
+                "error": result.get("message", "Gửi ảnh vào nhóm thất bại."),
+                "step": result.get("step"),
+                "detail": result.get("decoded"),
+            }), 400
+
+        from features.groups.send_sms_group import send_group_msg as _send_group_msg
+        response_json, decoded_data = _send_group_msg(
+            cookies, zpw_enk, group_id, imei, message, zpw_ver=get_zpw_ver()
+        )
+
+        error_code = None
+        error_message = ""
+        if isinstance(decoded_data, dict):
+            error_code = decoded_data.get("error_code", decoded_data.get("errorCode"))
+            error_message = str(decoded_data.get("error_message", decoded_data.get("errorMessage", "")) or "")
+        if error_code is None and isinstance(response_json, dict):
+            error_code = response_json.get("error_code", response_json.get("errorCode"))
+            error_message = str(response_json.get("error_message", response_json.get("errorMessage", "")) or "")
+
+        if str(error_code) == "0":
+            return jsonify({"success": True, "message": "Đã gửi tin nhắn vào nhóm.", "data": decoded_data})
+
+        return jsonify({
+            "success": False,
+            "error": error_message or f"Gửi tin nhắn nhóm lỗi error_code={error_code}",
+            "code": error_code,
+            "detail": decoded_data,
+        }), 400
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/create-group", methods=["POST"])
 def api_create_group():
     """API: Tạo nhóm mới từ danh sách thành viên theo account được chọn."""
@@ -2527,25 +2746,30 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str, auto_jo
 
         task.set_progress(30)
         task.log(f"Lấy được {len(uid_list)} UID. Đang lấy profile...")
-        profiles = fetch_profiles_with_single_fallback(
-            uid_list,
-            zpw_enk,
-            cookies,
-            imei=imei,
-            log_func=task_log,
-            zpw_ver=zpw_ver,
-        )
         auto_joined = bool(member_payload.get("autoJoined"))
         auto_left = False
         leave_result = None
 
-        task.set_progress(70)
-        result = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
-
-        # Nếu tự join ngầm thì rời sau khi đã có UID + mini profile + bảng kết quả.
-        if auto_joined and uid_list:
-            leave_result = _leave_group([group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver)
-            auto_left = bool(isinstance(leave_result, dict) and leave_result.get("ok"))
+        try:
+            profiles = fetch_profiles_with_single_fallback(
+                uid_list,
+                zpw_enk,
+                cookies,
+                imei=imei,
+                log_func=task_log,
+                zpw_ver=zpw_ver,
+            )
+            task.set_progress(70)
+            result = build_member_rows_from_uids(uid_list, profiles, member_map=member_map, group_info=group_info)
+        finally:
+            # Nếu tự join ngầm thì LUÔN rời nhóm sau khi đã có UID, kể cả khi
+            # lấy profile hoặc build bảng lỗi, để account không kẹt lại trong nhóm.
+            if auto_joined and uid_list:
+                try:
+                    leave_result = _leave_group([group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver)
+                    auto_left = bool(isinstance(leave_result, dict) and leave_result.get("ok"))
+                except Exception as leave_error:
+                    task.log(f"Không rời được nhóm đã tự tham gia: {leave_error}")
 
         task.set_progress(90)
         task.log(f"Hoàn thành! Tổng {len(result)} thành viên")
@@ -2618,7 +2842,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         log_func=lambda msg, typ="info": task.log(msg, typ),
         zpw_ver=zpw_ver,
     )
-    members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
+    members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map, group_info=member_payload.get("groupInfo") or {})
 
     task.set_progress(58)
     task.log("Đang xác định thành viên đã là bạn bè để ưu tiên thêm vào nhóm trước...")
@@ -2902,6 +3126,57 @@ def api_get_schedules():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/schedules/upload-photo", methods=["POST"])
+def api_schedules_upload_photo():
+    """API: Lưu ảnh đính kèm cho lịch gửi tin (chiến dịch).
+
+    Nhận multipart `photo`, lưu vào data/schedule_photos/, trả về photoPath
+    (tương đối với thư mục data) để gắn vào schedule; worker sẽ đọc file này
+    khi chạy lịch và gửi qua photo_original/upload + send.
+    """
+    photo_file = request.files.get("photo") or request.files.get("image") or request.files.get("file")
+    if not photo_file:
+        return jsonify({"success": False, "error": "Thiếu file ảnh."}), 400
+
+    image_bytes = photo_file.read()
+    if not image_bytes:
+        return jsonify({"success": False, "error": "File ảnh rỗng."}), 400
+    if len(image_bytes) > 20 * 1024 * 1024:
+        return jsonify({"success": False, "error": "Ảnh vượt quá 20MB."}), 400
+
+    try:
+        from features.messaging.send_photo import get_image_info
+        get_image_info(image_bytes)  # raise ValueError nếu không phải ảnh
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+    try:
+        import uuid as _uuid
+        from features.schedules.schedule_manager import DATA_DIR as _SCHED_DATA_DIR
+
+        original_name = photo_file.filename or "image.jpg"
+        ext = os.path.splitext(original_name)[1].lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"):
+            ext = ".jpg"
+        photos_dir = os.path.join(_SCHED_DATA_DIR, "schedule_photos")
+        os.makedirs(photos_dir, exist_ok=True)
+        file_id = _uuid.uuid4().hex[:12]
+        saved_name = f"{file_id}{ext}"
+        with open(os.path.join(photos_dir, saved_name), "wb") as f:
+            f.write(image_bytes)
+
+        return jsonify({
+            "success": True,
+            "photoPath": f"schedule_photos/{saved_name}",
+            "photoName": original_name,
+            "size": len(image_bytes),
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/schedules", methods=["POST"])
@@ -3747,7 +4022,7 @@ def api_get_group_members_for_manager():
             log_func=None,
             zpw_ver=zpw_ver,
         )
-        members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map)
+        members = build_member_rows_from_uids(uid_list, profiles, member_map=member_map, group_info=group_info)
 
         return jsonify({
             "success": True,

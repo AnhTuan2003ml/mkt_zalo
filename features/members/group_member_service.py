@@ -310,16 +310,26 @@ def fetch_group_members_by_input(raw: str, zpw_enk: str, cookies: str,
         auto_joined = True
         time.sleep(1.0)
 
+        fetch_failed = False
         try:
             members_group_info, uid_list = fetch_group_member_uids(
                 group_id, zpw_enk, cookies, callback=callback, zpw_ver=zpw_ver, imei=imei
             )
+        except Exception:
+            fetch_failed = True
+            raise
         finally:
-            if leave_after_auto_join and auto_joined:
-                leave_result = leave_group(
-                    [group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver
-                )
-                auto_left = bool(leave_result.get("ok"))
+            # Rời nhóm đã tự join ngầm khi: caller yêu cầu rời ngay, HOẶC lần lấy
+            # UID thứ hai lỗi — khi đó caller không nhận được payload nên không
+            # thể tự rời, account sẽ kẹt lại trong nhóm nếu không rời tại đây.
+            if auto_joined and (leave_after_auto_join or fetch_failed):
+                try:
+                    leave_result = leave_group(
+                        [group_id], imei=imei, zpw_enk=zpw_enk, cookies=cookies, zpw_ver=zpw_ver
+                    )
+                    auto_left = bool(leave_result.get("ok"))
+                except Exception as leave_exc:
+                    log_message(callback, f"Không rời được nhóm đã tự tham gia: {leave_exc}", "warn")
 
     group_info = merge_group_info(resolved_group_info, members_group_info)
     group_info.setdefault("groupId", group_id)
@@ -350,6 +360,9 @@ def format_group_info(group_info: Optional[dict], group_id: str = "", fallback_t
         or group_id
         or ""
     ).strip()
+    admin_ids = group_info.get("adminIds") or group_info.get("grid_adminIds") or []
+    if not isinstance(admin_ids, (list, tuple)):
+        admin_ids = [admin_ids]
     return {
         "groupId": gid,
         "name": group_info.get("name", group_info.get("grid_name", "")),
@@ -357,4 +370,6 @@ def format_group_info(group_info: Optional[dict], group_id: str = "", fallback_t
         "avt": group_info.get("avt", group_info.get("grid_avatar", "")),
         "fullAvt": group_info.get("fullAvt", group_info.get("grid_fullAvt", "")),
         "totalMember": group_info.get("totalMember", group_info.get("grid_totalMember", fallback_total)),
+        "creatorId": str(group_info.get("creatorId") or group_info.get("grid_creatorId") or ""),
+        "adminIds": [str(x) for x in admin_ids if str(x or "").strip()],
     }

@@ -15,6 +15,9 @@ profile/
 logs/
 *.log
 
+# Test / dữ liệu phân tích cục bộ
+test/
+
 # Zip / archives
 *.zip
 *.rar

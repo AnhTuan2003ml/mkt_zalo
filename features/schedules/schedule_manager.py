@@ -117,6 +117,9 @@ def normalize_schedule(schedule: dict) -> dict:
             "totalMember": 0
         },
         "message": (schedule.get("message") or "").strip(),
+        # Ảnh đính kèm (tùy chọn): đường dẫn file tương đối trong thư mục data.
+        "photoPath": str(schedule.get("photoPath") or "").strip(),
+        "photoName": str(schedule.get("photoName") or "").strip(),
         "runAt": schedule.get("runAt", ""),
         "status": schedule.get("status", "pending"),
         "rateLimit": {
@@ -141,8 +144,8 @@ def create_schedule(payload: dict) -> dict:
     # Validate
     if not schedule["accountId"]:
         raise ValueError("Chưa chọn tài khoản gửi")
-    if not schedule["message"]:
-        raise ValueError("Tin nhắn không được để trống")
+    if not schedule["message"] and not schedule["photoPath"]:
+        raise ValueError("Tin nhắn không được để trống (hoặc phải đính kèm ảnh)")
     if not schedule["recipients"]:
         raise ValueError("Chưa chọn người nhận")
     if not schedule["runAt"]:

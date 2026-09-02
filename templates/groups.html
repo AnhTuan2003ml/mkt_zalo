@@ -87,8 +87,16 @@
                             </div>
                         </div>
                     </div>
-                    <div class="group-detail-state">
-                        <span id="groupsAutoLoadState">Chọn nhóm để tự động tải thành viên</span>
+                    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+                        <button class="btn btn-primary btn-sm" id="groupsSendMsgBtn" type="button" onclick="groupsOpenGroupMessageModal()" style="display:inline-flex;align-items:center;gap:6px">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            Gửi tin nhắn
+                        </button>
+                        <div class="group-detail-state">
+                            <span id="groupsAutoLoadState">Chọn nhóm để tự động tải thành viên</span>
+                        </div>
                     </div>
                 </div>
 
@@ -192,7 +200,55 @@
         </div>
         <div class="overlay-footer">
             <div class="overlay-status" id="groupsPfStatus"></div>
+            <button class="btn btn-primary" id="groupsPfMsgBtn" type="button" onclick="groupsSendMsgFromProfile()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Nhắn tin
+            </button>
             <button class="btn btn-secondary" type="button" onclick="groupsCloseMemberProfile()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal gửi tin nhắn (vào nhóm hoặc tới thành viên) - có thể kèm ảnh -->
+<div id="groupsMsgBackdrop" class="groups-modal-backdrop" style="display:none" onclick="if(event.target===this) groupsCloseMessageModal()">
+    <div class="groups-modal" onclick="event.stopPropagation()">
+        <div class="groups-modal-header">
+            <div>
+                <h3 id="groupsMsgTitle">Gửi tin nhắn</h3>
+                <p id="groupsMsgTargetName">-</p>
+            </div>
+            <button class="groups-modal-close" type="button" onclick="groupsCloseMessageModal()">×</button>
+        </div>
+        <div style="padding:0 4px">
+            <div class="form-group">
+                <label>Nội dung tin nhắn</label>
+                <textarea id="groupsMsgText" placeholder="Nhập nội dung tin nhắn..." style="width:100%;min-height:90px;resize:vertical"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Ảnh đính kèm (tùy chọn)</label>
+                <input type="file" id="groupsMsgPhotoInput" accept="image/*" style="display:none">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <button type="button" class="btn btn-secondary btn-sm" id="groupsMsgPhotoBtn">📷 Chọn ảnh</button>
+                    <div id="groupsMsgPhotoWrap" style="display:none;align-items:center;gap:8px">
+                        <img id="groupsMsgPhotoPreview" src="" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border,#ddd)">
+                        <span id="groupsMsgPhotoName" style="font-size:12px;color:var(--text-secondary);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                        <button type="button" id="groupsMsgPhotoRemove" title="Bỏ ảnh" style="border:none;background:rgba(239,68,68,0.12);color:#ef4444;border-radius:6px;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1">&times;</button>
+                    </div>
+                </div>
+                <small style="color:var(--text-secondary)">Có ảnh: nội dung trở thành chú thích ảnh, có thể bỏ trống nội dung.</small>
+            </div>
+        </div>
+        <div class="groups-modal-footer">
+            <div id="groupsMsgStatus" class="groups-modal-status"></div>
+            <button class="btn btn-ghost" type="button" onclick="groupsCloseMessageModal()">Đóng</button>
+            <button id="groupsMsgSubmit" class="btn btn-primary" type="button" onclick="groupsSubmitMessage()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+                Gửi tin nhắn
+            </button>
         </div>
     </div>
 </div>
@@ -200,6 +256,6 @@
 <div id="groupsToast" class="groups-toast" style="display:none"></div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
-<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-selected-link-v2-20260731-1808"></script>
+<script src="{{ url_for('static', filename='js/groups.js') }}?v=groups-sendmsg-photo-v1"></script>
 </body>
 </html>

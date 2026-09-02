@@ -807,6 +807,35 @@ function bindMemberRowClick() {
 }
 
 
+// Xác định vai trò trong nhóm: 'owner' (trưởng nhóm) / 'admin' (phó nhóm) / 'member'.
+// Ưu tiên groupRole backend đã gắn sẵn; fallback tính từ creatorId/adminIds trong groupInfo
+// để dữ liệu cũ lưu trong localStorage vẫn hiển thị đúng.
+function getMemberGroupRole(member) {
+    if (!member) return 'member';
+    if (member.groupRole === 'owner' || member.groupRole === 'admin') return member.groupRole;
+    if (member.groupRole === 'member') return 'member';
+    var info = _savedGroupInfo || {};
+    var uid = String(member.userId || member.id || '');
+    if (!uid) return 'member';
+    if (info.creatorId && String(info.creatorId) === uid) return 'owner';
+    var admins = info.adminIds || [];
+    for (var i = 0; i < admins.length; i++) {
+        if (String(admins[i]) === uid) return 'admin';
+    }
+    return 'member';
+}
+
+function buildMemberRoleBadge(member) {
+    var role = getMemberGroupRole(member);
+    if (role === 'owner') {
+        return '<span class="member-role-badge" title="Trưởng nhóm (người tạo nhóm)" style="padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;color:#b45309;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35)">Trưởng nhóm</span>';
+    }
+    if (role === 'admin') {
+        return '<span class="member-role-badge" title="Phó nhóm (quản trị viên)" style="padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;color:#2563eb;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3)">Phó nhóm</span>';
+    }
+    return '';
+}
+
 function renderResults(members) {
     var tbody = document.getElementById('resultsBody');
     var totalCount = document.getElementById('totalCount');
@@ -855,8 +884,9 @@ function renderResults(members) {
         }
         html += '</td>';
 
-        // 3. tên - ẩn ID kỹ thuật khỏi bảng chính, vẫn giữ trong popup chi tiết
-        html += '<td class="member-name-col"><div class="member-name-cell" title="Bấm Xem để mở chi tiết">' + escapeHtmlMembers(name) + '</div></td>';
+        // 3. tên - ẩn ID kỹ thuật khỏi bảng chính, vẫn giữ trong popup chi tiết.
+        // Kèm badge vai trò: Trưởng nhóm (creatorId) / Phó nhóm (adminIds).
+        html += '<td class="member-name-col"><div class="member-name-cell" title="Bấm Xem để mở chi tiết"><span class="member-name-text">' + escapeHtmlMembers(name) + '</span>' + buildMemberRoleBadge(member) + '</div></td>';
 
         // 4. giới tính
         html += '<td class="member-gender-col">' + escapeHtmlMembers(genderDisplay) + '</td>';

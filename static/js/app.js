@@ -228,6 +228,7 @@ function openOverlay(uid, name, avatar) {
     document.getElementById('overlayName').textContent = name || '-';
     document.getElementById('overlayUid').textContent  = uid  || '-';
     document.getElementById('overlayMsg').value  = '';
+    clearOverlayPhoto();
     document.getElementById('overlayStatus').textContent = '';
     document.getElementById('overlaySendBtn').disabled = false;
     document.getElementById('overlaySendBtn').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Gửi tin nhắn';
@@ -512,7 +513,56 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-// ─── Send SMS ───────────────────────────────────────────────────────────────
+// ─── Send SMS / Photo ───────────────────────────────────────────────────────
+
+var _overlayPhotoFile = null;
+
+function clearOverlayPhoto() {
+    _overlayPhotoFile = null;
+    var input = document.getElementById('overlayPhotoInput');
+    if (input) input.value = '';
+    var wrap = document.getElementById('overlayPhotoPreviewWrap');
+    if (wrap) wrap.style.display = 'none';
+    var preview = document.getElementById('overlayPhotoPreview');
+    if (preview) preview.src = '';
+    var nameEl = document.getElementById('overlayPhotoName');
+    if (nameEl) nameEl.textContent = '';
+}
+
+(function initOverlayPhotoAttach() {
+    var attachBtn = document.getElementById('overlayAttachBtn');
+    var input = document.getElementById('overlayPhotoInput');
+    var removeBtn = document.getElementById('overlayPhotoRemoveBtn');
+    if (!attachBtn || !input) return;
+
+    attachBtn.addEventListener('click', function() { input.click(); });
+
+    input.addEventListener('change', function() {
+        var file = input.files && input.files[0];
+        var status = document.getElementById('overlayStatus');
+        if (!file) { clearOverlayPhoto(); return; }
+        if (!/^image\//.test(file.type)) {
+            if (status) { status.textContent = 'File chọn không phải ảnh.'; status.className = 'overlay-status error'; }
+            clearOverlayPhoto();
+            return;
+        }
+        if (file.size > 20 * 1024 * 1024) {
+            if (status) { status.textContent = 'Ảnh vượt quá 20MB.'; status.className = 'overlay-status error'; }
+            clearOverlayPhoto();
+            return;
+        }
+        _overlayPhotoFile = file;
+        var wrap = document.getElementById('overlayPhotoPreviewWrap');
+        var preview = document.getElementById('overlayPhotoPreview');
+        var nameEl = document.getElementById('overlayPhotoName');
+        if (preview) preview.src = URL.createObjectURL(file);
+        if (nameEl) nameEl.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+        if (wrap) wrap.style.display = 'inline-flex';
+        if (status) { status.textContent = ''; status.className = 'overlay-status'; }
+    });
+
+    if (removeBtn) removeBtn.addEventListener('click', clearOverlayPhoto);
+})();
 
 if (document.getElementById('overlaySendBtn')) {
 document.getElementById('overlaySendBtn').addEventListener('click', function() {
@@ -521,20 +571,22 @@ document.getElementById('overlaySendBtn').addEventListener('click', function() {
     var msg    = document.getElementById('overlayMsg').value.trim();
     var status = document.getElementById('overlayStatus');
     var btn    = document.getElementById('overlaySendBtn');
+    var hasPhoto = !!_overlayPhotoFile;
 
     if (!uid || uid === '-') {
         status.textContent = 'Không xác định được người nhận.';
         status.className = 'overlay-status error';
         return;
     }
-    if (!msg) {
-        status.textContent = 'Vui lòng nhập nội dung tin nhắn.';
+    // Có ảnh thì cho phép bỏ trống nội dung (nội dung trở thành chú thích ảnh).
+    if (!msg && !hasPhoto) {
+        status.textContent = 'Vui lòng nhập nội dung tin nhắn hoặc chọn ảnh.';
         status.className = 'overlay-status error';
         return;
     }
 
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Đang gửi...';
+    btn.innerHTML = '<span class="spinner"></span> ' + (hasPhoto ? 'Đang gửi ảnh...' : 'Đang gửi...');
     status.textContent = '';
     status.className = 'overlay-status';
 
@@ -547,15 +599,29 @@ document.getElementById('overlaySendBtn').addEventListener('click', function() {
         return;
     }
 
-    fetch('/api/send-sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            accountId: accountId,
-            to_uid:    uid,
-            message:   msg,
-        })
-    })
+    var request;
+    if (hasPhoto) {
+        // Gửi ảnh: upload multipart tới /api/send-photo, backend tự chạy
+        // 2 bước photo_original/upload -> photo_original/send.
+        var formData = new FormData();
+        formData.append('accountId', accountId);
+        formData.append('to_uid', uid);
+        formData.append('message', msg);
+        formData.append('photo', _overlayPhotoFile, _overlayPhotoFile.name);
+        request = fetch('/api/send-photo', { method: 'POST', body: formData });
+    } else {
+        request = fetch('/api/send-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                accountId: accountId,
+                to_uid:    uid,
+                message:   msg,
+            })
+        });
+    }
+
+    request
         .then(function(r) { return r && r.json(); })
         .then(function(result) {
             if (!result) return;
@@ -563,9 +629,10 @@ document.getElementById('overlaySendBtn').addEventListener('click', function() {
                 status.textContent = result.error;
                 status.className = 'overlay-status error';
             } else {
-                status.textContent = 'Đã gửi tin nhắn đến ' + name + '!';
+                status.textContent = (hasPhoto ? 'Đã gửi ảnh đến ' : 'Đã gửi tin nhắn đến ') + name + '!';
                 status.className = 'overlay-status success';
                 document.getElementById('overlayMsg').value = '';
+                clearOverlayPhoto();
                 setTimeout(closeOverlay, 1500);
             }
         })

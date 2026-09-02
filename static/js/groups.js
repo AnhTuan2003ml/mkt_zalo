@@ -1139,6 +1139,161 @@
         groupsReloadAccounts();
     });
 
+    // ─── Gửi tin nhắn (vào nhóm hoặc tới thành viên), có thể kèm ảnh ─────────
+
+    var msgTarget = null;        // {type:'group'|'user', id, name}
+    var msgPhotoFile = null;
+    var msgPhotoBound = false;
+
+    function groupsMsgClearPhoto() {
+        msgPhotoFile = null;
+        var input = $('groupsMsgPhotoInput');
+        if (input) input.value = '';
+        var wrap = $('groupsMsgPhotoWrap');
+        if (wrap) wrap.style.display = 'none';
+        var preview = $('groupsMsgPhotoPreview');
+        if (preview) preview.src = '';
+        var nameEl = $('groupsMsgPhotoName');
+        if (nameEl) nameEl.textContent = '';
+    }
+
+    function groupsMsgBindPhotoOnce() {
+        if (msgPhotoBound) return;
+        msgPhotoBound = true;
+        var btn = $('groupsMsgPhotoBtn');
+        var input = $('groupsMsgPhotoInput');
+        var removeBtn = $('groupsMsgPhotoRemove');
+        if (btn && input) btn.addEventListener('click', function () { input.click(); });
+        if (input) input.addEventListener('change', function () {
+            var file = input.files && input.files[0];
+            var status = $('groupsMsgStatus');
+            if (!file) { groupsMsgClearPhoto(); return; }
+            if (!/^image\//.test(file.type)) {
+                if (status) status.textContent = 'File chọn không phải ảnh.';
+                groupsMsgClearPhoto();
+                return;
+            }
+            if (file.size > 20 * 1024 * 1024) {
+                if (status) status.textContent = 'Ảnh vượt quá 20MB.';
+                groupsMsgClearPhoto();
+                return;
+            }
+            msgPhotoFile = file;
+            var preview = $('groupsMsgPhotoPreview');
+            var nameEl = $('groupsMsgPhotoName');
+            var wrap = $('groupsMsgPhotoWrap');
+            if (preview) preview.src = URL.createObjectURL(file);
+            if (nameEl) nameEl.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+            if (wrap) wrap.style.display = 'inline-flex';
+            if (status) status.textContent = '';
+        });
+        if (removeBtn) removeBtn.addEventListener('click', groupsMsgClearPhoto);
+    }
+
+    function groupsOpenMessageModal(target) {
+        msgTarget = target;
+        groupsMsgBindPhotoOnce();
+        groupsMsgClearPhoto();
+        if ($('groupsMsgText')) $('groupsMsgText').value = '';
+        if ($('groupsMsgStatus')) { $('groupsMsgStatus').textContent = ''; $('groupsMsgStatus').className = 'groups-modal-status'; }
+        if ($('groupsMsgTitle')) $('groupsMsgTitle').textContent = target.type === 'group' ? 'Gửi tin nhắn vào nhóm' : 'Gửi tin nhắn';
+        if ($('groupsMsgTargetName')) $('groupsMsgTargetName').textContent = (target.type === 'group' ? 'Nhóm: ' : 'Người nhận: ') + (target.name || target.id);
+        var backdrop = $('groupsMsgBackdrop');
+        if (backdrop) backdrop.style.display = 'flex';
+    }
+
+    function groupsOpenGroupMessageModal() {
+        if (!state.accountId) { showToast('Vui lòng chọn tài khoản trước.'); return; }
+        var g = state.selectedGroup;
+        if (!g || !state.selectedGroupId) { showToast('Vui lòng chọn nhóm trước.'); return; }
+        groupsOpenMessageModal({ type: 'group', id: state.selectedGroupId, name: getGroupName(g) });
+    }
+
+    function groupsSendMsgFromProfile() {
+        var uidText = ($('groupsPfUid') || {}).textContent || '';
+        var uid = uidText.replace(/^ID:\s*/i, '').trim();
+        var name = (($('groupsPfName') || {}).textContent || '').trim();
+        if (!uid || uid === '-') { showToast('Không xác định được người nhận.'); return; }
+        if (!state.accountId) { showToast('Vui lòng chọn tài khoản trước.'); return; }
+        groupsCloseMemberProfile();
+        groupsOpenMessageModal({ type: 'user', id: uid, name: name });
+    }
+
+    function groupsCloseMessageModal() {
+        var backdrop = $('groupsMsgBackdrop');
+        if (backdrop) backdrop.style.display = 'none';
+        msgTarget = null;
+        groupsMsgClearPhoto();
+    }
+
+    function groupsSubmitMessage() {
+        if (!msgTarget) return;
+        var status = $('groupsMsgStatus');
+        var btn = $('groupsMsgSubmit');
+        var msg = (($('groupsMsgText') || {}).value || '').trim();
+
+        if (!state.accountId) {
+            if (status) status.textContent = 'Vui lòng chọn tài khoản trước.';
+            return;
+        }
+        if (!msg && !msgPhotoFile) {
+            if (status) status.textContent = 'Vui lòng nhập nội dung hoặc chọn ảnh.';
+            return;
+        }
+
+        var orig = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> ' + (msgPhotoFile ? 'Đang gửi ảnh...' : 'Đang gửi...'); }
+        if (status) status.textContent = '';
+
+        var request;
+        if (msgTarget.type === 'group') {
+            // Gửi vào nhóm: endpoint dùng multipart cho cả 2 trường hợp có/không ảnh.
+            var fd = new FormData();
+            fd.append('accountId', state.accountId);
+            fd.append('group_id', msgTarget.id);
+            fd.append('message', msg);
+            if (msgPhotoFile) fd.append('photo', msgPhotoFile, msgPhotoFile.name);
+            request = fetch('/api/send-group-message', { method: 'POST', body: fd });
+        } else if (msgPhotoFile) {
+            var fdU = new FormData();
+            fdU.append('accountId', state.accountId);
+            fdU.append('to_uid', msgTarget.id);
+            fdU.append('message', msg);
+            fdU.append('photo', msgPhotoFile, msgPhotoFile.name);
+            request = fetch('/api/send-photo', { method: 'POST', body: fdU });
+        } else {
+            request = fetch('/api/send-sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accountId: state.accountId, to_uid: msgTarget.id, message: msg })
+            });
+        }
+
+        request
+            .then(function (r) { return r && r.json(); })
+            .then(function (result) {
+                if (!result) return;
+                if (result.error) {
+                    if (status) status.textContent = result.error;
+                } else {
+                    if (status) status.textContent = (msgPhotoFile ? 'Đã gửi ảnh tới ' : 'Đã gửi tin nhắn tới ') + (msgTarget && msgTarget.name ? msgTarget.name : '') + '!';
+                    showToast('Đã gửi tin nhắn thành công.');
+                    setTimeout(groupsCloseMessageModal, 1200);
+                }
+            })
+            .catch(function (err) {
+                if (status) status.textContent = 'Lỗi: ' + err.message;
+            })
+            .finally(function () {
+                if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+            });
+    }
+
+    window.groupsOpenGroupMessageModal = groupsOpenGroupMessageModal;
+    window.groupsSendMsgFromProfile = groupsSendMsgFromProfile;
+    window.groupsCloseMessageModal = groupsCloseMessageModal;
+    window.groupsSubmitMessage = groupsSubmitMessage;
+
     window.groupsReloadAccounts = groupsReloadAccounts;
     window.groupsOnAccountChange = groupsOnAccountChange;
     window.groupsLoadGroups = groupsLoadGroups;
