@@ -265,7 +265,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -2319,46 +2319,29 @@ def api_send_sms():
         print("[api_send_sms] has_zpw_enk=", bool(zpw_enk))
         print("[api_send_sms] imei=", imei)
 
-        response_json, decoded_data = send_sms(cookies, zpw_enk, to_uid, imei, message, zpw_ver=get_zpw_ver())
+        # Nội dung chứa link nhóm Zalo -> tự lấy thông tin nhóm rồi gửi link card
+        # (message/link); không có link hoặc lỗi -> gửi SMS text như cũ.
+        from features.messaging.send_link import send_message_smart
+        result = send_message_smart(
+            to_uid, message, zpw_enk, cookies, imei,
+            is_group=False, zpw_ver=get_zpw_ver(),
+        )
 
-        print("[api_send_sms] response_json=", response_json)
-        print("[api_send_sms] decoded_data=", decoded_data)
+        print("[api_send_sms] result=", result)
 
-        error_code = None
-        error_message = ""
-
-        if isinstance(decoded_data, dict):
-            error_code = decoded_data.get("error_code", decoded_data.get("errorCode"))
-            error_message = str(
-                decoded_data.get(
-                    "error_message",
-                    decoded_data.get("errorMessage", decoded_data.get("message", ""))
-                ) or ""
-            )
-        elif isinstance(response_json, dict):
-            error_code = response_json.get("error_code", response_json.get("errorCode"))
-            error_message = str(
-                response_json.get(
-                    "error_message",
-                    response_json.get("errorMessage", response_json.get("message", ""))
-                ) or ""
-            )
-
-        if str(error_code) == "0":
+        if result.get("ok"):
             return jsonify({
                 "success": True,
-                "message": "Da gui tin nhan.",
-                "data": decoded_data,
-                "raw": response_json
+                "message": "Da gui tin nhan." + (" (link card)" if result.get("sentAsLink") else ""),
+                "sentAsLink": bool(result.get("sentAsLink")),
+                "data": result.get("decoded"),
             })
 
         return jsonify({
             "success": False,
             "error": "Loi gui SMS tu Zalo.",
-            "code": error_code,
-            "message": error_message,
-            "detail": decoded_data,
-            "raw": response_json
+            "message": result.get("error", ""),
+            "detail": result.get("decoded"),
         }), 400
 
     except ValueError as e:
@@ -2434,11 +2417,14 @@ def api_send_photo():
             text_error = ""
             if message:
                 try:
-                    _, text_decoded = send_sms(cookies, zpw_enk, to_uid, imei, message, zpw_ver=get_zpw_ver())
-                    text_code = text_decoded.get("error_code", -1) if isinstance(text_decoded, dict) else -1
-                    text_sent = text_code == 0
+                    from features.messaging.send_link import send_message_smart
+                    text_result = send_message_smart(
+                        to_uid, message, zpw_enk, cookies, imei,
+                        is_group=False, zpw_ver=get_zpw_ver(),
+                    )
+                    text_sent = bool(text_result.get("ok"))
                     if not text_sent:
-                        text_error = f"Gửi text sau ảnh lỗi error_code={text_code}"
+                        text_error = f"Gửi text sau ảnh lỗi: {text_result.get('error')}"
                 except Exception as text_exc:
                     text_error = f"Gửi text sau ảnh lỗi: {text_exc}"
             return jsonify({
@@ -2525,14 +2511,14 @@ def api_send_group_message():
                 text_error = ""
                 if message:
                     try:
-                        from features.groups.send_sms_group import send_group_msg as _send_group_msg_after
-                        _, text_decoded = _send_group_msg_after(
-                            cookies, zpw_enk, group_id, imei, message, zpw_ver=get_zpw_ver()
+                        from features.messaging.send_link import send_message_smart
+                        text_result = send_message_smart(
+                            group_id, message, zpw_enk, cookies, imei,
+                            is_group=True, zpw_ver=get_zpw_ver(),
                         )
-                        text_code = text_decoded.get("error_code", -1) if isinstance(text_decoded, dict) else -1
-                        text_sent = text_code == 0
+                        text_sent = bool(text_result.get("ok"))
                         if not text_sent:
-                            text_error = f"Gửi text sau ảnh lỗi error_code={text_code}"
+                            text_error = f"Gửi text sau ảnh lỗi: {text_result.get('error')}"
                     except Exception as text_exc:
                         text_error = f"Gửi text sau ảnh lỗi: {text_exc}"
                 return jsonify({
@@ -2551,28 +2537,26 @@ def api_send_group_message():
                 "detail": result.get("decoded"),
             }), 400
 
-        from features.groups.send_sms_group import send_group_msg as _send_group_msg
-        response_json, decoded_data = _send_group_msg(
-            cookies, zpw_enk, group_id, imei, message, zpw_ver=get_zpw_ver()
+        # Nội dung chứa link nhóm Zalo -> tự lấy thông tin nhóm rồi gửi link card
+        # (group/sendlink); không có link hoặc lỗi -> gửi text nhóm như cũ.
+        from features.messaging.send_link import send_message_smart
+        result = send_message_smart(
+            group_id, message, zpw_enk, cookies, imei,
+            is_group=True, zpw_ver=get_zpw_ver(),
         )
 
-        error_code = None
-        error_message = ""
-        if isinstance(decoded_data, dict):
-            error_code = decoded_data.get("error_code", decoded_data.get("errorCode"))
-            error_message = str(decoded_data.get("error_message", decoded_data.get("errorMessage", "")) or "")
-        if error_code is None and isinstance(response_json, dict):
-            error_code = response_json.get("error_code", response_json.get("errorCode"))
-            error_message = str(response_json.get("error_message", response_json.get("errorMessage", "")) or "")
-
-        if str(error_code) == "0":
-            return jsonify({"success": True, "message": "Đã gửi tin nhắn vào nhóm.", "data": decoded_data})
+        if result.get("ok"):
+            return jsonify({
+                "success": True,
+                "message": "Đã gửi tin nhắn vào nhóm." + (" (link card)" if result.get("sentAsLink") else ""),
+                "sentAsLink": bool(result.get("sentAsLink")),
+                "data": result.get("decoded"),
+            })
 
         return jsonify({
             "success": False,
-            "error": error_message or f"Gửi tin nhắn nhóm lỗi error_code={error_code}",
-            "code": error_code,
-            "detail": decoded_data,
+            "error": result.get("error") or "Gửi tin nhắn nhóm thất bại.",
+            "detail": result.get("decoded"),
         }), 400
 
     except ValueError as e:

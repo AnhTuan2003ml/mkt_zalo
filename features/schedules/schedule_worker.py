@@ -15,7 +15,25 @@ from features.accounts.account_manager import load_accounts
 from features.groups.send_sms_group import send_group_msg
 from features.messaging.send_sms import send_sms
 from features.messaging.send_photo import send_photo
+from features.messaging.send_link import extract_zalo_group_link, resolve_group_link_info, send_message_smart
 from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result
+
+
+def _prepare_link_info(message: str, zpw_enk: str, cookies: str, zpw_ver: str, imei: str = ""):
+    """Nếu nội dung chứa link nhóm Zalo: resolve thông tin nhóm MỘT lần cho cả
+    lịch để mọi người nhận dùng chung, tránh gọi parselink/ginfo lặp lại."""
+    link = extract_zalo_group_link(message)
+    if not link:
+        return None
+    try:
+        info = resolve_group_link_info(link, zpw_enk, cookies, zpw_ver=zpw_ver, imei=imei)
+        if info.get("ok"):
+            print(f"[schedule_worker] Nội dung chứa link nhóm '{info.get('title')}' -> gửi dạng link card", flush=True)
+            return info
+        print(f"[schedule_worker] Không lấy được info nhóm từ link: {info.get('message')}", flush=True)
+    except Exception as e:
+        print(f"[schedule_worker] Lỗi resolve link nhóm: {e}", flush=True)
+    return None
 
 
 def _load_schedule_photo(schedule: dict):
@@ -139,10 +157,13 @@ class ScheduleWorker:
         max_delay = rate_limit.get("maxDelaySec", 5)
         max_errors = rate_limit.get("maxConsecutiveErrors", 5)
 
+        # Nội dung chứa link nhóm Zalo -> resolve info nhóm 1 lần cho cả lịch.
+        link_info = _prepare_link_info(message, zpw_enk, cookies, zpw_ver, imei=imei)
+
         # Handle personal groups
         if schedule_source == "personal-groups":
             self._run_schedule_groups(sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result,
-                                      photo_bytes=photo_bytes, photo_name=photo_name)
+                                      photo_bytes=photo_bytes, photo_name=photo_name, link_info=link_info)
             return
 
         # Handle individual users (group or phone source)
@@ -193,17 +214,21 @@ class ScheduleWorker:
                         sent_ok = bool(photo_result.get("ok"))
                         send_error = photo_result.get("message", "Gửi ảnh thất bại")
                         if sent_ok and message:
-                            _, decoded = send_sms(cookies, zpw_enk, uid, imei, message, zpw_ver=zpw_ver)
-                            error_code = decoded.get("error_code", -1) if isinstance(decoded, dict) else -1
-                            if error_code != 0:
+                            text_result = send_message_smart(
+                                uid, message, zpw_enk, cookies, imei,
+                                is_group=False, zpw_ver=zpw_ver, link_info=link_info,
+                            )
+                            if not text_result.get("ok"):
                                 sent_ok = False
-                                send_error = f"Ảnh đã gửi nhưng text lỗi error_code={error_code}"
+                                send_error = f"Ảnh đã gửi nhưng text lỗi: {text_result.get('error')}"
                     else:
                         print(f"[schedule_worker] Sending to {uid} ({zalo_name})...")
-                        _, decoded = send_sms(cookies, zpw_enk, uid, imei, message, zpw_ver=zpw_ver)
-                        error_code = decoded.get("error_code", -1) if isinstance(decoded, dict) else -1
-                        sent_ok = error_code == 0
-                        send_error = f"Error code: {error_code}"
+                        text_result = send_message_smart(
+                            uid, message, zpw_enk, cookies, imei,
+                            is_group=False, zpw_ver=zpw_ver, link_info=link_info,
+                        )
+                        sent_ok = bool(text_result.get("ok"))
+                        send_error = text_result.get("error", "")
 
                     if sent_ok:
                         success_count += 1
@@ -265,7 +290,7 @@ class ScheduleWorker:
         update_schedule(sch_id, {"status": final_status})
     
     def _run_schedule_groups(self, sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result,
-                             photo_bytes=None, photo_name=""):
+                             photo_bytes=None, photo_name="", link_info=None):
         """Run schedule for personal groups - xử lý theo batch."""
         cookies = account.get("cookies", "")
         zpw_enk = account.get("zpwEnk", "")
@@ -324,20 +349,20 @@ class ScheduleWorker:
                         if error_code != 0:
                             print(f"[schedule_worker] Photo to group {group_id} failed: {photo_result.get('message')}")
                         elif message:
-                            response_json, decoded_data = send_group_msg(
-                                cookies, zpw_enk, group_id, imei, message,
-                                zpw_ver=zpw_ver
+                            text_result = send_message_smart(
+                                group_id, message, zpw_enk, cookies, imei,
+                                is_group=True, zpw_ver=zpw_ver, link_info=link_info,
                             )
-                            error_code = decoded_data.get("error_code", -1) if isinstance(decoded_data, dict) else -1
+                            error_code = 0 if text_result.get("ok") else -1
                             if error_code != 0:
-                                print(f"[schedule_worker] Text after photo to group {group_id} failed: error_code={error_code}")
+                                print(f"[schedule_worker] Text after photo to group {group_id} failed: {text_result.get('error')}")
                     else:
                         print(f"[schedule_worker] Sending to group {group_id}...")
-                        response_json, decoded_data = send_group_msg(
-                            cookies, zpw_enk, group_id, imei, message,
-                            zpw_ver=zpw_ver
+                        text_result = send_message_smart(
+                            group_id, message, zpw_enk, cookies, imei,
+                            is_group=True, zpw_ver=zpw_ver, link_info=link_info,
                         )
-                        error_code = decoded_data.get("error_code", -1) if isinstance(decoded_data, dict) else -1
+                        error_code = 0 if text_result.get("ok") else -1
 
                     if error_code == 0:
                         success_count += 1
