@@ -766,9 +766,49 @@
 .detail-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; color: var(--text); font-size: 18px; font-weight: 810; }
 .detail-modal-close { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid rgba(151,183,221,.13); border-radius: 10px; background: rgba(255,255,255,.03); color: #8fa6ba; font-size: 22px; cursor: pointer; }
 .detail-modal-close:hover { color: #fff; border-color: rgba(91,190,255,.26); }
-.detail-item { display: flex; gap: 12px; margin-bottom: 13px; }
-.detail-label { min-width: 124px; color: #7890a5; font-size: 10px; font-weight: 760; text-transform: uppercase; letter-spacing: .06em; }
-.detail-value { color: #e6f0f8; font-size: 12px; line-height: 1.55; word-break: break-word; }
+.detail-item { display: flex; gap: 12px; margin-bottom: 13px; align-items: baseline; }
+.detail-label { min-width: 124px; color: #5b6b81; font-size: 10px; font-weight: 760; text-transform: uppercase; letter-spacing: .06em; }
+/* Modal nền sáng: giá trị phải là chữ tối, màu #e6f0f8 cũ của theme tối bị tàng hình */
+.detail-value { color: #172033; font-size: 12.5px; line-height: 1.55; word-break: break-word; }
+
+/* Modal chi tiết: thông tin xếp lưới 2 cột cho gọn, không kéo dài trang */
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 20px;
+    margin-bottom: 14px;
+}
+.detail-cell .detail-label { min-width: 0; margin-bottom: 3px; }
+.detail-cell.full { grid-column: 1 / -1; }
+/* Số liệu: 4 ô stat số to, thay cho 4 dòng chữ dài */
+.detail-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 16px;
+}
+.detail-stat {
+    padding: 10px 12px;
+    border: 1px solid #e2e9f2;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.detail-stat small {
+    display: block;
+    margin-bottom: 3px;
+    color: #5b6b81;
+    font-size: 9.5px;
+    font-weight: 760;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.detail-stat strong { color: #172033 !important; font-size: 18px; font-weight: 800; }
+.detail-stat.ok strong { color: #16a34a !important; }
+.detail-stat.err strong { color: #dc2626 !important; }
+@media (max-width: 640px) {
+    .detail-grid { grid-template-columns: 1fr; }
+    .detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; margin-bottom: 5px; color: var(--text); font-size: 12px; font-weight: 700; }
 .notification-overlay { position: fixed; top: 22px; right: 22px; z-index: 9998; opacity: 0; pointer-events: none; transform: translateX(420px); transition: all .28s ease; }

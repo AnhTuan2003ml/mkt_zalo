@@ -740,29 +740,39 @@
             var fail = results.filter(function (r) { return r.status === 'failed'; }).length;
             var pending = Math.max(recipients.length - ok - fail, 0);
 
-            var html = '';
-            html += '<div class="detail-item"><div class="detail-label">Mã lịch:</div><div class="detail-value" style="font-family:monospace;word-break:break-all;">' + escHtml(sch.scheduleId || scheduleId) + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Tiêu đề:</div><div class="detail-value">' + escHtml(sch.title || '-') + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Loại chiến dịch:</div><div class="detail-value">' + escHtml(kind.label) + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Tài khoản gửi:</div><div class="detail-value">' + escHtml(accountName(sch)) + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Thời gian gửi:</div><div class="detail-value">' + escHtml(formatDateTime(sch.runAt)) + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Trạng thái:</div><div class="detail-value">' + escHtml(statusLabel(sch.status)) + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Tạo lúc:</div><div class="detail-value">' + escHtml(formatDateTime(sch.createdAt)) + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Nội dung:</div><div class="detail-value" style="white-space:pre-wrap;">' + escHtml(sch.message || '-') + '</div></div>';
-
-            if (sch.groupInfo && (sch.groupInfo.name || sch.groupInfo.groupId)) {
-                html += '<hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">';
-                html += '<div class="detail-item"><div class="detail-label">Nhóm nguồn:</div><div class="detail-value">' + escHtml(sch.groupInfo.name || sch.groupInfo.groupId || '-') + '</div></div>';
-                html += '<div class="detail-item"><div class="detail-label">Group ID:</div><div class="detail-value" style="font-family:monospace;word-break:break-all;">' + escHtml(sch.groupInfo.groupId || '-') + '</div></div>';
+            // Ô thông tin: label trên, giá trị dưới; xếp lưới 2 cột cho gọn.
+            function detailCell(label, value, opts) {
+                opts = opts || {};
+                var style = (opts.mono ? 'font-family:monospace;word-break:break-all;' : '') + (opts.pre ? 'white-space:pre-wrap;' : '');
+                return '<div class="detail-cell' + (opts.full ? ' full' : '') + '">'
+                    + '<div class="detail-label">' + label + '</div>'
+                    + '<div class="detail-value"' + (style ? ' style="' + style + '"' : '') + '>' + value + '</div>'
+                    + '</div>';
             }
 
-            html += '<hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">';
-            html += '<div class="detail-item"><div class="detail-label">Tổng người nhận:</div><div class="detail-value">' + recipients.length + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Thành công:</div><div class="detail-value" style="color:var(--green);">' + ok + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Chưa gửi:</div><div class="detail-value">' + pending + '</div></div>';
-            html += '<div class="detail-item"><div class="detail-label">Lỗi:</div><div class="detail-value" style="color:var(--red);">' + fail + '</div></div>';
+            var html = '';
+            html += '<div class="detail-grid">';
+            html += detailCell('Loại chiến dịch', escHtml(kind.label));
+            html += detailCell('Trạng thái', escHtml(statusLabel(sch.status)));
+            html += detailCell('Tài khoản gửi', escHtml(accountName(sch)));
+            html += detailCell('Mã lịch', escHtml(sch.scheduleId || scheduleId), { mono: true });
+            html += detailCell('Thời gian gửi', escHtml(formatDateTime(sch.runAt)));
+            html += detailCell('Tạo lúc', escHtml(formatDateTime(sch.createdAt)));
+            if (sch.groupInfo && (sch.groupInfo.name || sch.groupInfo.groupId)) {
+                html += detailCell('Nhóm nguồn', escHtml(sch.groupInfo.name || sch.groupInfo.groupId || '-'));
+                html += detailCell('Group ID', escHtml(sch.groupInfo.groupId || '-'), { mono: true });
+            }
+            html += detailCell('Nội dung', escHtml(sch.message || '-'), { full: true, pre: true });
+            html += '</div>';
 
-            html += '<hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">';
+            // Số liệu: hàng 4 ô stat, số to dễ quét thay cho 4 dòng chữ.
+            html += '<div class="detail-stats">';
+            html += '<div class="detail-stat"><small>Người nhận</small><strong>' + recipients.length + '</strong></div>';
+            html += '<div class="detail-stat ok"><small>Thành công</small><strong>' + ok + '</strong></div>';
+            html += '<div class="detail-stat"><small>Chưa gửi</small><strong>' + pending + '</strong></div>';
+            html += '<div class="detail-stat err"><small>Lỗi</small><strong>' + fail + '</strong></div>';
+            html += '</div>';
+
             html += '<div style="font-weight:700;margin-bottom:8px;">Danh sách người nhận</div>';
             if (!recipients.length) {
                 html += '<div style="color:var(--text-muted);font-size:13px;">Không có người nhận.</div>';

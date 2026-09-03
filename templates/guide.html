@@ -21,15 +21,26 @@
         .guide-api-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
         .guide-api-note { font-size: 13px; color: #44546b; line-height: 1.6; margin: 10px 0 0; }
 
-        /* Thanh mục lục: nhãn + các mục đánh số, dính khi cuộn, mục đang xem nổi bật */
-        .guide-anchor-nav-v2 {
+        /* Bố cục nội dung: mục lục là CỘT DỌC dính bên trái, không che nội dung;
+           các section chiếm phần còn lại bên phải. */
+        .guide-body-layout {
+            display: grid;
+            grid-template-columns: 210px minmax(0, 1fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .guide-sections { min-width: 0; }
+        body.guide-page .guide-anchor-nav.guide-anchor-nav-v2 {
+            position: sticky !important;
+            top: 12px !important;
             display: flex !important;
-            align-items: center !important;
-            gap: 14px !important;
-            padding: 8px 10px 8px 18px !important;
-            border-radius: 999px !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 4px !important;
+            width: 100% !important;
+            padding: 14px 12px !important;
+            border-radius: 16px !important;
+            overflow: visible !important;
         }
         .guide-anchor-label {
             font-size: 11px;
@@ -37,28 +48,32 @@
             letter-spacing: .1em;
             text-transform: uppercase;
             color: #8194ab;
-            flex: 0 0 auto;
+            padding: 0 8px 8px;
         }
         .guide-anchor-items {
             display: flex;
-            align-items: center;
-            gap: 6px;
-            flex: 1 1 auto;
-            min-width: 0;
+            flex-direction: column;
+            gap: 4px;
         }
         body.guide-page.guide-page-professional .guide-anchor-nav.guide-anchor-nav-v2 a[href] {
-            display: inline-flex !important;
+            display: flex !important;
             align-items: center !important;
-            gap: 8px !important;
-            height: 34px !important;
-            padding: 0 14px 0 6px !important;
-            border-radius: 999px !important;
+            /* Căn trái cố định để cột số 01-05 thẳng hàng tuyệt đối */
+            justify-content: flex-start !important;
+            text-align: left !important;
+            width: 100% !important;
+            gap: 9px !important;
+            min-height: 36px !important;
+            padding: 0 10px 0 6px !important;
+            border-radius: 10px !important;
             font-size: 12.5px !important;
             font-weight: 600 !important;
             color: #44546b !important;
             background: transparent !important;
             border: 1px solid transparent !important;
             white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
             transition: background .15s ease, color .15s ease, border-color .15s ease;
         }
         .guide-anchor-num {
@@ -72,6 +87,7 @@
             font-weight: 800;
             background: #eef3f9;
             color: #5b6b81;
+            flex: 0 0 auto;
             transition: background .15s ease, color .15s ease;
         }
         body.guide-page.guide-page-professional .guide-anchor-nav.guide-anchor-nav-v2 a[href]:hover {
@@ -88,8 +104,37 @@
             background: rgba(255,255,255,.18);
             color: #ffffff;
         }
-        @media (max-width: 760px) {
+        /* Màn hẹp: mục lục về đầu trang dạng hàng cuộn ngang, KHÔNG dính để
+           không che nội dung. */
+        @media (max-width: 1100px) {
+            .guide-body-layout { grid-template-columns: 1fr; }
+            body.guide-page .guide-anchor-nav.guide-anchor-nav-v2 {
+                position: static !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                border-radius: 999px !important;
+                padding: 8px 12px !important;
+                overflow-x: auto !important;
+            }
             .guide-anchor-label { display: none; }
+            .guide-anchor-items { flex-direction: row; gap: 6px; }
+        }
+
+        /* Section không bị thanh mục lục sticky che khi cuộn tới */
+        .guide-section-pro, .guide-principle-panel { scroll-margin-top: 66px; }
+
+        /* Hero gọn lại: tiêu đề vừa phải, bớt khoảng trống thừa để nội dung
+           chính (mục lục + các section) vào tầm nhìn sớm hơn */
+        body.guide-page .guide-hero-pro { padding: 22px 26px !important; }
+        body.guide-page .guide-display-title {
+            font-size: clamp(24px, 2.6vw, 34px) !important;
+            line-height: 1.22 !important;
+            margin: 8px 0 10px !important;
+        }
+        body.guide-page .guide-hero-lead {
+            font-size: 13.5px !important;
+            max-width: 640px;
+            margin-bottom: 14px !important;
         }
     </style>
 </head>
@@ -117,18 +162,20 @@
         </aside>
     </section>
 
+    <div class="guide-body-layout">
     <nav class="guide-anchor-nav guide-anchor-nav-v2" aria-label="Điều hướng giới thiệu">
         <span class="guide-anchor-label">Mục lục</span>
         <div class="guide-anchor-items">
-            <a href="#triết-lý"><span class="guide-anchor-num">01</span>Triết lý giao diện</a>
-            <a href="#chức-năng"><span class="guide-anchor-num">02</span>Khu vực chính</a>
-            <a href="#quy-trình"><span class="guide-anchor-num">03</span>Quy trình sử dụng</a>
-            <a href="#api-gửi-tin"><span class="guide-anchor-num">04</span>Tích hợp API</a>
-            <a href="#an-toàn"><span class="guide-anchor-num">05</span>Vận hành an toàn</a>
+            <a href="#sec-triet-ly"><span class="guide-anchor-num">01</span>Triết lý giao diện</a>
+            <a href="#sec-chuc-nang"><span class="guide-anchor-num">02</span>Khu vực chính</a>
+            <a href="#sec-quy-trinh"><span class="guide-anchor-num">03</span>Quy trình sử dụng</a>
+            <a href="#sec-api-gui-tin"><span class="guide-anchor-num">04</span>Tích hợp API</a>
+            <a href="#sec-an-toan"><span class="guide-anchor-num">05</span>Vận hành an toàn</a>
         </div>
     </nav>
 
-    <section class="guide-section-pro" id="triết-lý">
+    <div class="guide-sections">
+    <section class="guide-section-pro" id="sec-triet-ly">
         <header class="guide-section-heading">
             <span class="guide-section-number">01</span>
             <div><span class="guide-section-eyebrow">Thiết kế lấy dữ liệu làm trung tâm</span><h2>Nhìn thấy điều quan trọng trước tiên</h2><p>Không gian làm việc ưu tiên bảng, trạng thái và kết quả. Form cấu hình, thông tin phụ và lịch sử được mở trong overlay để không đẩy dữ liệu xuống dưới.</p></div>
@@ -140,7 +187,7 @@
         </div>
     </section>
 
-    <section class="guide-section-pro" id="chức-năng">
+    <section class="guide-section-pro" id="sec-chuc-nang">
         <header class="guide-section-heading">
             <span class="guide-section-number">02</span>
             <div><span class="guide-section-eyebrow">Một hệ thống, một luồng làm việc</span><h2>Các khu vực chính</h2><p>Mỗi menu phục vụ một mục tiêu rõ ràng và liên kết trực tiếp với dữ liệu liên quan.</p></div>
@@ -155,7 +202,7 @@
         </div>
     </section>
 
-    <section class="guide-section-pro" id="quy-trình">
+    <section class="guide-section-pro" id="sec-quy-trinh">
         <header class="guide-section-heading"><span class="guide-section-number">03</span><div><span class="guide-section-eyebrow">Hoàn thành trong ít bước</span><h2>Quy trình sử dụng đề xuất</h2></div></header>
         <div class="guide-process-grid">
             <article class="guide-process-card"><span class="guide-process-label">Bước 1</span><h3>Chọn tài khoản</h3><p>Kiểm tra tài khoản đã đăng nhập và ở trạng thái sẵn sàng.</p></article>
@@ -165,42 +212,13 @@
         </div>
     </section>
 
-    <section class="guide-section-pro" id="api-gửi-tin">
+    <section class="guide-section-pro" id="sec-api-gui-tin">
         <header class="guide-section-heading">
             <span class="guide-section-number">04</span>
             <div><span class="guide-section-eyebrow">Dành cho hệ thống bên ngoài</span><h2>Tích hợp API gửi tin nhắn</h2><p>Nexus mở API HTTP tại <code style="font-family:Consolas,monospace">http://127.0.0.1:5000</code> khi ứng dụng đang chạy. Lấy <code style="font-family:Consolas,monospace">accountId</code> của tài khoản trạng thái Sẵn sàng từ <code style="font-family:Consolas,monospace">GET /api/accounts</code> rồi gọi các endpoint dưới đây.</p></div>
         </header>
 
-        <p class="guide-api-note" style="margin-top:0">Cá nhân và nhóm xử lý <strong>giống hệt nhau</strong> — chỉ khác endpoint và tham số người nhận (<code>to_uid</code> cho cá nhân, <code>group_id</code> cho nhóm). Chọn endpoint theo tình huống:</p>
-
-        <div class="guide-api-table-wrap">
-            <table class="guide-api-table">
-                <thead>
-                    <tr>
-                        <th>Tình huống</th>
-                        <th>Gửi cho cá nhân</th>
-                        <th>Gửi vào nhóm</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Chỉ gửi tin nhắn</strong></td>
-                        <td><span class="guide-api-method">POST</span><code>/api/send-sms</code><br><small>JSON: <code>accountId</code>, <code>to_uid</code>, <code>message</code></small></td>
-                        <td rowspan="3" style="vertical-align:middle"><span class="guide-api-method">POST</span><code>/api/send-group-message</code><br><small>form-data: <code>accountId</code>, <code>group_id</code>, <code>message</code> và/hoặc <code>photo</code>.<br>Một endpoint cho cả 3 tình huống — bỏ trống trường không dùng.</small></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Chỉ gửi ảnh</strong></td>
-                        <td><span class="guide-api-method">POST</span><code>/api/send-photo</code><br><small>form-data: <code>accountId</code>, <code>to_uid</code>, <code>photo</code> — bỏ trống <code>message</code></small></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Gửi ảnh kèm tin nhắn</strong></td>
-                        <td><span class="guide-api-method">POST</span><code>/api/send-photo</code><br><small>form-data: <code>accountId</code>, <code>to_uid</code>, <code>photo</code>, <code>message</code></small></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <p class="guide-api-note"><strong>Hành vi chung cho cả cá nhân và nhóm:</strong> ảnh luôn gửi trước, nội dung <code>message</code> gửi thành tin nhắn riêng ngay sau ảnh (không làm chú thích). Nội dung chứa link nhóm dạng <code>https://zalo.me/g/...</code> tự động gửi thành thẻ link có tên và ảnh nhóm (response có <code>sentAsLink: true</code>; nếu lỗi vẫn gửi văn bản thường). Ảnh tối đa 20MB; phải có ít nhất <code>message</code> hoặc <code>photo</code>.</p>
+        <p class="guide-api-note" style="margin-top:0"><strong>Hành vi chung cho cả cá nhân và nhóm:</strong> ảnh luôn gửi trước, nội dung <code>message</code> gửi thành tin nhắn riêng ngay sau ảnh (không làm chú thích). Nội dung chứa link nhóm dạng <code>https://zalo.me/g/...</code> tự động gửi thành thẻ link có tên và ảnh nhóm (response có <code>sentAsLink: true</code>; nếu lỗi vẫn gửi văn bản thường). Ảnh tối đa 20MB; phải có ít nhất <code>message</code> hoặc <code>photo</code>.</p>
 
         <div class="guide-api-columns">
             <pre class="guide-api-code"><span class="cmt"># Chỉ gửi tin nhắn cho cá nhân (JSON)</span>
@@ -226,10 +244,12 @@ curl -X POST http://127.0.0.1:5000/api/send-group-message \
         <p class="guide-api-note">Response thành công: <code>{"success": true, "message": "..."}</code> — thất bại trả HTTP 400/500 với <code>{"success": false, "error": "lý do"}</code>. Điều kiện: tài khoản đã đăng nhập đủ phiên (cookie <code>zpw_sek</code>, khóa <code>zpwEnk</code>, <code>imei</code>) — mở tài khoản trong mục Tài khoản và chờ trạng thái Sẵn sàng trước khi gọi API.</p>
     </section>
 
-    <section class="guide-principle-panel" id="an-toàn">
+    <section class="guide-principle-panel" id="sec-an-toan">
         <div><span class="guide-section-eyebrow">Nguyên tắc vận hành an toàn</span><h2>Đúng quyền, đúng đối tượng, đúng tần suất.</h2><p>Chỉ thao tác với tài khoản và dữ liệu bạn có quyền quản lý. Kiểm tra danh sách người nhận trước khi chạy và luôn tôn trọng chính sách của nền tảng.</p></div>
         <a class="btn btn-secondary" href="{{ url_for('policy_page') }}">Xem lại chính sách</a>
     </section>
+    </div><!-- /.guide-sections -->
+    </div><!-- /.guide-body-layout -->
 </main>
 <script>
 // Scroll-spy: đánh dấu mục lục theo section đang xem.
@@ -251,6 +271,11 @@ curl -X POST http://127.0.0.1:5000/api/send-group-message \
     var scroller = document.querySelector('main.guide-shell') || window;
 
     function update() {
+        // Cuộn chạm đáy: section cuối ngắn không bao giờ vượt mốc, đánh dấu mục cuối luôn.
+        if (scroller !== window && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 8) {
+            setActive(pairs[pairs.length - 1].link);
+            return;
+        }
         // Mốc: 35% chiều cao khung nhìn — section nào có đỉnh vượt qua mốc gần nhất là mục đang xem.
         var mark = window.innerHeight * 0.35;
         var current = pairs[0];
@@ -269,8 +294,16 @@ curl -X POST http://127.0.0.1:5000/api/send-group-message \
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
-    links.forEach(function (a) {
-        a.addEventListener('click', function () { setTimeout(update, 350); });
+    // Tự xử lý cuộn khi bấm mục lục: trang cuộn trong main.guide-shell nên
+    // anchor mặc định của trình duyệt không đáng tin.
+    pairs.forEach(function (p) {
+        p.link.addEventListener('click', function (e) {
+            e.preventDefault();
+            p.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setActive(p.link);
+            if (history.replaceState) history.replaceState(null, '', p.link.getAttribute('href'));
+            setTimeout(update, 600);
+        });
     });
     // Lưới an toàn: poll nhẹ phòng môi trường không bắn scroll event lên container.
     setInterval(update, 500);
