@@ -1300,10 +1300,33 @@ td.personal-group-actions .action-btn {
     display: block !important;
 }
 .sched-groups-left .personal-groups-table .btn.btn-sm { padding: 5px 10px !important; min-width: 0 !important; }
-/* Toolbar bảng: pill "Chọn tất cả" và nút "Lưu lịch" phải CÙNG chiều cao 34px.
-   Pill cũ nền tối + chữ wrap 2 dòng làm nó cao 54px, khập khiễng với nút bên cạnh:
-   khóa height, cấm wrap và đưa pill về hệ màu sáng đồng bộ với button. */
-.sched-groups-left .sched-toolbar-actions .sched-check-pill {
+/* Cột trái tab "Gửi riêng cho thành viên": panel nguồn nhóm + bảng xếp dọc. */
+.sched-groups-left-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+.sched-groups-left-stack .sched-panel { margin-bottom: 0; }
+/* Panel nguồn nhóm: tài khoản + link đặt cạnh nhau cho gọn chiều dọc */
+.sched-source-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+}
+@media (max-width: 900px) {
+    .sched-source-grid { grid-template-columns: 1fr; }
+}
+/* Bảng thành viên nhiều cột: cuộn cả 2 chiều trong vùng riêng của cột trái */
+.sched-groups-left .sched-table-wrap {
+    overflow: auto !important;
+    max-height: min(56dvh, 640px);
+}
+
+/* Toolbar bảng (mọi tab chiến dịch): pill "Chọn tất cả" và nút "Lưu lịch"
+   phải CÙNG chiều cao 34px. Pill cũ nền tối + chữ wrap 2 dòng làm nó cao 54px,
+   khập khiễng với nút bên cạnh: khóa height, cấm wrap, đưa về hệ màu sáng. */
+.sched-toolbar-actions .sched-check-pill {
     height: 34px !important;
     min-height: 34px !important;
     padding: 0 12px !important;
@@ -1318,13 +1341,13 @@ td.personal-group-actions .action-btn {
     font-size: 12.5px !important;
     font-weight: 600;
 }
-.sched-groups-left .sched-toolbar-actions .sched-check-pill input[type="checkbox"] {
+.sched-toolbar-actions .sched-check-pill input[type="checkbox"] {
     width: 15px !important;
     height: 15px !important;
     margin: 0 !important;
     flex: 0 0 auto;
 }
-.sched-groups-left .sched-toolbar-actions .btn {
+.sched-toolbar-actions .btn {
     height: 34px !important;
     min-height: 34px !important;
     padding-top: 0 !important;
@@ -1332,6 +1355,24 @@ td.personal-group-actions .action-btn {
     display: inline-flex !important;
     align-items: center !important;
     white-space: nowrap !important;
+}
+
+/* Nút "Lưu lịch" (cả 3 tab chiến dịch): màu xanh lá đậm, chữ trắng — hành động
+   chính phải nổi bật; dùng ID để thắng các theme đè .btn-success thành nền nhạt. */
+#btnSaveScheduleGroup.btn,
+#btnSaveSchedulePhone.btn,
+#btnSaveSchedulePersonalGroup.btn {
+    background: #16a34a !important;
+    border: 1px solid #15803d !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}
+#btnSaveScheduleGroup.btn:hover,
+#btnSaveSchedulePhone.btn:hover,
+#btnSaveSchedulePersonalGroup.btn:hover {
+    background: #15803d !important;
+    border-color: #166534 !important;
+    color: #ffffff !important;
 }
 /* Cột phải: vùng soạn nội dung đủ cao, các khối cách đều */
 .sched-groups-right textarea { min-height: 110px; }
