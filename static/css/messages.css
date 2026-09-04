@@ -28,7 +28,7 @@
 .message-toolbar-card { padding: 14px 16px; }
 .message-toolbar {
     display: grid;
-    grid-template-columns: minmax(210px, 260px) minmax(150px, 180px) minmax(140px, 170px) auto 1fr;
+    grid-template-columns: minmax(200px, 250px) minmax(135px, 165px) minmax(130px, 160px) minmax(135px, 165px) auto 1fr;
     gap: 12px;
     align-items: end;
 }

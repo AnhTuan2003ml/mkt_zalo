@@ -246,7 +246,7 @@ curl -X POST http://127.0.0.1:5000/api/send-group-message \
 
         <h3 class="guide-api-subtitle">Kiểm tra tin nhắn mới nhất của một nhóm</h3>
         <div class="guide-api-columns">
-            <pre class="guide-api-code"><span class="cmt"># Lấy tin nhắn ghim mới nhất của nhóm truyền vào</span>
+            <pre class="guide-api-code"><span class="cmt"># Lấy tin nhắn mới nhất của nhóm truyền vào</span>
 <span class="cmt"># (bỏ account_id để dùng tài khoản sẵn sàng đầu tiên)</span>
 curl "http://127.0.0.1:5000/api/messages/group-latest?groupId=&lt;groupId&gt;&amp;account_id=&lt;accountId&gt;"</pre>
             <pre class="guide-api-code"><span class="cmt"># Response rút gọn</span>
@@ -263,7 +263,7 @@ curl "http://127.0.0.1:5000/api/messages/group-latest?groupId=&lt;groupId&gt;&am
   "items": [ ... ]               <span class="cmt"># toàn bộ tin, mới nhất trước</span>
 }</pre>
         </div>
-        <p class="guide-api-note">Gọi trực tiếp Zalo tại thời điểm request, không phụ thuộc dữ liệu đã lưu của trang Tin nhắn. <code>groupId</code> lấy từ mục Nhóm Zalo hoặc <code>GET /api/groups/personal?accountId=...</code>; nhóm không có tin ghim trả <code>count: 0</code> và <code>latest: null</code>. Cũng hỗ trợ <code>POST</code> với JSON <code>{"groupId": "...", "account_id": "..."}</code>.</p>
+        <p class="guide-api-note">Gọi trực tiếp Zalo tại thời điểm request, không phụ thuộc dữ liệu đã lưu của trang Tin nhắn. <code>groupId</code> lấy từ mục Nhóm Zalo hoặc <code>GET /api/groups/personal?accountId=...</code>; nhóm chưa có tin nhắn trả <code>count: 0</code> và <code>latest: null</code>. Cũng hỗ trợ <code>POST</code> với JSON <code>{"groupId": "...", "account_id": "..."}</code>.</p>
     </section>
 
     <section class="guide-principle-panel" id="sec-an-toan">

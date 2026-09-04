@@ -8,7 +8,11 @@ let messageState = {
     selectedAccount: '',
     selectedGroup: '', // '' = tất cả nhóm có tin
     selectedItemId: '',
+    dayFilter: '0', // '0' = hôm nay, '1' = hôm qua, '2' = 2 ngày trước... 'all' = tất cả
 };
+
+const DAY_FILTER_STORE_KEY = 'nexusMsgDayFilter';
+const DAY_FILTER_MAX_BACK = 6; // cho chọn tới 6 ngày trước (khớp mức lưu trữ 7 ngày)
 
 const UI_REFRESH_MS = 30000; // làm mới hiển thị từ db (worker server tự quét theo chu kỳ)
 
@@ -244,10 +248,47 @@ async function checkMessages() {
 
 // ─── Render 3 cột ────────────────────────────────────────────────────────────
 
+// ─── Bộ lọc ngày: chỉ hiển thị tin gửi trong NGÀY được chọn ─────────────────
+
+function dayFilterRange() {
+    const value = messageState.dayFilter;
+    if (value === 'all') return null;
+    const offset = Number(value) || 0;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - offset);
+    return { from: start.getTime(), to: start.getTime() + 86400000 };
+}
+
+function filteredItems() {
+    const range = dayFilterRange();
+    if (!range) return messageState.items;
+    return messageState.items.filter(item => {
+        const ts = Number(item.createTime || 0);
+        return ts >= range.from && ts < range.to;
+    });
+}
+
+function buildDayFilterOptions() {
+    const sel = qs('msgDayFilter');
+    if (!sel) return;
+    const pad = (n) => String(n).padStart(2, '0');
+    const options = [];
+    for (let i = 0; i <= DAY_FILTER_MAX_BACK; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dayLabel = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+        const name = i === 0 ? 'Hôm nay' : (i === 1 ? 'Hôm qua' : `${i} ngày trước`);
+        options.push(`<option value="${i}">${name} (${dayLabel})</option>`);
+    }
+    options.push('<option value="all">Tất cả</option>');
+    sel.innerHTML = options.join('');
+}
+
 function visibleGroups() {
     const counts = {};
     const latest = {};
-    messageState.items.forEach(item => {
+    filteredItems().forEach(item => {
         counts[item.groupId] = (counts[item.groupId] || 0) + 1;
         latest[item.groupId] = Math.max(latest[item.groupId] || 0, Number(item.createTime) || 0);
     });
@@ -270,7 +311,7 @@ function visibleGroups() {
 
 function currentItems() {
     const gid = messageState.selectedGroup;
-    return messageState.items.filter(item => !gid || item.groupId === gid);
+    return filteredItems().filter(item => !gid || item.groupId === gid);
 }
 
 function renderAll() {
@@ -301,7 +342,7 @@ function renderGroupList(groups) {
                 <span class="msg-group-name">Tất cả tin nhắn</span>
                 <span class="msg-group-sub">${groups.length} nhóm có tin mới</span>
             </span>
-            <span class="unread-badge">${messageState.items.length}</span>
+            <span class="unread-badge">${filteredItems().length}</span>
         </button>`;
     wrap.innerHTML = allRow + groups.map(g => `
         <button type="button" class="msg-group-item ${g.groupId === messageState.selectedGroup ? 'active' : ''}" data-gid="${escapeHtml(g.groupId)}" title="${escapeHtml(g.name)}">
@@ -390,7 +431,7 @@ function renderDetail() {
     body.innerHTML = `
         ${item.title ? `<div class="msg-detail-text">${linkifyText(item.title)}</div>` : ''}
         ${item.thumb ? `<a class="msg-item-photo-link" href="${escapeHtml(item.thumb)}" target="_blank" rel="noopener"><img class="msg-item-photo" src="${escapeHtml(item.thumb)}" alt="Ảnh đính kèm" loading="lazy" onerror="msgPhotoError(this)"></a>` : ''}
-        ${item.href ? `<a class="msg-item-link" href="${escapeHtml(item.href)}" target="_blank" rel="noopener">${escapeHtml(item.href)}</a>` : ''}
+        ${item.href && item.msgType !== 'chat.photo' ? `<a class="msg-item-link" href="${escapeHtml(item.href)}" target="_blank" rel="noopener">${escapeHtml(item.href)}</a>` : ''}
         ${!item.title && !item.thumb && !item.href ? '<div class="msg-detail-text muted">(Tin không có nội dung hiển thị — có thể là bình chọn hoặc tệp đính kèm)</div>' : ''}
     `;
     body.scrollTop = 0;
@@ -451,6 +492,24 @@ async function clearSelectedGroup() {
 // ─── Khởi động ───────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Bộ lọc theo ngày: mặc định "Hôm nay", nhớ lựa chọn lần trước.
+    buildDayFilterOptions();
+    try {
+        const saved = localStorage.getItem(DAY_FILTER_STORE_KEY);
+        if (saved !== null && saved !== '') messageState.dayFilter = saved;
+    } catch (e) { /* private mode */ }
+    const daySel = qs('msgDayFilter');
+    if (daySel) {
+        daySel.value = messageState.dayFilter;
+        if (daySel.value !== messageState.dayFilter) { daySel.value = '0'; messageState.dayFilter = '0'; }
+        daySel.addEventListener('change', () => {
+            messageState.dayFilter = daySel.value;
+            try { localStorage.setItem(DAY_FILTER_STORE_KEY, messageState.dayFilter); } catch (e) {}
+            messageState.selectedItemId = '';
+            renderAll();
+        });
+    }
+
     await loadAccounts();
     await loadSettings();
     await loadUnread();
