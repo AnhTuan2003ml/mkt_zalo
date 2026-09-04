@@ -279,20 +279,19 @@ body.members-page #emptyState {
 }
 .messages-page > .messages-hero,
 .messages-page > .status-bar,
-.messages-page > .message-kpi-grid,
 .messages-page > .message-toolbar-card {
     flex: 0 0 auto;
     margin: 0 !important;
 }
-.messages-page .message-workspace {
+.messages-page .msg-workspace {
     flex: 1 1 auto;
     min-height: 0 !important;
     align-items: stretch !important;
     overflow: hidden;
 }
-.messages-page .inbox-panel,
-.messages-page .thread-panel,
-.messages-page .message-side-panel {
+.messages-page .msg-groups-panel,
+.messages-page .msg-list-panel,
+.messages-page .msg-detail-panel {
     height: 100%;
     min-height: 0 !important;
     margin: 0 !important;
@@ -300,37 +299,12 @@ body.members-page #emptyState {
     flex-direction: column !important;
     overflow: hidden !important;
 }
-.messages-page .conversation-list {
+.messages-page .msg-group-list,
+.messages-page .msg-feed-list,
+.messages-page .msg-detail-body {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none !important;
-    overflow-y: auto !important;
-}
-.messages-page .thread-empty {
-    flex: 1 1 auto;
-    min-height: 0;
-    margin: 0 !important;
-    overflow: auto;
-}
-.messages-page .thread-detail {
-    min-height: 0;
-    height: 100%;
-}
-.messages-page .thread-detail:not([style*="display:none"]):not([style*="display: none"]) {
-    display: flex !important;
-    flex-direction: column !important;
-}
-.messages-page .thread-header,
-.messages-page .reply-box {
-    flex: 0 0 auto;
-}
-.messages-page .message-thread {
-    flex: 1 1 auto;
-    height: auto !important;
-    min-height: 0;
-    overflow-y: auto !important;
-}
-.messages-page .message-side-panel {
     overflow-y: auto !important;
 }
 
@@ -471,14 +445,16 @@ body.activation-page .page {
     }
     .dash-shell .dash-grid,
     .groups-page .groups-manager-layout,
-    .messages-page .message-workspace,
+    .messages-page .msg-workspace,
     .schedmon-shell .schedmon-dashboard-grid {
         overflow: visible;
     }
     .dash-shell .dash-side,
     .schedmon-shell .schedmon-main-column,
     .schedmon-shell .schedmon-side-column,
-    .messages-page .message-side-panel {
+    .messages-page .msg-groups-panel,
+    .messages-page .msg-list-panel,
+    .messages-page .msg-detail-panel {
         height: auto;
         overflow: visible !important;
     }
@@ -497,8 +473,9 @@ body.activation-page .page {
     body.members-page #resultsSection .table-scroll,
     .groups-page .groups-list,
     .groups-page .groups-members-table-wrap,
-    .messages-page .conversation-list,
-    .messages-page .message-thread,
+    .messages-page .msg-group-list,
+    .messages-page .msg-feed-list,
+    .messages-page .msg-detail-body,
     .schedmon-shell .schedmon-running-list,
     .schedmon-shell .schedmon-upcoming-list,
     .schedmon-shell .schedmon-table-shell,
@@ -511,7 +488,6 @@ body.activation-page .page {
 @media (max-width: 640px) {
     :root { --nexus-mobile-bar-height: 60px; }
     .page { padding: 12px !important; }
-    .messages-page .message-kpi-grid,
     .schedmon-shell .schedmon-topbar-stats,
     .gc-head-stats {
         overflow-x: auto;

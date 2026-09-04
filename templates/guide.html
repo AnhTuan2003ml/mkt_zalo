@@ -20,6 +20,7 @@
         .guide-api-code .cmt { color: #7fa3c0; }
         .guide-api-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
         .guide-api-note { font-size: 13px; color: #44546b; line-height: 1.6; margin: 10px 0 0; }
+        .guide-api-subtitle { margin: 22px 0 0; font-size: 14.5px; font-weight: 700; color: #172033; }
 
         /* Bố cục nội dung: mục lục là CỘT DỌC dính bên trái, không che nội dung;
            các section chiếm phần còn lại bên phải. */
@@ -242,6 +243,27 @@ curl -X POST http://127.0.0.1:5000/api/send-group-message \
         </div>
 
         <p class="guide-api-note">Response thành công: <code>{"success": true, "message": "..."}</code> — thất bại trả HTTP 400/500 với <code>{"success": false, "error": "lý do"}</code>. Điều kiện: tài khoản đã đăng nhập đủ phiên (cookie <code>zpw_sek</code>, khóa <code>zpwEnk</code>, <code>imei</code>) — mở tài khoản trong mục Tài khoản và chờ trạng thái Sẵn sàng trước khi gọi API.</p>
+
+        <h3 class="guide-api-subtitle">Kiểm tra tin nhắn mới nhất của một nhóm</h3>
+        <div class="guide-api-columns">
+            <pre class="guide-api-code"><span class="cmt"># Lấy tin nhắn ghim mới nhất của nhóm truyền vào</span>
+<span class="cmt"># (bỏ account_id để dùng tài khoản sẵn sàng đầu tiên)</span>
+curl "http://127.0.0.1:5000/api/messages/group-latest?groupId=&lt;groupId&gt;&amp;account_id=&lt;accountId&gt;"</pre>
+            <pre class="guide-api-code"><span class="cmt"># Response rút gọn</span>
+{
+  "success": true,
+  "groupId": "713239...",
+  "count": 2,
+  "latest": {
+    "title": "Nội dung tin mới nhất",
+    "senderName": "Người gửi",
+    "thumb": "https://...jpg",   <span class="cmt"># ảnh (nếu tin dạng ảnh/link)</span>
+    "createTime": 1779334013396
+  },
+  "items": [ ... ]               <span class="cmt"># toàn bộ tin, mới nhất trước</span>
+}</pre>
+        </div>
+        <p class="guide-api-note">Gọi trực tiếp Zalo tại thời điểm request, không phụ thuộc dữ liệu đã lưu của trang Tin nhắn. <code>groupId</code> lấy từ mục Nhóm Zalo hoặc <code>GET /api/groups/personal?accountId=...</code>; nhóm không có tin ghim trả <code>count: 0</code> và <code>latest: null</code>. Cũng hỗ trợ <code>POST</code> với JSON <code>{"groupId": "...", "account_id": "..."}</code>.</p>
     </section>
 
     <section class="guide-principle-panel" id="sec-an-toan">

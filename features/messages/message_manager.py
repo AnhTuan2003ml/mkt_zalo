@@ -274,8 +274,10 @@ def get_settings() -> Dict[str, Any]:
     settings = _read_json(_settings_path(), {})
     if not isinstance(settings, dict):
         settings = {}
-    settings.setdefault("auto_check_enabled", False)
-    settings.setdefault("check_interval_minutes", 5)
+    settings.setdefault("auto_check_enabled", True)
+    settings.setdefault("check_interval_minutes", 1)
+    # Số giờ lưu tin trong db trước khi tự xóa (0 = không tự xóa). Mặc định 1 ngày.
+    settings.setdefault("retention_hours", 24)
     settings.setdefault("auto_reply_enabled", False)
     settings.setdefault("default_reply", "")
     settings.setdefault("last_check_at", "")
@@ -285,7 +287,7 @@ def get_settings() -> Dict[str, Any]:
 
 def update_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
     settings = get_settings()
-    allowed = {"auto_check_enabled", "check_interval_minutes", "auto_reply_enabled", "default_reply"}
+    allowed = {"auto_check_enabled", "check_interval_minutes", "retention_hours", "auto_reply_enabled", "default_reply"}
     for key, value in (patch or {}).items():
         if key not in allowed:
             continue
@@ -295,7 +297,12 @@ def update_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
             try:
                 settings[key] = max(1, int(value))
             except Exception:
-                settings[key] = 5
+                settings[key] = 1
+        elif key == "retention_hours":
+            try:
+                settings[key] = max(0, int(value))
+            except Exception:
+                settings[key] = 24
         else:
             settings[key] = _normalize_text(value)
     _write_json(_settings_path(), settings)

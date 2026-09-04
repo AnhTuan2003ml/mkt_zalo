@@ -528,7 +528,7 @@ body.campaign-builder-page .page {
 
 .accounts-shell > .card,
 .groups-page .groups-manager-layout,
-.messages-page .message-workspace,
+.messages-page .msg-workspace,
 .group-copy-page .group-copy-jobs-card,
 .schedmon-shell .schedmon-all-card,
 body.members-page .members-data-layout,
@@ -549,9 +549,8 @@ body.campaign-builder-page .page > .card {
 .groups-page .groups-detail-card { min-height: 0 !important; }
 .groups-page .groups-members-table-wrap { flex: 1 1 auto !important; max-height: none !important; }
 
-/* Tin nhắn: dữ liệu hội thoại là vùng chính, KPI chỉ giữ một hàng gọn. */
-.messages-page .message-kpi-grid { grid-template-columns: repeat(4, minmax(130px, 1fr)) !important; }
-.messages-page .message-kpi-card { min-height: 72px !important; padding: 12px !important; }
+/* Tin nhắn: ba cột nhóm / danh sách tin / nội dung tin. */
+.messages-page .msg-workspace { grid-template-columns: minmax(220px, 280px) minmax(260px, 340px) minmax(0, 1fr) !important; }
 
 /* Lịch hoạt động: bảng là nội dung chính, các khối phụ mở bằng overlay từ toolbar. */
 body.schedmon-page .schedmon-shell { background: transparent !important; }

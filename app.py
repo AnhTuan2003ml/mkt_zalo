@@ -256,6 +256,14 @@ from features.messages.message_manager import (
     update_settings as update_message_settings,
     log_check_attempt as log_message_check_attempt,
 )
+from features.messages.unread_manager import (
+    list_unread_messages,
+    dismiss_unread_message,
+    dismiss_group_messages,
+    sync_unread_messages,
+    get_group_latest_messages,
+    start_unread_worker,
+)
 from core.zalo.zalo_config import get_zpw_ver
 
 
@@ -265,7 +273,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -304,9 +312,14 @@ def _github_headers():
     }
 
 
+# Gọi thẳng không qua system proxy: các tool bắt gói (đặt proxy 127.0.0.1:xxxx
+# toàn hệ thống) sẽ làm SSL verification thất bại khi kiểm tra cập nhật.
+_UPDATE_NO_PROXY = {"http": None, "https": None}
+
+
 def _fetch_latest_release():
     url = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
-    res = requests.get(url, headers=_github_headers(), timeout=20)
+    res = requests.get(url, headers=_github_headers(), timeout=20, proxies=_UPDATE_NO_PROXY)
     res.raise_for_status()
     release = res.json()
     tag_name = str(release.get("tag_name") or "").strip()
@@ -331,7 +344,7 @@ def _download_update_zip(download_url, target_zip):
     part_path = target_zip + ".part"
     if os.path.exists(part_path):
         os.remove(part_path)
-    with requests.get(download_url, headers=_github_headers(), timeout=60, stream=True) as res:
+    with requests.get(download_url, headers=_github_headers(), timeout=60, stream=True, proxies=_UPDATE_NO_PROXY) as res:
         res.raise_for_status()
         with open(part_path, "wb") as f:
             for chunk in res.iter_content(chunk_size=1024 * 256):
@@ -343,7 +356,7 @@ def _download_update_zip(download_url, target_zip):
 def _download_text(url):
     if not url:
         return ""
-    res = requests.get(url, headers=_github_headers(), timeout=20)
+    res = requests.get(url, headers=_github_headers(), timeout=20, proxies=_UPDATE_NO_PROXY)
     res.raise_for_status()
     return res.text
 
@@ -938,8 +951,9 @@ def ensure_schedule_worker_started():
             return False
         start_schedule_worker()
         start_group_copy_worker()
+        start_unread_worker()
         SCHEDULE_WORKER_STARTED = True
-        print("✅ Schedule worker và group-copy worker đã khởi động", flush=True)
+        print("✅ Schedule worker, group-copy worker và unread worker đã khởi động", flush=True)
         return True
 
 
@@ -1286,15 +1300,76 @@ def api_messages_settings():
 
 @app.route("/api/messages/check", methods=["POST"])
 def api_messages_check():
-    """API placeholder: ghi nhận yêu cầu check tin nhắn để sau này nối API Zalo."""
+    """API: quét tin ghim (board pin) của các nhóm để cập nhật tin chưa đọc."""
     try:
         data = request.get_json(silent=True) or request.form or {}
         account_id = (data.get("account_id") or "").strip()
-        message = "Đã ghi nhận yêu cầu kiểm tra tin nhắn. Bản vá này mới tạo khung UI/lưu trữ, chưa nối API đồng bộ tin nhắn Zalo thật."
-        settings = log_message_check_attempt(account_id=account_id, message=message)
-        return jsonify({"success": True, "synced_count": 0, "settings": settings, "message": message})
+        result = sync_unread_messages(account_id=account_id or None)
+        settings = log_message_check_attempt(account_id=account_id, message=result.get("message", ""))
+        return jsonify({
+            "success": True,
+            "synced_count": result.get("newCount", 0),
+            "result": result,
+            "settings": settings,
+            "message": result.get("message", ""),
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/messages/unread", methods=["GET"])
+def api_messages_unread_list():
+    """API: danh sách tin ghim chưa đọc đã lưu trong data/unread_messages.json."""
+    try:
+        account_id = (request.args.get("account_id") or "").strip() or None
+        payload = list_unread_messages(account_id=account_id)
+        return jsonify({"success": True, **payload})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/messages/unread/<path:item_id>", methods=["DELETE"])
+def api_messages_unread_delete(item_id):
+    """API: xóa một tin đã xem khỏi db; lần quét sau không thêm lại."""
+    try:
+        if not dismiss_unread_message(item_id):
+            return jsonify({"success": False, "error": "Không tìm thấy tin nhắn"}), 404
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/messages/unread/group/<group_id>", methods=["DELETE"])
+def api_messages_unread_delete_group(group_id):
+    """API: xóa toàn bộ tin của một nhóm khỏi db (đã xem hết)."""
+    try:
+        account_id = (request.args.get("account_id") or "").strip()
+        removed = dismiss_group_messages(account_id, group_id)
+        return jsonify({"success": True, "removed": removed})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/messages/group-latest", methods=["GET", "POST"])
+def api_messages_group_latest():
+    """API tích hợp: lấy tin nhắn ghim mới nhất của một nhóm truyền vào.
+
+    GET  /api/messages/group-latest?groupId=...&account_id=...
+    POST /api/messages/group-latest  {"groupId": "...", "account_id": "..."}
+    """
+    try:
+        if request.method == "POST":
+            data = request.get_json(silent=True) or request.form or {}
+        else:
+            data = request.args
+        group_id = (data.get("groupId") or data.get("group_id") or "").strip()
+        account_id = (data.get("account_id") or data.get("accountId") or "").strip()
+        payload = get_group_latest_messages(group_id, account_id or None)
+        return jsonify({"success": True, **payload})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 502
 
 
 @app.route("/api/accounts", methods=["GET"])
