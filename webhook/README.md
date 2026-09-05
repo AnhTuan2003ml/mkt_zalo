@@ -4,14 +4,18 @@ Extension chạy RIÊNG, không đụng vào code Nexus — dùng **Nexus.exe l�
 
 ## Cách hoạt động
 
+0. Cấu hình theo **luồng**: chọn **nhóm kết quả trước**, rồi tick các **nhóm
+   nguồn** cho luồng đó — mỗi nhóm kết quả nhận tin từ nhiều nhóm nguồn, và
+   tạo được nhiều luồng (một nhóm nguồn có thể thuộc nhiều luồng).
 1. Theo chu kỳ cấu hình, gọi `GET /api/messages/group-latest` của Nexus để kiểm
-   tra tin nhắn mới nhất của từng **nhóm nguồn** (chọn được nhiều nhóm).
+   tra tin nhắn mới nhất của từng nhóm nguồn (mỗi nhóm chỉ quét MỘT lần dù
+   thuộc nhiều luồng).
 2. Tin mới có link **Shopee/Lazada** thì chuyển thành link affiliate:
    - Shopee: dựng link `s.shopee.vn/an_redir` gắn affiliate id (mặc định `17340820046`).
    - Lazada: gọi `adsense.lazada.vn/newOffer/link-convert-v2.json` bằng **cookie
      dán trên dashboard** → nhận shortLink `https://s.lazada.vn/...`.
-3. Gửi **nguyên nội dung + ảnh gốc, chỉ thay link** vào **nhóm kết quả** qua
-   `POST /api/send-group-message` của Nexus.
+3. Gửi **nguyên nội dung + ảnh gốc, chỉ thay link** vào **nhóm kết quả của
+   từng luồng** chứa nhóm nguồn đó, qua `POST /api/send-group-message` của Nexus.
 4. Lần kiểm tra **đầu tiên** của mỗi nhóm chỉ ghi mốc tin mới nhất (baseline),
    KHÔNG chuyển tiếp tin cũ. Tin do chính tài khoản gửi bị bỏ qua (tránh vòng lặp).
 
@@ -33,7 +37,8 @@ thì mở bằng trình duyệt mặc định). Địa chỉ Nexus API fix cứn
 ## Dashboard
 
 - Công tắc bật/tắt theo dõi (mặc định tắt), nút "Chạy ngay".
-- Chọn tài khoản Zalo, chu kỳ kiểm tra, nhóm nguồn (nhiều) + nhóm kết quả (một).
+- Chọn tài khoản Zalo, chu kỳ kiểm tra; mục "Luồng chuyển tiếp": thêm/xóa
+  luồng, mỗi luồng chọn 1 nhóm kết quả + nhiều nhóm nguồn (có tìm kiếm).
 - Ô nhập Shopee affiliate id; ô dán cookie Lazada; nút "Thử" chuyển 1 link để
   kiểm tra aff id / cookie.
 - Thống kê (đã chuyển tiếp / lỗi / lần chạy cuối) + nhật ký chi tiết từng tin.

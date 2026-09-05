@@ -64,12 +64,32 @@ def _default_settings() -> dict:
     return {
         "enabled": False,
         "account_id": "",
-        "source_group_ids": [],
-        "dest_group_id": "",
+        # Mỗi luồng: 1 NHÓM KẾT QUẢ nhận tin từ NHIỀU nhóm nguồn.
+        # [{"id", "dest_group_id", "source_group_ids": [...]}]
+        "routes": [],
         "interval_minutes": 1,
         "shopee_aff_id": DEFAULT_SHOPEE_AFF_ID,
         "lazada_cookie": "",
     }
+
+
+def _sanitize_routes(raw) -> list:
+    """Chuẩn hóa danh sách luồng: bỏ nguồn trùng nhóm kết quả, khử trùng lặp."""
+    routes = []
+    for i, r in enumerate(raw if isinstance(raw, list) else []):
+        if not isinstance(r, dict):
+            continue
+        dest = str(r.get("dest_group_id") or "").strip()
+        sources = sorted({
+            str(x or "").strip() for x in (r.get("source_group_ids") or [])
+            if str(x or "").strip() and str(x or "").strip() != dest
+        })
+        routes.append({
+            "id": str(r.get("id") or f"r{i + 1}").strip(),
+            "dest_group_id": dest,
+            "source_group_ids": sources,
+        })
+    return routes
 
 
 def _now_str() -> str:
@@ -87,8 +107,16 @@ def _load_db() -> dict:
     if not isinstance(db, dict):
         db = {}
     settings = db.get("settings") if isinstance(db.get("settings"), dict) else {}
+    # Migration bản cũ (1 cặp nguồn/kết quả toàn cục) → 1 luồng.
+    if settings.get("dest_group_id") and not settings.get("routes"):
+        settings["routes"] = [{
+            "id": "r1",
+            "dest_group_id": settings.get("dest_group_id"),
+            "source_group_ids": settings.get("source_group_ids") or [],
+        }]
     merged = _default_settings()
     merged.update({k: v for k, v in settings.items() if k in merged})
+    merged["routes"] = _sanitize_routes(merged.get("routes"))
     db["settings"] = merged
     db.setdefault("state", {})
     db["state"].setdefault("lastMsgByGroup", {})
@@ -181,11 +209,11 @@ def _download_image(url: str, timeout: int = 30) -> bytes:
     return b""
 
 
-def _send_to_dest(settings: dict, text: str, thumb: str) -> dict:
+def _send_to_dest(settings: dict, dest_group_id: str, text: str, thumb: str) -> dict:
     """Gửi nội dung (kèm ảnh nếu tải được) vào nhóm kết quả qua API Nexus."""
     data = {
         "accountId": settings["account_id"],
-        "group_id": settings["dest_group_id"],
+        "group_id": dest_group_id,
         "message": text,
     }
     files = None
@@ -226,16 +254,20 @@ def run_forward_once(triggered_by: str = "worker") -> dict:
         result.update(extra)
         return result
 
-    source_ids = [g for g in settings["source_group_ids"] if g]
-    dest_id = settings["dest_group_id"]
     if not settings["account_id"]:
         return _finish(False, "Chưa chọn tài khoản Zalo trên dashboard.")
-    if not source_ids:
-        return _finish(False, "Chưa chọn nhóm nguồn nào để theo dõi.")
-    if not dest_id:
-        return _finish(False, "Chưa chọn nhóm kết quả để gửi link aff.")
-    if dest_id in source_ids:
-        return _finish(False, "Nhóm kết quả không được nằm trong nhóm nguồn (tránh vòng lặp).")
+    # Luồng đủ cấu hình = có nhóm kết quả + ít nhất 1 nhóm nguồn.
+    routes = [r for r in settings["routes"] if r["dest_group_id"] and r["source_group_ids"]]
+    if not routes:
+        return _finish(False, "Chưa có luồng nào đủ cấu hình — chọn nhóm kết quả trước, "
+                              "rồi tick các nhóm nguồn cho luồng đó.")
+
+    # Một nhóm nguồn có thể thuộc nhiều luồng: quét MỘT lần, gửi cho từng luồng.
+    routes_by_source: dict = {}
+    for route in routes:
+        for gid in route["source_group_ids"]:
+            routes_by_source.setdefault(gid, []).append(route)
+    source_ids = sorted(routes_by_source)
 
     checked = 0
     new_messages = 0
@@ -301,47 +333,58 @@ def run_forward_once(triggered_by: str = "worker") -> dict:
                     # Link nằm ở href (link card) — nối vào cuối nội dung.
                     new_text = (new_text + "\n" + conv["link"]).strip()
 
-        log_entry = {
-            "groupId": gid,
-            "groupName": gid,
-            "sender": str(latest.get("senderName") or latest.get("senderUid") or ""),
-            "textPreview": (new_text or raw_text)[:220],
-            "links": [
-                {"platform": c.get("platform"), "original": c.get("original"),
-                 "aff": c.get("link", ""), "ok": bool(c.get("ok")),
-                 "error": "" if c.get("ok") else str(c.get("message") or "")}
-                for c in conversions
-            ],
-            "msgId": msg_id,
-            "msgTs": msg_ts,
-        }
+        def _base_entry() -> dict:
+            return {
+                "groupId": gid,
+                "groupName": gid,
+                "sender": str(latest.get("senderName") or latest.get("senderUid") or ""),
+                "textPreview": (new_text or raw_text)[:220],
+                "links": [
+                    {"platform": c.get("platform"), "original": c.get("original"),
+                     "aff": c.get("link", ""), "ok": bool(c.get("ok")),
+                     "error": "" if c.get("ok") else str(c.get("message") or "")}
+                    for c in conversions
+                ],
+                "msgId": msg_id,
+                "msgTs": msg_ts,
+            }
 
+        entries = []
         if ok_count == 0:
             errors += 1
-            log_entry.update({"status": "error",
-                              "error": "Không chuyển được link nào: "
-                                       + "; ".join(str(c.get("message") or "") for c in conversions)})
+            entry = _base_entry()
+            entry.update({"status": "error",
+                          "error": "Không chuyển được link nào: "
+                                   + "; ".join(str(c.get("message") or "") for c in conversions)})
+            entries.append(entry)
         else:
-            sent = _send_to_dest(settings, new_text, str(latest.get("thumb") or ""))
-            if sent.get("ok"):
-                forwarded += 1
-                log_entry.update({
-                    "status": "sent" if ok_count == len(conversions) else "sent_partial",
-                    "withPhoto": bool(sent.get("withPhoto")),
-                    "error": "",
-                })
-            else:
-                errors += 1
-                log_entry.update({"status": "error", "withPhoto": False,
+            # Tin thuộc bao nhiêu luồng thì gửi vào bấy nhiêu nhóm kết quả.
+            for route in routes_by_source[gid]:
+                sent = _send_to_dest(settings, route["dest_group_id"], new_text,
+                                     str(latest.get("thumb") or ""))
+                entry = _base_entry()
+                entry["destGroupId"] = route["dest_group_id"]
+                if sent.get("ok"):
+                    forwarded += 1
+                    entry.update({
+                        "status": "sent" if ok_count == len(conversions) else "sent_partial",
+                        "withPhoto": bool(sent.get("withPhoto")),
+                        "error": "",
+                    })
+                else:
+                    errors += 1
+                    entry.update({"status": "error", "withPhoto": False,
                                   "error": str(sent.get("message") or "Gửi vào nhóm kết quả thất bại")})
+                entries.append(entry)
 
         with _lock:
             d = _load_db()
-            _append_log(d, log_entry)
-            if log_entry["status"].startswith("sent"):
-                d["stats"]["forwarded"] = int(d["stats"]["forwarded"]) + 1
-            else:
-                d["stats"]["errors"] = int(d["stats"]["errors"]) + 1
+            for entry in entries:
+                _append_log(d, entry)
+                if entry["status"].startswith("sent"):
+                    d["stats"]["forwarded"] = int(d["stats"]["forwarded"]) + 1
+                else:
+                    d["stats"]["errors"] = int(d["stats"]["errors"]) + 1
             _save_db(d)
 
         time.sleep(0.3)  # giãn nhẹ giữa các nhóm cho API Zalo
@@ -352,8 +395,8 @@ def run_forward_once(triggered_by: str = "worker") -> dict:
         _save_db(d)
 
     baseline_note = f", {baseline_count} nhóm ghi mốc lần đầu" if baseline_count else ""
-    message = (f"Đã kiểm tra {checked}/{len(source_ids)} nhóm nguồn: {new_messages} tin mới, "
-               f"chuyển tiếp {forwarded}, lỗi {errors}{baseline_note}.")
+    message = (f"Đã kiểm tra {checked}/{len(source_ids)} nhóm nguồn của {len(routes)} luồng: "
+               f"{new_messages} tin mới, chuyển tiếp {forwarded}, lỗi {errors}{baseline_note}.")
     return _finish(True, message, checkedGroups=checked, newMessages=new_messages,
                    forwarded=forwarded, errors=errors)
 
@@ -409,15 +452,8 @@ def api_config():
             settings["enabled"] = bool(patch["enabled"])
         if "account_id" in patch:
             settings["account_id"] = str(patch["account_id"] or "").strip()
-        if "source_group_ids" in patch:
-            raw = patch["source_group_ids"]
-            if isinstance(raw, str):
-                raw = raw.replace(",", "\n").splitlines()
-            settings["source_group_ids"] = sorted({
-                str(x or "").strip() for x in (raw or []) if str(x or "").strip()
-            })
-        if "dest_group_id" in patch:
-            settings["dest_group_id"] = str(patch["dest_group_id"] or "").strip()
+        if "routes" in patch:
+            settings["routes"] = _sanitize_routes(patch["routes"])
         if "interval_minutes" in patch:
             try:
                 settings["interval_minutes"] = max(1, int(patch["interval_minutes"]))
