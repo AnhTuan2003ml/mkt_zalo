@@ -6,7 +6,7 @@
     <title>Tin nhắn nhóm - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-9-dayfilter">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-10-tracking">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
 <body>
@@ -30,6 +30,14 @@
 
     <div class="card message-toolbar-card">
         <div class="message-toolbar">
+            <div class="form-group toolbar-field">
+                <label>Theo dõi tin nhắn</label>
+                <label class="tracking-switch" title="Bật để bắt đầu quét và lưu tin nhắn mới. Chỉ tin gửi sau thời điểm bật mới được ghi nhận. Tắt là ngừng cập nhật.">
+                    <input type="checkbox" id="trackingToggle">
+                    <span class="switch-track" aria-hidden="true"></span>
+                    <span class="switch-text" id="trackingToggleText">Đang tắt</span>
+                </label>
+            </div>
             <div class="form-group toolbar-field">
                 <label>Tài khoản</label>
                 <div class="account-combo" id="accountCombo">
@@ -79,6 +87,11 @@
         </div>
     </div>
 
+    <div id="msgTrackingNote" class="msg-tracking-note off">
+        ⏸ <strong>Chế độ theo dõi đang tắt</strong> (mặc định) — hệ thống không quét và không lưu tin nhắn mới.
+        Bật công tắc "Theo dõi tin nhắn" để bắt đầu: chỉ tin gửi <strong>sau thời điểm bật</strong> mới được ghi nhận, tin cũ hơn sẽ bỏ qua.
+    </div>
+
     <div class="msg-workspace">
         <section class="card msg-groups-panel">
             <div class="message-panel-header">
@@ -122,6 +135,6 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
-<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-9-dayfilter"></script>
+<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-10-tracking"></script>
 </body>
 </html>

@@ -217,6 +217,14 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
     from features.accounts.account_manager import load_accounts
     from features.messaging.last_messages import fetch_last_messages
 
+    settings = get_settings()
+    if not settings.get("tracking_enabled"):
+        # Chế độ theo dõi đang TẮT (mặc định): không quét, không cập nhật db.
+        message = ("Chế độ theo dõi tin nhắn đang tắt — không quét. "
+                   "Bật công tắc \"Theo dõi tin nhắn\" trên trang Tin nhắn để bắt đầu.")
+        return {"ok": False, "accounts": 0, "groupsChecked": 0, "newCount": 0,
+                "updatedCount": 0, "errorCount": 0, "message": message}
+
     with _store_lock:
         store = _load_store()
         if _prune_expired(store):
@@ -254,8 +262,11 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
 
     # Không lưu tin có thời điểm GỬI cũ hơn thời gian lưu trữ: nhóm im ắng lâu
     # sẽ có "tin mới nhất" từ nhiều tháng trước, không phải tin cần nhắc.
-    retention_hours = int(get_settings().get("retention_hours") or 0)
+    retention_hours = int(settings.get("retention_hours") or 0)
     oldest_ts_ms = int((time.time() - retention_hours * 3600) * 1000) if retention_hours > 0 else 0
+    # Chỉ theo dõi TỪ thời điểm bật công tắc: tin gửi trước lúc bật không lưu.
+    tracking_since_ms = int(settings.get("tracking_since_ms") or 0)
+    oldest_ts_ms = max(oldest_ts_ms, tracking_since_ms)
 
     for acc in targets:
         aid = str(acc.get("accountId") or "").strip()
@@ -514,6 +525,8 @@ def _worker_loop() -> None:
         time.sleep(15)
         try:
             settings = get_settings()
+            if not settings.get("tracking_enabled"):
+                continue  # chế độ theo dõi đang tắt: ngừng mọi lần quét tự động
             if not settings.get("auto_check_enabled"):
                 continue
             interval_seconds = max(1, int(settings.get("check_interval_minutes") or 5)) * 60

@@ -279,7 +279,8 @@ body.members-page #emptyState {
 }
 .messages-page > .messages-hero,
 .messages-page > .status-bar,
-.messages-page > .message-toolbar-card {
+.messages-page > .message-toolbar-card,
+.messages-page > .msg-tracking-note {
     flex: 0 0 auto;
     margin: 0 !important;
 }

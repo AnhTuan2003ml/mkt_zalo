@@ -182,8 +182,62 @@ async function loadSettings() {
             retSel.value = hours;
         }
         updateLastCheckPill();
+        updateTrackingUI();
     } catch (err) {
         showMessageStatus('Không tải được thiết lập: ' + err.message, 'error');
+    }
+}
+
+// ─── Chế độ theo dõi tin nhắn (bật/tắt, mặc định tắt) ───────────────────────
+
+function updateTrackingUI() {
+    const on = !!messageState.settings.tracking_enabled;
+    const toggle = qs('trackingToggle');
+    const text = qs('trackingToggleText');
+    const note = qs('msgTrackingNote');
+    const checkBtn = qs('btnCheckMessages');
+    if (toggle) toggle.checked = on;
+    if (text) text.textContent = on ? 'Đang bật' : 'Đang tắt';
+    if (checkBtn) {
+        checkBtn.disabled = !on;
+        checkBtn.title = on ? '' : 'Bật công tắc "Theo dõi tin nhắn" để quét';
+    }
+    if (!note) return;
+    note.className = 'msg-tracking-note ' + (on ? 'on' : 'off');
+    if (on) {
+        const since = messageState.settings.tracking_since || '';
+        note.innerHTML = '▶ <strong>Đang theo dõi tin nhắn</strong>'
+            + (since ? ` từ <strong>${escapeHtml(since)}</strong>` : '')
+            + ' — chỉ tin gửi sau thời điểm bật mới được lưu; tin cũ hơn sẽ bỏ qua. Tắt công tắc "Theo dõi tin nhắn" để ngừng quét và cập nhật.';
+    } else {
+        note.innerHTML = '⏸ <strong>Chế độ theo dõi đang tắt</strong> (mặc định) — hệ thống không quét và không lưu tin nhắn mới. '
+            + 'Bật công tắc "Theo dõi tin nhắn" để bắt đầu: chỉ tin gửi <strong>sau thời điểm bật</strong> mới được ghi nhận, tin cũ hơn sẽ bỏ qua. Tin đã lưu trước đó vẫn xem được bên dưới.';
+    }
+}
+
+async function toggleTracking() {
+    const toggle = qs('trackingToggle');
+    if (!toggle) return;
+    const wantOn = toggle.checked;
+    toggle.disabled = true;
+    try {
+        const data = await apiJson('/api/messages/settings', {
+            method: 'PATCH',
+            body: JSON.stringify({ tracking_enabled: wantOn }),
+        });
+        messageState.settings = data.settings || {};
+        updateTrackingUI();
+        if (wantOn) {
+            showMessageStatus('Đã bật theo dõi — chỉ ghi nhận tin gửi từ bây giờ. Đang quét lần đầu...', 'success');
+            await checkMessages(); // quét ngay để ghi mốc tin mới nhất từng nhóm
+        } else {
+            showMessageStatus('Đã tắt theo dõi — ngừng quét và cập nhật tin mới.', 'info');
+        }
+    } catch (err) {
+        toggle.checked = !wantOn;
+        showMessageStatus('Không đổi được chế độ theo dõi: ' + err.message, 'error');
+    } finally {
+        toggle.disabled = false;
     }
 }
 
@@ -229,6 +283,10 @@ async function loadUnread() {
 }
 
 async function checkMessages() {
+    if (!messageState.settings.tracking_enabled) {
+        showMessageStatus('Chế độ theo dõi đang tắt — bật công tắc "Theo dõi tin nhắn" để quét.', 'error');
+        return;
+    }
     const btn = qs('btnCheckMessages');
     const oldLabel = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Đang quét...'; }
@@ -242,7 +300,7 @@ async function checkMessages() {
     } catch (err) {
         showMessageStatus('Không quét được tin nhắn: ' + err.message, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+        if (btn) { btn.disabled = !messageState.settings.tracking_enabled; btn.textContent = oldLabel; }
     }
 }
 
@@ -516,6 +574,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     qs('btnReloadMessages')?.addEventListener('click', loadUnread);
     qs('btnCheckMessages')?.addEventListener('click', checkMessages);
+    qs('trackingToggle')?.addEventListener('change', toggleTracking);
     qs('btnSaveMessageSettings')?.addEventListener('click', saveSettings);
     qs('btnClearGroup')?.addEventListener('click', clearSelectedGroup);
     qs('btnDetailRead')?.addEventListener('click', deleteCurrentItem);

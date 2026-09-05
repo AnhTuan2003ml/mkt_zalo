@@ -28,7 +28,7 @@
 .message-toolbar-card { padding: 14px 16px; }
 .message-toolbar {
     display: grid;
-    grid-template-columns: minmax(200px, 250px) minmax(135px, 165px) minmax(130px, 160px) minmax(135px, 165px) auto 1fr;
+    grid-template-columns: minmax(130px, 160px) minmax(180px, 240px) minmax(130px, 160px) minmax(125px, 155px) minmax(130px, 160px) auto 1fr;
     gap: 12px;
     align-items: end;
 }
@@ -76,6 +76,72 @@
     text-overflow: ellipsis;
 }
 .pill.muted { color: var(--text-muted); background: rgba(255,255,255,.03); }
+
+/* ── Công tắc "Theo dõi tin nhắn" ── */
+.tracking-switch {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 40px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    padding: 0 11px;
+    cursor: pointer;
+    user-select: none;
+    margin: 0 !important;
+}
+.tracking-switch:hover { border-color: rgba(88,166,255,.5); }
+.tracking-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.switch-track {
+    position: relative;
+    width: 34px;
+    height: 20px;
+    border-radius: 99px;
+    background: #cbd5e1;
+    transition: background .18s ease;
+    flex-shrink: 0;
+}
+.switch-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .25);
+    transition: transform .18s ease;
+}
+.tracking-switch input:checked ~ .switch-track { background: #16a34a; }
+.tracking-switch input:checked ~ .switch-track::after { transform: translateX(14px); }
+.tracking-switch input:disabled ~ .switch-track { opacity: .55; }
+.switch-text { font-size: 12.5px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.tracking-switch input:checked ~ .switch-text { color: #16a34a; }
+
+/* ── Banner giải thích chế độ theo dõi ── */
+.msg-tracking-note {
+    border: 1px solid #fdba74;
+    border-radius: 12px;
+    background: #fff7ed;
+    color: #9a3412;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    line-height: 1.6;
+}
+.msg-tracking-note.on {
+    border-color: #6ee7b7;
+    background: #ecfdf5;
+    color: #065f46;
+}
 
 /* ── Combobox tài khoản có avatar ── */
 .account-combo { position: relative; }
@@ -387,6 +453,15 @@
     border-radius: 14px !important;
     background: #f8fafc !important;
     line-height: 1.6;
+}
+
+/* 7 cột một hàng chỉ đủ chỗ trên màn rất rộng; dưới mức này xếp 2 hàng
+   để pill "Lần quét" không bị bóp mất chữ. */
+@media (max-width: 1600px) {
+    /* Hàng 1: công tắc / tài khoản / tự cập nhật / tự xóa.
+       Hàng 2: lọc ngày / nút lưu / pill lần quét (chiếm 2 cột, canh phải). */
+    .message-toolbar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .toolbar-note { grid-column: 3 / -1; justify-content: flex-end; }
 }
 
 @media (max-width: 1200px) {

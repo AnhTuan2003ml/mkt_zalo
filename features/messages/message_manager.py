@@ -278,6 +278,11 @@ def get_settings() -> Dict[str, Any]:
     settings.setdefault("check_interval_minutes", 1)
     # Số giờ lưu tin trong db trước khi tự xóa (0 = không tự xóa). Mặc định 1 ngày.
     settings.setdefault("retention_hours", 24)
+    # Chế độ theo dõi tin nhắn nhóm: mặc định TẮT. Khi bật mới quét, và chỉ
+    # ghi nhận tin gửi TỪ thời điểm bật trở đi (tracking_since_ms, epoch ms).
+    settings.setdefault("tracking_enabled", False)
+    settings.setdefault("tracking_since_ms", 0)
+    settings.setdefault("tracking_since", "")
     settings.setdefault("auto_reply_enabled", False)
     settings.setdefault("default_reply", "")
     settings.setdefault("last_check_at", "")
@@ -287,11 +292,18 @@ def get_settings() -> Dict[str, Any]:
 
 def update_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
     settings = get_settings()
-    allowed = {"auto_check_enabled", "check_interval_minutes", "retention_hours", "auto_reply_enabled", "default_reply"}
+    allowed = {"auto_check_enabled", "check_interval_minutes", "retention_hours", "auto_reply_enabled", "default_reply", "tracking_enabled"}
     for key, value in (patch or {}).items():
         if key not in allowed:
             continue
-        if key in {"auto_check_enabled", "auto_reply_enabled"}:
+        if key == "tracking_enabled":
+            value = bool(value)
+            if value and not settings.get("tracking_enabled"):
+                # Vừa BẬT theo dõi: chỉ ghi nhận tin gửi từ thời điểm này trở đi.
+                settings["tracking_since_ms"] = int(datetime.now().timestamp() * 1000)
+                settings["tracking_since"] = _now()
+            settings[key] = value
+        elif key in {"auto_check_enabled", "auto_reply_enabled"}:
             settings[key] = bool(value)
         elif key == "check_interval_minutes":
             try:
