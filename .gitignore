@@ -46,3 +46,4 @@ ENV/
 Thumbs.db
 
 *.exe
+webhook/
