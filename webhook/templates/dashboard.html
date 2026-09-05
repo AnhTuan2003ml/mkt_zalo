@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aff Forwarder - Webhook</title>
+<style>
+    :root {
+        --bg: #f4f7fb; --card: #ffffff; --border: #dbe4ee; --text: #16222f;
+        --muted: #5b6b81; --accent: #1f6feb; --accent-dark: #1558c0;
+        --ok: #16a34a; --err: #dc2626; --warn: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font: 14px/1.55 "Segoe UI", system-ui, Arial, sans-serif;
+    }
+    .wrap { max-width: 1320px; margin: 0 auto; padding: 20px 18px 40px; }
+    h1 { font-size: 21px; margin: 0; }
+    h1 .beta { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--warn);
+        border: 1px solid #fcd34d; background: #fffbeb; border-radius: 999px; padding: 2px 9px;
+        vertical-align: middle; margin-left: 8px; }
+    h2 { font-size: 15px; margin: 0 0 12px; }
+    .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .topbar .grow { flex: 1; min-width: 0; }
+    .sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+        padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.04); margin-top: 16px; }
+
+    label.fl { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 0 5px; }
+    input[type=text], select, textarea {
+        width: 100%; border: 1px solid var(--border); border-radius: 10px;
+        background: #fff; color: var(--text); font: inherit; padding: 0 11px;
+        height: 40px;
+    }
+    textarea { height: auto; padding: 9px 11px; resize: vertical; min-height: 40px; font-size: 12px; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid rgba(31,111,235,.35); border-color: var(--accent); }
+
+    .btn { border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text);
+        font: inherit; font-weight: 700; height: 40px; padding: 0 15px; cursor: pointer; white-space: nowrap; }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-dark); color: #fff; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn.mini { height: 28px; padding: 0 10px; font-size: 11.5px; font-weight: 600; border-radius: 8px; }
+
+    /* ── Toolbar cấu hình kiểu ngang ── */
+    .config-toolbar {
+        display: grid;
+        grid-template-columns: minmax(180px, 240px) minmax(140px, 170px) minmax(160px, 210px) auto 1fr;
+        gap: 12px; align-items: end;
+    }
+    .config-row2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+    .test-row { display: flex; gap: 8px; }
+    .test-row input { flex: 1; min-width: 0; }
+    .save-hint { display: flex; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--muted); min-width: 0; }
+    @media (max-width: 1100px) {
+        .config-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .config-row2 { grid-template-columns: 1fr; }
+        .save-hint { justify-content: flex-start; }
+    }
+
+    /* Công tắc bật/tắt */
+    .switch { display: inline-flex; align-items: center; gap: 9px; border: 1px solid var(--border);
+        border-radius: 10px; background: #fff; height: 40px; padding: 0 12px; cursor: pointer; user-select: none; }
+    .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .track { position: relative; width: 34px; height: 20px; border-radius: 99px; background: #cbd5e1;
+        transition: background .18s; flex-shrink: 0; }
+    .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+        border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.25); transition: transform .18s; }
+    .switch input:checked ~ .track { background: var(--ok); }
+    .switch input:checked ~ .track::after { transform: translateX(14px); }
+    .switch .st { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+    .switch input:checked ~ .st { color: var(--ok); }
+
+    .note { border: 1px solid #fdba74; background: #fff7ed; color: #9a3412;
+        border-radius: 12px; padding: 10px 14px; font-size: 12.5px; margin-top: 14px; }
+    .note.on { border-color: #6ee7b7; background: #ecfdf5; color: #065f46; }
+
+    .statusbar { display: none; border-radius: 10px; padding: 9px 13px; font-size: 12.5px;
+        margin-top: 12px; border: 1px solid; }
+    .statusbar.ok { display: block; background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+    .statusbar.err { display: block; background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+    .statusbar.info { display: block; background: #eff6ff; border-color: #93c5fd; color: #1e40af; }
+
+    .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+        border-radius: 999px; height: 40px; padding: 0 14px; font-size: 12px; color: var(--muted); background: #fff; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; flex-shrink: 0; }
+    .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
+
+    /* ── Chọn nhóm nguồn / nhóm kết quả: 2 panel ngang hàng ── */
+    .groups-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+    @media (max-width: 900px) { .groups-grid { grid-template-columns: 1fr; } }
+    .group-panel { border: 1px solid var(--border); border-radius: 12px; background: #fbfdff;
+        display: flex; flex-direction: column; overflow: hidden; }
+    .gp-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+        border-bottom: 1px solid var(--border); background: #f2f6fb; flex-wrap: wrap; }
+    .gp-head .t { font-weight: 800; font-size: 13px; }
+    .gp-head .c { font-size: 11.5px; color: var(--muted); flex: 1; min-width: 0; }
+    .gp-search { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .gp-search input { height: 34px; font-size: 12.5px; border-radius: 8px; }
+    .gp-list { height: 300px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 3px; }
+    .g-item { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 9px;
+        cursor: pointer; border: 1px solid transparent; }
+    .g-item:hover { background: rgba(31,111,235,.06); }
+    .g-item.checked { background: rgba(31,111,235,.10); border-color: rgba(31,111,235,.35); }
+    .g-item.disabled { opacity: .42; cursor: not-allowed; }
+    .g-item img { width: 28px; height: 28px; border-radius: 8px; object-fit: cover;
+        border: 1px solid var(--border); flex-shrink: 0; background: #e8eef6; }
+    .g-item .gname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; font-weight: 600; font-size: 13px; }
+    .g-item .role { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; flex-shrink: 0; }
+    .g-item .role.src { background: #eff6ff; color: var(--accent); border: 1px solid #93c5fd; }
+    .g-item .role.dst { background: #ecfdf5; color: var(--ok); border: 1px solid #6ee7b7; }
+    /* Ô check / radio vẽ tay để đồng bộ 2 panel */
+    .mark { width: 17px; height: 17px; border: 2px solid #b6c4d6; background: #fff; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
+    .mark.box { border-radius: 5px; }
+    .mark.dot-r { border-radius: 50%; }
+    .g-item.checked .mark { background: var(--accent); border-color: var(--accent); }
+    .g-item.checked .mark.dot-r { background: var(--ok); border-color: var(--ok); }
+    .empty { color: var(--muted); text-align: center; padding: 26px 10px; font-size: 12.5px; }
+    .small { font-size: 11.5px; color: var(--muted); }
+    .mono { font-family: Consolas, monospace; font-size: 11.5px; word-break: break-all; }
+
+    /* Thống kê + log */
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+    @media (max-width: 700px) { .stats { grid-template-columns: 1fr; } }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 13px 16px; }
+    .stat .v { font-size: 22px; font-weight: 800; }
+    .stat .k { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .stat .v.ok { color: var(--ok); } .stat .v.err { color: var(--err); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em;
+        position: sticky; top: 0; background: var(--card); }
+    .log-scroll { max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
+    .tag { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 11px; font-weight: 700; }
+    .tag.sent { background: #ecfdf5; color: var(--ok); border: 1px solid #6ee7b7; }
+    .tag.sent_partial { background: #fffbeb; color: var(--warn); border: 1px solid #fcd34d; }
+    .tag.error { background: #fef2f2; color: var(--err); border: 1px solid #fca5a5; }
+    td a { color: var(--accent); word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div class="grow">
+            <h1>Aff Forwarder <span class="beta">Webhook</span></h1>
+            <div class="sub">Theo dõi nhóm nguồn → chuyển link Shopee/Lazada thành link affiliate → gửi vào nhóm kết quả (qua API Nexus).</div>
+        </div>
+        <span class="pill" id="nexusPill" title="Địa chỉ Nexus API cố định trong webhook">
+            <span class="dot" id="nexusDot"></span><span id="nexusPillText">Đang kiểm tra Nexus...</span>
+        </span>
+        <button class="btn" id="btnReloadNexus" title="Tải lại tài khoản + nhóm từ Nexus">⟳</button>
+        <label class="switch" title="Bật để tự động kiểm tra theo chu kỳ. Lần kiểm tra đầu của mỗi nhóm chỉ ghi mốc, không chuyển tiếp tin cũ.">
+            <input type="checkbox" id="enabledToggle">
+            <span class="track"></span>
+            <span class="st" id="enabledText">Đang tắt</span>
+        </label>
+        <button class="btn primary" id="btnRun">Chạy ngay</button>
+    </div>
+
+    <div class="statusbar" id="statusBar"></div>
+
+    <div class="note" id="modeNote">
+        ⏸ <strong>Đang tắt</strong> — hệ thống không tự kiểm tra. Bật công tắc để chạy theo chu kỳ.
+        Lần kiểm tra <strong>đầu tiên</strong> của mỗi nhóm chỉ ghi mốc tin mới nhất (không chuyển tiếp tin cũ);
+        từ lần sau, tin mới có link Shopee/Lazada sẽ được đổi sang link aff của bạn và gửi vào nhóm kết quả kèm ảnh gốc.
+    </div>
+
+    <section class="card">
+        <h2>Cấu hình</h2>
+        <div class="config-toolbar">
+            <div>
+                <label class="fl">Tài khoản Zalo</label>
+                <select id="accountSelect"><option value="">— Chưa tải được tài khoản —</option></select>
+            </div>
+            <div>
+                <label class="fl">Chu kỳ kiểm tra</label>
+                <select id="intervalSelect">
+                    <option value="1">Mỗi 1 phút</option>
+                    <option value="2">Mỗi 2 phút</option>
+                    <option value="3">Mỗi 3 phút</option>
+                    <option value="5">Mỗi 5 phút</option>
+                    <option value="10">Mỗi 10 phút</option>
+                    <option value="15">Mỗi 15 phút</option>
+                    <option value="30">Mỗi 30 phút</option>
+                    <option value="60">Mỗi 60 phút</option>
+                </select>
+            </div>
+            <div>
+                <label class="fl">Shopee affiliate ID</label>
+                <input type="text" id="shopeeAffId" placeholder="17340820046">
+            </div>
+            <div>
+                <label class="fl">&nbsp;</label>
+                <button class="btn primary" id="btnSave">Lưu cấu hình</button>
+            </div>
+            <div class="save-hint" id="saveHint"></div>
+        </div>
+        <div class="config-row2">
+            <div>
+                <label class="fl">Cookie Lazada (dán từ phiên đăng nhập adsense.lazada.vn)</label>
+                <textarea id="lazadaCookie" rows="2" placeholder="Dán chuỗi Cookie header HOẶC copy nguyên bảng cookies từ DevTools (Application → Cookies) rồi dán vào đây..." spellcheck="false"></textarea>
+                <div class="small" style="margin-top:4px">Nhận cả 2 kiểu: chuỗi <span class="mono">name=value; name2=value2</span> hoặc bảng cookies DevTools (tự ghép, tự bỏ cookie không thuộc lazada). Cookie hết hạn thì log báo "dán cookie mới". Link Shopee không cần cookie.</div>
+            </div>
+            <div>
+                <label class="fl">Thử chuyển link (kiểm tra aff id / cookie)</label>
+                <div class="test-row">
+                    <input type="text" id="testUrl" placeholder="Dán link sản phẩm Shopee hoặc Lazada...">
+                    <button class="btn" id="btnTest">Thử</button>
+                </div>
+                <div class="small mono" id="testResult" style="margin-top:6px"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Nhóm nguồn &amp; nhóm kết quả</h2>
+        <div class="groups-grid">
+            <div class="group-panel">
+                <div class="gp-head">
+                    <span class="t">Nhóm nguồn</span>
+                    <span class="c" id="sourceCount">0 nhóm được chọn</span>
+                    <button class="btn mini" id="btnSrcAll">Chọn tất cả</button>
+                    <button class="btn mini" id="btnSrcNone">Bỏ chọn</button>
+                </div>
+                <div class="gp-search"><input type="text" id="srcSearch" placeholder="Tìm nhóm nguồn..."></div>
+                <div class="gp-list" id="sourceList"><div class="empty">Chọn tài khoản để tải danh sách nhóm.</div></div>
+            </div>
+            <div class="group-panel">
+                <div class="gp-head">
+                    <span class="t">Nhóm kết quả</span>
+                    <span class="c" id="destLabel">Chưa chọn — bấm chọn 1 nhóm</span>
+                </div>
+                <div class="gp-search"><input type="text" id="dstSearch" placeholder="Tìm nhóm kết quả..."></div>
+                <div class="gp-list" id="destList"><div class="empty">Chọn tài khoản để tải danh sách nhóm.</div></div>
+            </div>
+        </div>
+        <div class="small" style="margin-top:8px">
+            Tin mới ở <strong>nhóm nguồn</strong> được theo dõi; nội dung sau khi thay link aff sẽ gửi vào <strong>nhóm kết quả</strong>.
+            Một nhóm không thể vừa là nguồn vừa là kết quả (tránh vòng lặp) — nhóm đã chọn bên này sẽ bị khóa ở bên kia.
+        </div>
+    </section>
+
+    <div class="stats">
+        <div class="stat"><div class="v ok" id="statForwarded">0</div><div class="k">Tin đã chuyển tiếp</div></div>
+        <div class="stat"><div class="v err" id="statErrors">0</div><div class="k">Lỗi</div></div>
+        <div class="stat"><div class="v" id="statLastRun" style="font-size:15px">—</div><div class="k" id="statLastMsg">Chưa chạy lần nào</div></div>
+    </div>
+
+    <section class="card">
+        <h2>Nhật ký chuyển tiếp</h2>
+        <div class="log-scroll">
+            <table>
+                <thead><tr>
+                    <th style="width:135px">Thời gian</th>
+                    <th style="width:150px">Nhóm nguồn</th>
+                    <th>Nội dung / Link</th>
+                    <th style="width:95px">Trạng thái</th>
+                </tr></thead>
+                <tbody id="logBody">
+                    <tr><td colspan="4" class="small" style="text-align:center;padding:24px">Chưa có nhật ký.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<script>
+const S = {
+    settings: {}, stats: {}, accounts: [], groups: [],
+    sourceIds: new Set(), destId: '',
+};
+const qs = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+
+function showStatus(text, type = 'info') {
+    const el = qs('statusBar');
+    el.className = 'statusbar ' + type;
+    el.textContent = text;
+    clearTimeout(showStatus._t);
+    showStatus._t = setTimeout(() => { el.className = 'statusbar'; }, 6000);
+}
+
+async function api(url, options = {}) {
+    const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(data.error || data.message || ('HTTP ' + res.status));
+    return data;
+}
+
+// ─── Cấu hình ────────────────────────────────────────────────────────────────
+
+function fillForm() {
+    const st = S.settings;
+    qs('intervalSelect').value = String(st.interval_minutes || 1);
+    qs('shopeeAffId').value = st.shopee_aff_id || '';
+    qs('lazadaCookie').value = st.lazada_cookie || '';
+    qs('enabledToggle').checked = !!st.enabled;
+    S.sourceIds = new Set(st.source_group_ids || []);
+    S.destId = st.dest_group_id || '';
+    updateModeUI();
+}
+
+function updateModeUI() {
+    const on = qs('enabledToggle').checked;
+    qs('enabledText').textContent = on ? 'Đang bật' : 'Đang tắt';
+    const note = qs('modeNote');
+    note.className = 'note' + (on ? ' on' : '');
+    note.innerHTML = on
+        ? '▶ <strong>Đang theo dõi</strong> — kiểm tra các nhóm nguồn theo chu kỳ đã chọn. Tin mới có link Shopee/Lazada sẽ được đổi sang link aff của bạn rồi gửi vào nhóm kết quả kèm ảnh gốc. Tắt công tắc để ngừng.'
+        : '⏸ <strong>Đang tắt</strong> — hệ thống không tự kiểm tra. Bật công tắc để chạy theo chu kỳ. Lần kiểm tra <strong>đầu tiên</strong> của mỗi nhóm chỉ ghi mốc tin mới nhất (không chuyển tiếp tin cũ); từ lần sau chỉ tin phát sinh mới được xử lý.';
+}
+
+function collectForm() {
+    return {
+        account_id: qs('accountSelect').value,
+        interval_minutes: Number(qs('intervalSelect').value || 1),
+        shopee_aff_id: qs('shopeeAffId').value.trim(),
+        lazada_cookie: qs('lazadaCookie').value.trim(),
+        source_group_ids: [...S.sourceIds],
+        dest_group_id: S.destId,
+    };
+}
+
+async function loadConfig() {
+    const data = await api('/api/config');
+    S.settings = data.settings || {};
+    S.stats = data.stats || {};
+    S.nexusUrl = data.nexusUrl || '';
+    fillForm();
+    renderStats();
+}
+
+async function saveConfig(extra = {}) {
+    const payload = { ...collectForm(), ...extra };
+    const data = await api('/api/config', { method: 'PATCH', body: JSON.stringify(payload) });
+    S.settings = data.settings || {};
+    return data;
+}
+
+// ─── Tài khoản + nhóm từ Nexus ───────────────────────────────────────────────
+
+async function loadAccounts() {
+    const dot = qs('nexusDot'), pillText = qs('nexusPillText');
+    try {
+        const data = await api('/api/nexus/accounts');
+        S.accounts = data.accounts || [];
+        dot.className = 'dot ok';
+        pillText.textContent = 'Nexus ' + (S.nexusUrl || '') + ' — ' + S.accounts.length + ' tài khoản';
+        const sel = qs('accountSelect');
+        sel.innerHTML = S.accounts.length
+            ? S.accounts.map(a => `<option value="${esc(a.accountId)}">${esc(a.name || a.accountId)}</option>`).join('')
+            : '<option value="">— Nexus chưa có tài khoản —</option>';
+        if (S.settings.account_id && S.accounts.some(a => a.accountId === S.settings.account_id)) {
+            sel.value = S.settings.account_id;
+        }
+        await loadGroups();
+    } catch (err) {
+        dot.className = 'dot err';
+        pillText.textContent = 'Nexus: mất kết nối — mở Nexus.exe rồi bấm ⟳';
+        showStatus(err.message, 'err');
+    }
+}
+
+async function loadGroups() {
+    const accountId = qs('accountSelect').value;
+    if (!accountId) {
+        qs('sourceList').innerHTML = '<div class="empty">Chọn tài khoản để tải danh sách nhóm.</div>';
+        qs('destList').innerHTML = '<div class="empty">Chọn tài khoản để tải danh sách nhóm.</div>';
+        return;
+    }
+    qs('sourceList').innerHTML = '<div class="empty">Đang tải danh sách nhóm...</div>';
+    qs('destList').innerHTML = '<div class="empty">Đang tải danh sách nhóm...</div>';
+    try {
+        const data = await api('/api/nexus/groups?accountId=' + encodeURIComponent(accountId));
+        S.groups = data.groups || [];
+    } catch (err) {
+        qs('sourceList').innerHTML = `<div class="empty">Không tải được nhóm: ${esc(err.message)}</div>`;
+        qs('destList').innerHTML = '<div class="empty">—</div>';
+        return;
+    }
+    // Bỏ các lựa chọn không còn tồn tại trong danh sách nhóm mới.
+    const validIds = new Set(S.groups.map(g => g.groupId));
+    S.sourceIds = new Set([...S.sourceIds].filter(id => validIds.has(id)));
+    if (S.destId && !validIds.has(S.destId)) S.destId = '';
+    renderGroupPanels();
+}
+
+function groupRow(g, opts) {
+    const { checked, disabled, mark, role } = opts;
+    return `
+        <div class="g-item ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}"
+             data-gid="${esc(g.groupId)}" title="${esc(g.name)}">
+            <span class="mark ${mark}">${checked ? '✓' : ''}</span>
+            <img src="${esc(g.avatar || '')}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+            <span class="gname">${esc(g.name)}</span>
+            ${role ? `<span class="role ${role.cls}">${role.text}</span>` : ''}
+        </div>`;
+}
+
+function renderGroupPanels() {
+    const srcFilter = qs('srcSearch').value.trim().toLowerCase();
+    const dstFilter = qs('dstSearch').value.trim().toLowerCase();
+    const srcWrap = qs('sourceList');
+    const dstWrap = qs('destList');
+
+    if (!S.groups.length) {
+        srcWrap.innerHTML = '<div class="empty">Tài khoản chưa đồng bộ nhóm nào trong Nexus (mục "Nhóm Zalo").</div>';
+        dstWrap.innerHTML = '<div class="empty">—</div>';
+        updateGroupHeads();
+        return;
+    }
+
+    const srcGroups = S.groups.filter(g => !srcFilter || g.name.toLowerCase().includes(srcFilter));
+    srcWrap.innerHTML = srcGroups.length ? srcGroups.map(g => groupRow(g, {
+        checked: S.sourceIds.has(g.groupId),
+        disabled: g.groupId === S.destId,
+        mark: 'box',
+        role: g.groupId === S.destId ? { cls: 'dst', text: 'Kết quả' } : null,
+    })).join('') : '<div class="empty">Không có nhóm khớp từ khóa.</div>';
+
+    const dstGroups = S.groups.filter(g => !dstFilter || g.name.toLowerCase().includes(dstFilter));
+    dstWrap.innerHTML = dstGroups.length ? dstGroups.map(g => groupRow(g, {
+        checked: g.groupId === S.destId,
+        disabled: S.sourceIds.has(g.groupId),
+        mark: 'dot-r',
+        role: S.sourceIds.has(g.groupId) ? { cls: 'src', text: 'Nguồn' } : null,
+    })).join('') : '<div class="empty">Không có nhóm khớp từ khóa.</div>';
+
+    srcWrap.querySelectorAll('.g-item').forEach(el => el.addEventListener('click', () => {
+        const gid = el.dataset.gid;
+        if (gid === S.destId) { showStatus('Nhóm này đang là nhóm kết quả — bỏ chọn bên phải trước.', 'err'); return; }
+        if (S.sourceIds.has(gid)) S.sourceIds.delete(gid); else S.sourceIds.add(gid);
+        renderGroupPanels();
+    }));
+    dstWrap.querySelectorAll('.g-item').forEach(el => el.addEventListener('click', () => {
+        const gid = el.dataset.gid;
+        if (S.sourceIds.has(gid)) { showStatus('Nhóm này đang là nhóm nguồn — bỏ tick bên trái trước.', 'err'); return; }
+        S.destId = (S.destId === gid) ? '' : gid;
+        renderGroupPanels();
+    }));
+    updateGroupHeads();
+}
+
+function updateGroupHeads() {
+    qs('sourceCount').textContent = S.sourceIds.size + ' nhóm được chọn';
+    const g = S.groups.find(x => x.groupId === S.destId);
+    qs('destLabel').textContent = g ? ('Đang gửi vào: ' + g.name) : 'Chưa chọn — bấm chọn 1 nhóm';
+}
+
+// ─── Thống kê + nhật ký ──────────────────────────────────────────────────────
+
+function renderStats() {
+    qs('statForwarded').textContent = S.stats.forwarded ?? 0;
+    qs('statErrors').textContent = S.stats.errors ?? 0;
+    qs('statLastRun').textContent = S.stats.lastRunAt || '—';
+    qs('statLastMsg').textContent = S.stats.lastRunMessage || '';
+}
+
+function groupName(gid) {
+    const g = S.groups.find(x => x.groupId === gid);
+    return g ? g.name : gid;
+}
+
+async function loadLogs() {
+    try {
+        const data = await api('/api/logs');
+        S.stats = data.stats || {};
+        renderStats();
+        const logs = data.logs || [];
+        const body = qs('logBody');
+        if (!logs.length) {
+            body.innerHTML = '<tr><td colspan="4" class="small" style="text-align:center;padding:24px">Chưa có nhật ký.</td></tr>';
+            return;
+        }
+        body.innerHTML = logs.map(l => {
+            const links = (l.links || []).map(x => x.ok
+                ? `<div>✅ <a href="${esc(x.aff)}" target="_blank" rel="noopener">${esc(x.aff)}</a></div>`
+                : `<div>❌ <span class="mono">${esc(x.original)}</span> — ${esc(x.error)}</div>`
+            ).join('');
+            const statusLabel = { sent: 'Đã gửi', sent_partial: 'Gửi 1 phần', error: 'Lỗi' }[l.status] || l.status;
+            return `<tr>
+                <td class="small">${esc(l.at || '')}</td>
+                <td>${esc(groupName(l.groupId) || l.groupName || '')}${l.sender ? `<div class="small">${esc(l.sender)}</div>` : ''}</td>
+                <td>${l.textPreview ? `<div>${esc(l.textPreview)}</div>` : ''}${links}
+                    ${l.error && !(l.links || []).length ? `<div class="small">${esc(l.error)}</div>` : ''}
+                    ${l.withPhoto ? '<div class="small">📷 kèm ảnh</div>' : ''}</td>
+                <td><span class="tag ${esc(l.status)}">${esc(statusLabel)}</span>
+                    ${l.status === 'error' && (l.links || []).length ? `<div class="small">${esc(l.error || '')}</div>` : ''}</td>
+            </tr>`;
+        }).join('');
+    } catch (err) { /* giữ log cũ khi lỗi tạm thời */ }
+}
+
+// ─── Hành động ───────────────────────────────────────────────────────────────
+
+async function toggleEnabled() {
+    const toggle = qs('enabledToggle');
+    const wantOn = toggle.checked;
+    toggle.disabled = true;
+    try {
+        await saveConfig({ enabled: wantOn });
+        updateModeUI();
+        showStatus(wantOn
+            ? 'Đã bật — lượt đầu chỉ ghi mốc từng nhóm, từ lượt sau mới chuyển tiếp tin phát sinh.'
+            : 'Đã tắt — ngừng kiểm tra tự động.', wantOn ? 'ok' : 'info');
+        if (wantOn) { await runNow(true); }
+    } catch (err) {
+        toggle.checked = !wantOn;
+        updateModeUI();
+        showStatus('Không đổi được trạng thái: ' + err.message, 'err');
+    } finally { toggle.disabled = false; }
+}
+
+async function runNow(silent) {
+    const btn = qs('btnRun');
+    btn.disabled = true; btn.textContent = 'Đang chạy...';
+    try {
+        const data = await api('/api/run', { method: 'POST' });
+        if (!silent) showStatus(data.message || 'Đã chạy xong.', data.success ? 'ok' : 'err');
+        await loadLogs();
+    } catch (err) {
+        showStatus('Chạy lỗi: ' + err.message, 'err');
+    } finally { btn.disabled = false; btn.textContent = 'Chạy ngay'; }
+}
+
+async function testConvert() {
+    const url = qs('testUrl').value.trim();
+    const out = qs('testResult');
+    if (!url) { out.textContent = 'Nhập link sản phẩm trước.'; return; }
+    out.textContent = 'Đang chuyển...';
+    try {
+        // Lưu aff id / cookie đang gõ trước khi thử để test đúng cấu hình trên form.
+        await saveConfig();
+        const res = await fetch('/api/test-convert', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        const data = await res.json().catch(() => ({}));
+        out.innerHTML = data.success
+            ? `✅ <a href="${esc(data.link)}" target="_blank" rel="noopener">${esc(data.link)}</a>`
+            : '❌ ' + esc(data.message || data.error || 'Chuyển link thất bại.');
+    } catch (err) { out.textContent = '❌ ' + err.message; }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadConfig();
+    await loadAccounts();
+    await loadLogs();
+
+    qs('btnSave').addEventListener('click', async () => {
+        try {
+            await saveConfig();
+            qs('saveHint').textContent = 'Đã lưu lúc ' + new Date().toLocaleTimeString('vi-VN');
+            showStatus('Đã lưu cấu hình.', 'ok');
+        } catch (err) { showStatus('Không lưu được: ' + err.message, 'err'); }
+    });
+    qs('btnRun').addEventListener('click', () => runNow(false));
+    qs('btnTest').addEventListener('click', testConvert);
+    qs('enabledToggle').addEventListener('change', toggleEnabled);
+    qs('accountSelect').addEventListener('change', loadGroups);
+    qs('btnReloadNexus').addEventListener('click', loadAccounts);
+    qs('srcSearch').addEventListener('input', renderGroupPanels);
+    qs('dstSearch').addEventListener('input', renderGroupPanels);
+    qs('btnSrcAll').addEventListener('click', () => {
+        S.groups.forEach(g => { if (g.groupId !== S.destId) S.sourceIds.add(g.groupId); });
+        renderGroupPanels();
+    });
+    qs('btnSrcNone').addEventListener('click', () => { S.sourceIds.clear(); renderGroupPanels(); });
+
+    setInterval(() => { if (!document.hidden) loadLogs(); }, 10000);
+});
+</script>
+</body>
+</html>
