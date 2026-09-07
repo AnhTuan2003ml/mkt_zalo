@@ -6,7 +6,7 @@
     <title>Tin nhắn nhóm - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-10-tracking">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/messages.css') }}?v=messages-12-toggle">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
 <body>
@@ -96,9 +96,13 @@
         <section class="card msg-groups-panel">
             <div class="message-panel-header">
                 <div>
-                    <h3>Nhóm</h3>
-                    <p id="msgGroupCount">0 nhóm</p>
+                    <h3>Cuộc trò chuyện</h3>
+                    <p id="msgGroupCount">0 cuộc trò chuyện</p>
                 </div>
+            </div>
+            <div class="msg-thread-toggle" role="group" aria-label="Lọc theo loại cuộc trò chuyện">
+                <button type="button" id="msgToggleGroup" class="active" onclick="msgSetThreadFilter('group')">Nhóm</button>
+                <button type="button" id="msgToggleFriend" onclick="msgSetThreadFilter('friend')">Người dùng</button>
             </div>
             <div id="msgGroupList" class="msg-group-list">
                 <div class="empty-state">Chưa có tin nhắn mới.<br>Bấm "Quét ngay" để kiểm tra.</div>
@@ -129,12 +133,16 @@
                     <button class="btn btn-secondary btn-sm" id="btnDetailRead">Đã đọc</button>
                 </div>
                 <div id="msgDetailBody" class="msg-detail-body"></div>
+                <div id="msgReplyBox" class="msg-reply-box">
+                    <textarea id="msgReplyText" class="msg-reply-input" rows="2" placeholder="Nhập nội dung trả lời tin nhắn này..."></textarea>
+                    <button class="btn btn-primary btn-sm" id="btnMsgReply" onclick="sendMessageReply()">Trả lời</button>
+                </div>
             </div>
         </section>
     </div>
 </div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}?v=10000-null-guards"></script>
-<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-10-tracking"></script>
+<script src="{{ url_for('static', filename='js/messages.js') }}?v=messages-15-reply-labels"></script>
 </body>
 </html>

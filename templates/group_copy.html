@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sao chép nhóm - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=gc-exec-picker-v1">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
 <body>
 {% include '_nav.html' %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-skip-leaders-v3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-progress-v1">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <div class="page group-copy-page">
@@ -96,7 +96,7 @@
         <div class="gc-create-body">
             <div class="gc-config-grid">
                 <div class="gc-field gc-col-3">
-                    <label>Tài khoản thực hiện</label>
+                    <label>Tài khoản chủ <span style="font-weight:400;color:var(--text-muted)">(sở hữu nhóm đích)</span></label>
                     <div id="groupCopyAccountPicker" class="group-copy-account-picker">
                         <input id="groupCopyAccount" type="hidden" value="">
                         <button id="groupCopyAccountTrigger" class="group-copy-account-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
@@ -109,6 +109,14 @@
                         </button>
                         <div id="groupCopyAccountMenu" class="group-copy-account-menu" role="listbox" hidden></div>
                     </div>
+                </div>
+
+                <div class="gc-field gc-col-3">
+                    <label>Tài khoản thực hiện <span style="font-weight:400;color:var(--text-muted)">(chọn nhiều, chia việc không trùng)</span></label>
+                    <button type="button" id="groupCopyExecTrigger" class="sched-exec-pick-btn" style="width:100%;min-width:0" onclick="groupCopyOpenExecPicker()">
+                        <span id="groupCopyExecLabel">Chọn tài khoản thực hiện</span>
+                        <span class="sched-exec-pick-add">＋ Thêm</span>
+                    </button>
                 </div>
 
                 <div class="gc-field gc-col-4">
@@ -209,6 +217,28 @@
     </div>
 </div>
 
+<!-- Popup chọn nhiều tài khoản thực hiện -->
+<div class="exec-picker-overlay" id="groupCopyExecOverlay">
+    <div class="exec-picker-card">
+        <div class="exec-picker-head">
+            <div>
+                <strong>Chọn tài khoản thực hiện</strong>
+                <small>Tick các tài khoản cùng sao chép (chia thành viên không trùng nhau)</small>
+            </div>
+            <button type="button" class="exec-picker-close" onclick="groupCopyCloseExecPicker()" title="Đóng">✕</button>
+        </div>
+        <div class="exec-picker-toolbar">
+            <input type="text" id="groupCopyExecSearch" placeholder="Tìm tài khoản..." oninput="groupCopyRenderExecList()">
+            <label class="exec-picker-all"><input type="checkbox" id="groupCopyExecSelectAll" onchange="groupCopyExecToggleAll(this.checked)"> Chọn tất cả</label>
+        </div>
+        <div class="exec-picker-list" id="groupCopyExecList"></div>
+        <div class="exec-picker-foot">
+            <span id="groupCopyExecCount">Đã chọn 0</span>
+            <button type="button" class="btn btn-primary btn-sm" onclick="groupCopyCloseExecPicker()">Xong</button>
+        </div>
+    </div>
+</div>
+
 <!-- Modal chọn nhóm hiện tại -->
 <div id="groupCopyPickerOverlay" class="overlay-backdrop gc-picker-overlay">
     <div class="overlay-card gc-picker-card">
@@ -264,6 +294,6 @@
 
 <div class="member-toast-stack" id="groupCopyToastStack" aria-live="polite" aria-atomic="true"></div>
 
-<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-skip-leaders-v1"></script>
+<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-exec-picker-v1"></script>
 </body>
 </html>

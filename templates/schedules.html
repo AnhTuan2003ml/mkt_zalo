@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or "Chiến dịch gửi" }} - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=sched-role-col-v1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=sched-exec-picker-v1">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}" >
     <style>
         .tab-nav { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
@@ -481,6 +481,28 @@
 </div>
 
 <script>window.ZALO_INITIAL_TAB = "{{ initial_tab or 'group' }}";</script>
-<script src="{{ url_for('static', filename='js/schedules.js') }}?v=sched-skip-leaders-v1"></script>
+<!-- Popup chọn nhiều tài khoản thực hiện -->
+<div class="exec-picker-overlay" id="schedExecPickerOverlay">
+    <div class="exec-picker-card">
+        <div class="exec-picker-head">
+            <div>
+                <strong>Chọn tài khoản thực hiện</strong>
+                <small>Tick các tài khoản sẽ cùng gửi (chia người nhận không trùng nhau)</small>
+            </div>
+            <button type="button" class="exec-picker-close" onclick="schedCloseExecPicker()" title="Đóng">✕</button>
+        </div>
+        <div class="exec-picker-toolbar">
+            <input type="text" id="schedExecSearch" placeholder="Tìm tài khoản..." oninput="schedRenderExecPickerList()">
+            <label class="exec-picker-all"><input type="checkbox" id="schedExecSelectAll" onchange="schedExecToggleAll(this.checked)"> Chọn tất cả</label>
+        </div>
+        <div class="exec-picker-list" id="schedExecPickerList"></div>
+        <div class="exec-picker-foot">
+            <span id="schedExecPickerCount">Đã chọn 0</span>
+            <button type="button" class="btn btn-primary btn-sm" onclick="schedCloseExecPicker()">Xong</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/schedules.js') }}?v=sched-exec-picker-v1"></script>
 </body>
 </html>

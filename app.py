@@ -235,6 +235,7 @@ from features.groups.group_copy_manager import (
     resume_job as resume_group_copy_job,
     request_verification as request_group_copy_verification,
     delete_job as delete_group_copy_job,
+    mutate_job as save_group_copy_job_mutation,
 )
 from features.groups.group_copy_worker import start_group_copy_worker
 from features.tasks.task_manager import (
@@ -273,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -1179,6 +1180,73 @@ def groups_page():
     return render_template("groups.html", active_page="groups")
 
 
+@app.route("/friends")
+def friends_page():
+    return render_template("friends.html", active_page="friends")
+
+
+@app.route("/api/friends", methods=["GET"])
+def api_friends_list():
+    """Danh sách bạn bè của tài khoản được chọn (API getfriends của Zalo Web)."""
+    account_id = str(request.args.get("accountId") or request.args.get("account_id") or "").strip()
+    if not account_id:
+        return jsonify({"success": False, "error": "Thiếu accountId."}), 400
+    account = get_account(account_id)
+    if not account:
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    cookies = str(account.get("cookies") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or "").strip()
+    imei = str(account.get("imei") or "").strip()
+    if not cookies or not zpw_enk:
+        return jsonify({"success": False, "error": "Tài khoản chưa đủ cookies/zpwEnk. Hãy mở lại tài khoản ở trang Tài khoản."}), 400
+    try:
+        from features.friends.friend_service import get_friend_list
+        friends = get_friend_list(zpw_enk, cookies, imei=imei)
+    except Exception as exc:
+        message = str(exc)
+        if "429" in message:
+            message = "Zalo đang giới hạn request (429). Hãy chờ 1-2 phút rồi bấm Làm mới."
+        elif len(message) > 220:
+            message = message[:220] + "..."
+        return jsonify({"success": False, "error": f"Không lấy được danh sách bạn bè: {message}"}), 502
+    return jsonify({"success": True, "friends": friends, "total": len(friends)})
+
+
+@app.route("/api/friends/remove", methods=["POST"])
+def api_friends_remove():
+    """Xóa kết bạn với một UID theo tài khoản được chọn."""
+    data = request.get_json(silent=True) or {}
+    account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
+    user_id = str(data.get("userId") or data.get("uid") or "").strip()
+    if not account_id or not user_id:
+        return jsonify({"success": False, "error": "Thiếu accountId hoặc userId."}), 400
+    account = get_account(account_id)
+    if not account:
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    cookies = str(account.get("cookies") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or "").strip()
+    imei = str(account.get("imei") or "").strip()
+    if not all([cookies, zpw_enk, imei]):
+        return jsonify({"success": False, "error": "Tài khoản chưa đủ cookies/zpwEnk/IMEI."}), 400
+    try:
+        from features.messaging.remove_friend import remove_friend
+        response_json, decoded = remove_friend(user_id, imei, zpw_enk, cookies, zpw_ver=get_zpw_ver())
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"Không xóa được bạn bè: {exc}"}), 502
+
+    outer_code = response_json.get("error_code", 0) if isinstance(response_json, dict) else -1
+    inner_code = decoded.get("error_code", 0) if isinstance(decoded, dict) else 0
+    ok = outer_code in (0, None) and inner_code in (0, None)
+    if not ok:
+        message = ""
+        if isinstance(decoded, dict):
+            message = str(decoded.get("error_message") or "")
+        if not message and isinstance(response_json, dict):
+            message = str(response_json.get("error_message") or "")
+        return jsonify({"success": False, "error": message or f"Zalo trả lỗi (code {outer_code}/{inner_code})."}), 502
+    return jsonify({"success": True, "message": "Đã xóa kết bạn."})
+
+
 @app.route("/schedules")
 def schedules_page():
     return render_template("schedules.html", active_page="marketing_group", initial_tab="group", page_title="Chiến dịch theo nhóm")
@@ -1326,6 +1394,55 @@ def api_messages_unread_list():
         return jsonify({"success": True, **payload})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/messages/reply", methods=["POST"])
+def api_messages_reply():
+    """API: trả lời (quote) một tin nhắn đã lưu trong danh sách."""
+    data = request.get_json(silent=True) or {}
+    item_id = str(data.get("itemId") or "").strip()
+    message = str(data.get("message") or "").strip()
+    if not item_id:
+        return jsonify({"success": False, "error": "Thiếu itemId."}), 400
+    if not message:
+        return jsonify({"success": False, "error": "Nội dung trả lời không được để trống."}), 400
+
+    payload = list_unread_messages()
+    item = next((x for x in payload.get("items", []) if x.get("id") == item_id), None)
+    if not item:
+        return jsonify({"success": False, "error": "Không tìm thấy tin nhắn để trả lời."}), 404
+
+    account_id = str(item.get("accountId") or "").strip()
+    account = get_account(account_id)
+    if not account:
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    cookies = str(account.get("cookies") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or "").strip()
+    imei = str(account.get("imei") or "").strip()
+    if not all([cookies, zpw_enk, imei]):
+        return jsonify({"success": False, "error": "Tài khoản chưa đủ cookies/zpwEnk/IMEI."}), 400
+
+    is_group = item.get("threadType") != "friend"
+    try:
+        from features.messaging.quote_message import quote_message
+        result = quote_message(
+            cookies, zpw_enk, imei,
+            thread_id=item.get("groupId"),
+            message=message,
+            is_group=is_group,
+            qmsg_owner=item.get("senderUid"),
+            qmsg_id=item.get("globalMsgId") or item.get("pinId"),
+            qmsg_cli_id=item.get("clientMsgId"),
+            qmsg_type=item.get("msgType"),
+            qmsg_ts=item.get("createTime"),
+            qmsg_text=item.get("title"),
+            zpw_ver=get_zpw_ver(),
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"Không gửi được trả lời: {exc}"}), 502
+    if not result.get("ok"):
+        return jsonify({"success": False, "error": result.get("message") or "Zalo từ chối gửi trả lời."}), 502
+    return jsonify({"success": True, "message": "Đã gửi trả lời."})
 
 
 @app.route("/api/messages/unread/<path:item_id>", methods=["DELETE"])
@@ -2955,31 +3072,79 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         raise ValueError("Không tìm thấy thành viên hợp lệ trong nhóm nguồn.")
 
     task.set_progress(85)
-    account_name = account.get("name") or account.get("displayName") or account_id
-    account_avatar = account.get("avatarUrl") or account.get("avatar") or ""
-    job = create_group_copy_job(
-        payload,
-        clean_members,
-        source_group,
-        account_name,
-        account_avatar=account_avatar,
-    )
+
+    # Danh sách tài khoản thực hiện (đã lọc trùng ở route). Tài khoản đầu là CHỦ.
+    account_ids = payload.get("accountIds") or [account_id]
+    account_ids = [str(a).strip() for a in account_ids if str(a or "").strip()]
+    if not account_ids:
+        account_ids = [account_id]
+
+    # Chia khối tuần tự: TK đầu nhận phần đầu danh sách, TK sau nhận phần tiếp theo.
+    n = len(account_ids)
+    k, m = divmod(len(clean_members), n)
+    blocks = [
+        clean_members[i * k + min(i, m):(i + 1) * k + min(i + 1, m)]
+        for i in range(n)
+    ]
+
+    is_multi = n > 1
+    target_mode = str(payload.get("targetMode") or "existing").strip()
+    jobs_created = []
+    master_job_id = ""
+    for idx, aid in enumerate(account_ids):
+        block = blocks[idx]
+        if not block:
+            continue  # tài khoản không được chia thành viên nào (danh sách ngắn hơn số TK)
+        acc = get_account(aid) or {}
+        acc_name = acc.get("name") or acc.get("displayName") or aid
+        acc_avatar = acc.get("avatarUrl") or acc.get("avatar") or ""
+
+        sub = dict(payload)
+        sub["accountId"] = aid
+        sub.pop("accountIds", None)
+        if is_multi:
+            sub["title"] = f"{payload.get('title') or 'Sao chép thành viên nhóm'} (TK {idx + 1}/{n} - {acc_name})"
+        if is_multi and idx > 0:
+            # Tài khoản phụ dùng CHUNG nhóm đích của tài khoản chủ.
+            if target_mode == "new":
+                # Nhóm chưa tạo lúc này -> chờ tài khoản chủ tạo xong (worker tự lấy).
+                sub["targetMode"] = "existing"
+                sub["targetGroupId"] = ""
+                sub["targetGroupLink"] = ""
+                sub["sharedTargetFromJobId"] = master_job_id
+            else:
+                sub["targetMode"] = "existing"
+                sub["targetGroupId"] = str(payload.get("targetGroupId") or "")
+                sub["targetGroupLink"] = str(payload.get("targetGroupLink") or "")
+
+        job = create_group_copy_job(sub, block, source_group, acc_name, account_avatar=acc_avatar)
+        # Ghi cờ nhiều tài khoản để worker biết + gắn master.
+        if is_multi:
+            def _tag(j, midx=idx, mid=master_job_id):
+                j["multiAccount"] = True
+                j["multiAccountIndex"] = midx
+                j["multiAccountTotal"] = n
+                if midx > 0 and target_mode == "new":
+                    j["sharedTargetFromJobId"] = mid
+            save_group_copy_job_mutation(job.get("jobId"), _tag)
+        if idx == 0:
+            master_job_id = job.get("jobId")
+        jobs_created.append(job)
+
     task.log(
-        f"Đã lập lịch {job.get('totalMembers', 0)} thành viên. "
-        f"Hệ thống ưu tiên thêm toàn bộ bạn bè trước, chỉ gửi tối đa "
-        f"{job.get('friendRequestDailyLimit', job.get('dailyLimit'))} lời mời kết bạn/ngày cho người chưa thêm được, "
-        f"sau đó thử add lại và kiểm tra nhóm đích mỗi {job.get('verifyIntervalMinutes', 30)} phút "
-        f"cho đến khi đủ thành viên hoặc hết {job.get('campaignDurationDays', 30)} ngày."
+        f"Đã lập lịch {len(clean_members)} thành viên"
+        + (f" chia cho {n} tài khoản (mỗi tài khoản một khối liên tiếp, không trùng)." if is_multi else ".")
+        + f" Mỗi tài khoản gửi tối đa {payload.get('friendRequestDailyLimit', payload.get('dailyLimit'))} lời mời kết bạn/ngày."
     )
+    first_job = jobs_created[0] if jobs_created else {}
     return {
-        "job": {key: value for key, value in job.items() if key != "members"},
+        "jobs": [{key: value for key, value in j.items() if key != "members"} for j in jobs_created],
+        "jobCount": len(jobs_created),
+        "accountCount": n,
         "sourceGroup": source_group,
-        "totalMembers": job.get("totalMembers", 0),
-        "friendCount": job.get("friendCount", 0),
-        "pendingInviteCount": job.get("pendingInviteCount", 0),
-        "verifyIntervalMinutes": job.get("verifyIntervalMinutes", 30),
-        "campaignDurationDays": job.get("campaignDurationDays", 30),
-        "campaignEndAt": job.get("campaignEndAt", ""),
+        "totalMembers": len(clean_members),
+        "verifyIntervalMinutes": first_job.get("verifyIntervalMinutes", 30),
+        "campaignDurationDays": first_job.get("campaignDurationDays", 30),
     }
 
 
@@ -3045,6 +3210,17 @@ def api_group_copy_job_verify(job_id):
 def api_group_copy_start():
     data = request.get_json(silent=True) or {}
     account_id = str(data.get("accountId") or "").strip()
+    # Nhiều tài khoản cùng thực hiện, chia khối thành viên không trùng.
+    raw_account_ids = data.get("accountIds") or []
+    if isinstance(raw_account_ids, str):
+        raw_account_ids = [x.strip() for x in raw_account_ids.split(",") if x.strip()]
+    account_ids = []
+    for aid in ([account_id] + list(raw_account_ids)):
+        aid = str(aid or "").strip()
+        if aid and aid not in account_ids:
+            account_ids.append(aid)
+    if not account_id and account_ids:
+        account_id = account_ids[0]
     source_input = str(data.get("sourceInput") or data.get("sourceGroup") or "").strip()
     source_group_id = str(data.get("sourceGroupId") or data.get("resolvedSourceGroupId") or "").strip()
     source_input_type, normalized_source_input = normalize_group_input(source_input)
@@ -3100,10 +3276,18 @@ def api_group_copy_start():
     account = get_account(account_id)
     if not account:
         return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    # Kiểm tra mọi tài khoản phụ đủ phiên.
+    for aid in account_ids:
+        acc = get_account(aid)
+        if not acc:
+            return jsonify({"success": False, "error": f"Không tìm thấy tài khoản {aid}."}), 404
+        if not all([acc.get("cookies"), acc.get("zpwEnk"), acc.get("imei")]):
+            return jsonify({"success": False, "error": f"Tài khoản {acc.get('name') or aid} chưa đủ phiên (cookies/zpwEnk/IMEI)."}), 400
 
     payload = {
         "title": str(data.get("title") or "Sao chép thành viên nhóm").strip(),
         "accountId": account_id,
+        "accountIds": account_ids,
         "sourceInput": source_input,
         "sourceInputType": source_input_type,
         "sourceGroupId": source_group_id or (source_input if source_input_type == "group_id" else ""),
@@ -3255,45 +3439,73 @@ def api_create_schedule_api():
         return jsonify({"error": "No data provided"}), 400
 
     try:
-        # Gắn thêm tên tài khoản gửi vào lịch để UI không hiện N/A
         account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
-        if account_id:
-            try:
-                accounts = load_accounts()
-                if isinstance(accounts, dict):
-                    iterable = accounts.values()
-                else:
-                    iterable = accounts
 
-                for acc in iterable:
-                    if not isinstance(acc, dict):
-                        continue
+        # Danh sách tài khoản gửi (nhiều tài khoản chia người nhận không trùng).
+        raw_ids = data.get("accountIds") or []
+        if isinstance(raw_ids, str):
+            raw_ids = [x.strip() for x in raw_ids.split(",") if x.strip()]
+        account_ids = []
+        for aid in ([account_id] + list(raw_ids)):
+            aid = str(aid or "").strip()
+            if aid and aid not in account_ids:
+                account_ids.append(aid)
+        if not account_id and account_ids:
+            account_id = account_ids[0]
 
-                    aid = str(
-                        acc.get("accountId")
-                        or acc.get("id")
-                        or acc.get("account_id")
-                        or ""
-                    ).strip()
+        # Map accountId -> tên hiển thị (để lịch không hiện N/A).
+        name_by_id = {}
+        try:
+            accounts = load_accounts()
+            iterable = accounts.values() if isinstance(accounts, dict) else accounts
+            for acc in iterable:
+                if not isinstance(acc, dict):
+                    continue
+                aid = str(acc.get("accountId") or acc.get("id") or acc.get("account_id") or "").strip()
+                if aid:
+                    name_by_id[aid] = (acc.get("name") or acc.get("displayName") or acc.get("zaloName") or acc.get("phone") or aid[:8])
+        except Exception as e:
+            print("[api_create_schedule_api] load account names failed:", e)
 
-                    if aid == account_id:
-                        account_name = (
-                            acc.get("name")
-                            or acc.get("displayName")
-                            or acc.get("zaloName")
-                            or acc.get("phone")
-                            or account_id[:8]
-                        )
-                        data["accountName"] = account_name
-                        data["senderName"] = account_name
-                        break
-            except Exception as e:
-                print("[api_create_schedule_api] attach accountName failed:", e)
+        recipients = data.get("recipients") or []
+        n = len(account_ids)
 
-        schedule = create_schedule(data)
+        # Một tài khoản: giữ nguyên hành vi cũ.
+        if n <= 1:
+            if account_id:
+                nm = name_by_id.get(account_id)
+                if nm:
+                    data["accountName"] = nm
+                    data["senderName"] = nm
+            schedule = create_schedule(data)
+            return jsonify({"success": True, "schedule": schedule})
+
+        # Nhiều tài khoản: chia người nhận thành khối tuần tự, mỗi tài khoản 1 lịch.
+        k, m = divmod(len(recipients), n)
+        blocks = [recipients[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
+        base_title = str(data.get("title") or "Chiến dịch").strip()
+        created = []
+        for idx, aid in enumerate(account_ids):
+            block = blocks[idx]
+            if not block:
+                continue
+            sub = dict(data)
+            sub.pop("accountIds", None)
+            sub["accountId"] = aid
+            nm = name_by_id.get(aid, aid[:8])
+            sub["accountName"] = nm
+            sub["senderName"] = nm
+            sub["title"] = f"{base_title} (TK {idx + 1}/{n} - {nm})"
+            sub["recipients"] = block
+            created.append(create_schedule(sub))
+        if not created:
+            return jsonify({"error": "Không có người nhận để chia cho các tài khoản."}), 400
         return jsonify({
             "success": True,
-            "schedule": schedule
+            "schedules": created,
+            "scheduleCount": len(created),
+            "accountCount": n,
+            "schedule": created[0],
         })
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

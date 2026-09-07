@@ -15,7 +15,7 @@
 
             <div class="sched-source-grid">
                 <div class="form-group">
-                    <label>Chọn tài khoản gửi</label>
+                    <label>Tài khoản lấy nhóm <span style="font-weight:400;color:var(--text-secondary)">(để đọc danh sách thành viên)</span></label>
                     <div id="schedGroupAccountDropdown" class="account-dropdown"></div>
                     <input type="hidden" id="schedGroupAccountId">
                 </div>
@@ -24,6 +24,15 @@
                     <label>Link nhóm hoặc Group ID</label>
                     <input type="text" id="schedGroupInput" placeholder="https://zalo.me/g/abc123 hoặc group_id">
                 </div>
+            </div>
+
+            <div class="form-group" style="margin-top:10px">
+                <label>Tài khoản thực hiện gửi <span style="font-weight:400;color:var(--text-secondary)">(chọn nhiều — chia người nhận không trùng, mỗi tài khoản một khối liên tiếp)</span></label>
+                <button type="button" id="schedGroupPickExecBtn" class="sched-exec-pick-btn" onclick="schedOpenExecPicker()">
+                    <span id="schedGroupExecLabel">Chọn tài khoản thực hiện</span>
+                    <span class="sched-exec-pick-add">＋ Thêm</span>
+                </button>
+                <div id="schedGroupExecChips" class="sched-extra-accounts" style="margin-top:8px"></div>
             </div>
         </section>
 

@@ -1498,3 +1498,31 @@ html[data-theme="light"] .schedmon-overlay-head h2 {
         gap: 6px;
     }
 }
+
+/* ─── Bảng người nhận trong modal chi tiết: chip lọc + badge màu ───────── */
+.schedmon-recip-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.schedmon-recip-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text-muted); font-size: 12.5px; font-weight: 600; transition: all .12s ease;
+}
+.schedmon-recip-chip:hover { color: var(--text); border-color: rgba(72,184,255,.4); }
+.schedmon-recip-chip span {
+    min-width: 20px; padding: 0 6px; height: 18px; line-height: 18px; text-align: center;
+    border-radius: 999px; background: rgba(128,128,128,.18); font-size: 11px; font-weight: 700;
+}
+.schedmon-recip-chip.active { color: #fff; border-color: transparent; }
+.schedmon-recip-chip.active.is-all { background: #4b5563; }
+.schedmon-recip-chip.active.is-success { background: #16a34a; }
+.schedmon-recip-chip.active.is-pending { background: #6b7280; }
+.schedmon-recip-chip.active.is-failed { background: #dc2626; }
+.schedmon-recip-chip.active span { background: rgba(255,255,255,.28); color: #fff; }
+
+.schedmon-recip-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.schedmon-recip-table th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface2); color: var(--text-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.schedmon-recip-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+.schedmon-recip-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.schedmon-recip-badge.is-success { background: rgba(22,163,74,.16); color: #16a34a; }
+.schedmon-recip-badge.is-pending { background: rgba(107,114,128,.16); color: #6b7280; }
+.schedmon-recip-badge.is-failed { background: rgba(220,38,38,.14); color: #dc2626; }

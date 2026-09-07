@@ -477,3 +477,62 @@
     .message-toolbar { grid-template-columns: 1fr; }
     .msg-workspace { grid-template-columns: 1fr; }
 }
+
+/* ─── Nút gạt Nhóm / Người dùng ở cột trái ─────────────────────────────── */
+.msg-thread-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    margin: 0 14px 10px;
+    padding: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+.msg-thread-toggle button {
+    height: 30px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .12s ease, color .12s ease, box-shadow .12s ease;
+}
+.msg-thread-toggle button:hover { color: var(--text); }
+.msg-thread-toggle button.active {
+    background: var(--surface);
+    color: var(--primary, #2563eb);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, .12);
+}
+
+/* ─── Ô trả lời (quote) tin nhắn trong panel chi tiết ──────────────────── */
+.msg-reply-box {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.msg-reply-input {
+    flex: 1 1 auto;
+    min-height: 40px;
+    max-height: 120px;
+    resize: vertical;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.msg-reply-input:focus {
+    outline: none;
+    border-color: rgba(72, 184, 255, .5);
+    box-shadow: 0 0 0 3px rgba(72, 184, 255, .1);
+}
+.msg-reply-box .btn { flex: 0 0 auto; height: 40px; }

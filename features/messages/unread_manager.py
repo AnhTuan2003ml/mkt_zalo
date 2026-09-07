@@ -44,6 +44,8 @@ def _load_store() -> Dict[str, Any]:
     store.setdefault("items", [])
     store.setdefault("dismissed", {})
     store.setdefault("groups", {})
+    store.setdefault("friends", {})       # meta bạn bè đã quét: {uid: {name, avatar, lastMsgId, ...}}
+    store.setdefault("friendsCache", {})  # cache danh sách bạn bè: {accountId: {fetchedAt, friends}}
     store.setdefault("lastSyncAt", "")
     store.setdefault("lastSyncMessage", "")
     if not isinstance(store["dismissed"], dict):
@@ -127,6 +129,24 @@ def list_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
                 "boardVersion": meta.get("boardVersion", 0),
             }
 
+    # Tin 1-1 (bạn bè + người lạ) đã quét hiển thị như "cuộc trò chuyện".
+    for fid, meta in (store.get("friends") or {}).items():
+        if fid in groups:
+            continue
+        is_stranger = bool(meta.get("isStranger"))
+        display_name = meta.get("name") or ("Người lạ" if is_stranger else fid)
+        groups[fid] = {
+            "name": display_name,
+            "avatar": meta.get("avatar", ""),
+            "accountId": meta.get("accountId", ""),
+            "accountName": meta.get("accountName", ""),
+            "lastSyncAt": meta.get("lastSyncAt", ""),
+            "lastError": meta.get("lastError", ""),
+            "boardVersion": 0,
+            "isFriend": True,       # thuộc tab "Người dùng"
+            "isStranger": is_stranger,
+        }
+
     items = [
         item for item in store.get("items", [])
         if (not account_id or item.get("accountId") == account_id)
@@ -179,6 +199,48 @@ def dismiss_group_messages(account_id: str, group_id: str) -> int:
             _cap_dismissed(store)
             _save_store(store)
     return removed
+
+
+# Danh sách bạn bè chỉ làm mới sau mỗi 30 phút để tránh Zalo rate-limit (429).
+_FRIENDS_CACHE_TTL_SEC = 30 * 60
+
+
+def _account_friends(account: dict) -> List[Dict[str, str]]:
+    """Danh sách bạn bè của tài khoản, cache trong db; lỗi thì dùng cache cũ."""
+    aid = str(account.get("accountId") or "").strip()
+    if not aid:
+        return []
+    with _store_lock:
+        store = _load_store()
+        cache = store["friendsCache"].get(aid) or {}
+    cached_friends = cache.get("friends")
+    fetched_at = float(cache.get("fetchedAt") or 0)
+    if cached_friends is not None and time.time() - fetched_at < _FRIENDS_CACHE_TTL_SEC:
+        return cached_friends or []
+
+    try:
+        from features.friends.friend_service import get_friend_list
+        friends = get_friend_list(
+            account.get("zpwEnk", ""),
+            account.get("cookies", ""),
+            imei=account.get("imei", ""),
+        )
+        slim = [
+            {
+                "userId": f["userId"],
+                "name": f.get("zaloName") or f.get("displayName") or f["userId"],
+                "avatar": f.get("avatar", ""),
+            }
+            for f in friends
+        ]
+        with _store_lock:
+            store = _load_store()
+            store["friendsCache"][aid] = {"fetchedAt": time.time(), "friends": slim}
+            _save_store(store)
+        return slim
+    except Exception as exc:
+        print(f"[unread_worker] Không làm mới được danh sách bạn bè ({aid}): {exc}", flush=True)
+        return cached_friends or []
 
 
 def _account_groups(account: dict) -> List[Dict[str, str]]:
@@ -239,8 +301,7 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
             continue
         if not all([acc.get("cookies"), acc.get("zpwEnk"), acc.get("imei")]):
             continue
-        if not _account_groups(acc):
-            continue
+        # Không còn bắt buộc có nhóm: tài khoản chỉ có bạn bè vẫn được quét tin 1-1.
         targets.append(acc)
 
     if not targets:
@@ -255,6 +316,7 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
                 "updatedCount": 0, "errorCount": 0, "message": message}
 
     groups_checked = 0
+    friends_checked = 0
     new_count = 0
     updated_count = 0
     error_count = 0
@@ -274,15 +336,24 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
         # Danh sách nhóm lấy trực tiếp từ personalGroups của TÀI KHOẢN tại thời
         # điểm quét (nguồn chân lý) — nhóm vừa đồng bộ thêm được quét ngay.
         group_by_id = {g["groupId"]: g for g in _account_groups(acc)}
+        # Bạn bè: quét tin 1-1 cùng request (thread hậu tố _0); danh sách cache 30 phút.
+        friend_by_id = {f["userId"]: f for f in _account_friends(acc)}
 
-        # Gửi kèm msgId mới nhất đã biết của từng nhóm ("0" = chưa biết) để
-        # server trả tin mới hơn; TẤT CẢ nhóm được kiểm tra trong MỘT request.
+        if not group_by_id and not friend_by_id:
+            continue
+
+        # Gửi kèm msgId mới nhất đã biết của từng thread ("0" = chưa biết) để
+        # server trả tin mới hơn; TẤT CẢ nhóm + bạn bè kiểm tra trong MỘT request.
         with _store_lock:
             store = _load_store()
             thread_map = {
                 f"{gid}_1": str((store["groups"].get(gid) or {}).get("lastMsgId") or "0")
                 for gid in group_by_id
             }
+            thread_map.update({
+                f"{fid}_0": str((store["friends"].get(fid) or {}).get("lastMsgId") or "0")
+                for fid in friend_by_id
+            })
 
         result = fetch_last_messages(
             thread_map,
@@ -291,6 +362,7 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
             imei=acc.get("imei", ""),
         )
         groups_checked += len(group_by_id)
+        friends_checked += len(friend_by_id)
         now = _now_str()
 
         if not result.get("ok"):
@@ -355,6 +427,76 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
                 existing_ids.add(key)
                 new_count += 1
 
+            # Tin 1-1: threadId = uid người trò chuyện. Server trả cả bạn bè lẫn
+            # NGƯỜI LẠ (người chưa kết bạn nhưng đã nhắn tin). Tin do chính mình
+            # gửi ("0"/"") chỉ cập nhật mốc msgId, không tạo nhắc mới.
+            friends_meta = store["friends"]
+            for um in result.get("userMsgs", []):
+                fid = um["threadId"]
+                if not fid:
+                    continue
+                friend = friend_by_id.get(fid)
+                is_stranger = friend is None
+                meta = friends_meta.setdefault(fid, {})
+                if friend:
+                    display_name = friend["name"]
+                    meta.update({
+                        "name": friend["name"],
+                        "avatar": friend.get("avatar", ""),
+                        "isStranger": False,
+                    })
+                else:
+                    # Người lạ: tên lấy từ cache đã resolve nếu có, chưa có thì để trống.
+                    cached = str(sender_names.get(fid) or meta.get("name") or "").strip()
+                    display_name = cached
+                    meta.setdefault("avatar", "")
+                    if cached:
+                        meta["name"] = cached
+                    meta["isStranger"] = True
+                meta.update({
+                    "accountId": aid,
+                    "accountName": acc_name,
+                    "lastSyncAt": now,
+                    "lastError": "",
+                })
+                if int(um["ts"]) >= int(meta.get("lastMsgTs") or 0):
+                    meta["lastMsgId"] = um["msgId"]
+                    meta["lastMsgTs"] = um["ts"]
+
+                if um["senderUid"] in ("", "0"):
+                    continue  # tin do chính tài khoản gửi
+                key = _item_key(aid, fid, um["msgId"])
+                if key in store["dismissed"] or key in existing_ids:
+                    continue
+                if oldest_ts_ms and int(um["ts"] or 0) < oldest_ts_ms:
+                    continue
+                if is_stranger and not display_name:
+                    pending_uids.add((aid, fid))  # resolve tên người lạ ở cuối
+                store["items"].append({
+                    "id": key,
+                    "accountId": aid,
+                    "accountName": acc_name,
+                    "groupId": fid,
+                    "groupName": display_name or ("Người lạ" if is_stranger else fid),
+                    "threadType": "friend",
+                    "isStranger": is_stranger,
+                    "pinId": um["msgId"],
+                    "emoji": "🕵️" if is_stranger else "👤",
+                    "title": um["text"],
+                    "thumb": um["thumb"],
+                    "href": um["href"],
+                    "senderUid": fid,
+                    "senderName": display_name or ("Người lạ" if is_stranger else fid),
+                    "clientMsgId": um["cliMsgId"],
+                    "globalMsgId": um["msgId"],
+                    "msgType": um["msgType"],
+                    "createTime": um["ts"],
+                    "editTime": 0,
+                    "fetchedAt": now,
+                })
+                existing_ids.add(key)
+                new_count += 1
+
             # Nhóm đã kiểm tra nhưng không có tin mới cũng ghi nhận lần quét.
             for gid, group in group_by_id.items():
                 meta = store["groups"].setdefault(gid, {})
@@ -388,7 +530,7 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
             _save_store(store)
 
     message = (
-        f"Đã kiểm tra {groups_checked} nhóm của {len(targets)} tài khoản: "
+        f"Đã kiểm tra {groups_checked} nhóm + {friends_checked} bạn bè của {len(targets)} tài khoản: "
         f"{new_count} tin nhắn mới"
         + (f", {error_count} lượt gọi lỗi." if error_count else ".")
     )
@@ -443,9 +585,19 @@ def _resolve_sender_names(targets: List[dict], pending_uids) -> None:
     with _store_lock:
         store = _load_store()
         store.setdefault("senderNames", {}).update(resolved)
+        placeholder = ("", "Người lạ")
         for item in store["items"]:
-            if not item.get("senderName") and item.get("senderUid") in resolved:
-                item["senderName"] = resolved[item["senderUid"]]
+            uid = item.get("senderUid")
+            if uid in resolved:
+                if item.get("senderName") in placeholder:
+                    item["senderName"] = resolved[uid]
+                # Tin 1-1 người lạ: cập nhật cả tên cuộc trò chuyện.
+                if item.get("threadType") == "friend" and item.get("groupName") in placeholder:
+                    item["groupName"] = resolved[uid]
+        # Cập nhật tên hiển thị cho meta người lạ trong danh sách cuộc trò chuyện.
+        for fid, meta in (store.get("friends") or {}).items():
+            if fid in resolved and meta.get("isStranger"):
+                meta["name"] = resolved[fid]
         _save_store(store)
 
 

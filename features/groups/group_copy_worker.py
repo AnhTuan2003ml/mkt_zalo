@@ -23,7 +23,7 @@ from typing import Optional
 from core.zalo.zalo_config import get_zpw_ver
 from features.accounts.account_manager import get_account
 from features.groups.add_group import create_group
-from features.groups.group_copy_manager import claim_due_job, save_job
+from features.groups.group_copy_manager import claim_due_job, save_job, get_job
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
 from features.members.get_members import get_members_by_group_id
@@ -607,6 +607,30 @@ class GroupCopyWorker:
             imei = str(account.get("imei") or "").strip()
             if not all([cookies, zpw_enk, imei]):
                 raise ValueError("Tài khoản chưa đủ cookies, zpwEnk hoặc IMEI.")
+
+            # Tài khoản phụ trong nhóm chung: chờ tài khoản chủ tạo xong nhóm đích
+            # rồi mượn Group ID + link, không tạo nhóm riêng.
+            shared_from = str(job.get("sharedTargetFromJobId") or "").strip()
+            if shared_from and not str(job.get("targetGroupId") or "").strip():
+                master = get_job(shared_from)
+                master_gid = str((master or {}).get("targetGroupId") or "").strip()
+                if master_gid:
+                    job["targetGroupId"] = master_gid
+                    job["targetGroupName"] = str((master or {}).get("targetGroupName") or master_gid)
+                    job["groupLink"] = str((master or {}).get("groupLink") or "")
+                    job["groupLinkEnabled"] = 1 if job["groupLink"] else 0
+                    job["targetMode"] = "existing"
+                    job["lastNotice"] = "Đã nhận nhóm đích chung từ tài khoản chính."
+                else:
+                    # Chủ chưa tạo nhóm xong: hoãn ~2 phút rồi thử lại.
+                    run_record["action"] = "wait_shared_target"
+                    run_record["status"] = "done"
+                    job["status"] = "pending"
+                    job["nextRunAt"] = (started_at + timedelta(minutes=2)).isoformat(timespec="seconds")
+                    job["lastNotice"] = "Đang chờ tài khoản chính tạo nhóm đích chung..."
+                    run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
+                    save_job(job)
+                    return
 
             if _campaign_expired(job, started_at):
                 run_record["action"] = "campaign_expired"

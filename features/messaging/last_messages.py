@@ -22,6 +22,9 @@ from features.messaging.board_pin import _normalize_thumb
 
 GET_LAST_MSGS_URL = "https://tt-convers-wpa.chat.zalo.me/api/preloadconvers/get-last-msgs"
 
+# Giới hạn số thread mỗi request để URL không vượt giới hạn header (HTTP 431).
+_MAX_THREADS_PER_CALL = 50
+
 
 def _cookie_dict(cookies: str) -> dict:
     result = {}
@@ -50,7 +53,22 @@ def _parse_content(msg_type: str, content):
 
     if msg_type == "chat.sticker":
         text = "[Sticker]"
-        thumb = ""
+        # content sticker chứa id (đôi khi là chuỗi JSON) -> dựng URL ảnh sticker
+        # theo đúng endpoint Zalo Web dùng để hiển thị.
+        raw = content
+        if isinstance(raw, str) and raw.strip().startswith("{"):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = {}
+        sticker_id = ""
+        if isinstance(raw, dict):
+            sticker_id = str(raw.get("id") or raw.get("stickerId") or "").strip()
+        # Host đúng theo bundle Zalo Web: api.zaloapp.com (trả image/png).
+        thumb = (
+            f"https://api.zaloapp.com/api/emoticon/sticker/webpc?eid={sticker_id}&size=130"
+            if sticker_id else ""
+        )
     elif msg_type == "chat.voice":
         text = "[Tin nhắn thoại]"
     elif msg_type in ("chat.video", "chat.video.msg"):
@@ -102,17 +120,52 @@ def _normalize_group_msg(m: dict) -> dict:
     }
 
 
+def _normalize_user_msg(m: dict) -> dict:
+    """Tin 1-1: threadId = uid của BẠN BÈ (uidFrom nếu họ gửi, idTo nếu mình gửi)."""
+    text, thumb, href = _parse_content(m.get("msgType"), m.get("content"))
+    uid_from = str(m.get("uidFrom") or "").strip()
+    id_to = str(m.get("idTo") or "").strip()
+    thread_id = uid_from if uid_from not in ("", "0") else id_to
+    return {
+        "threadId": thread_id,
+        "msgId": str(m.get("msgId") or "").strip(),
+        "cliMsgId": str(m.get("cliMsgId") or "").strip(),
+        "senderUid": uid_from,  # "0" = tài khoản đang dùng
+        "msgType": str(m.get("msgType") or ""),
+        "ts": int(m.get("ts") or 0),
+        "text": text,
+        "thumb": thumb,
+        "href": href,
+    }
+
+
 def fetch_last_messages(thread_map: dict, cookies: str, zpw_enk: str, imei: str,
                         zpw_ver: str = None, timeout: int = 20) -> dict:
     """Gọi get-last-msgs với map {"<threadId>_1|_0": "<msgId đã biết>"}.
 
     Returns:
-        {"ok": bool, "groupMsgs": [tin nhóm đã chuẩn hóa], "message": str}
+        {"ok": bool, "groupMsgs": [tin nhóm], "userMsgs": [tin 1-1], "message": str}
     """
     from core.zalo.zalo_config import get_zpw_ver as _get_zpw_ver
 
     if not thread_map:
-        return {"ok": True, "groupMsgs": [], "message": "Không có thread nào cần kiểm tra"}
+        return {"ok": True, "groupMsgs": [], "userMsgs": [], "message": "Không có thread nào cần kiểm tra"}
+
+    # Quá nhiều thread trong 1 request GET làm URL vượt giới hạn (HTTP 431),
+    # nên chia thành từng đợt nhỏ rồi gộp kết quả.
+    if len(thread_map) > _MAX_THREADS_PER_CALL:
+        entries = list(thread_map.items())
+        all_group, all_user = [], []
+        for i in range(0, len(entries), _MAX_THREADS_PER_CALL):
+            part = dict(entries[i:i + _MAX_THREADS_PER_CALL])
+            res = fetch_last_messages(part, cookies, zpw_enk, imei, zpw_ver=zpw_ver, timeout=timeout)
+            if not res.get("ok"):
+                res["groupMsgs"] = all_group + (res.get("groupMsgs") or [])
+                res["userMsgs"] = all_user + (res.get("userMsgs") or [])
+                return res
+            all_group.extend(res.get("groupMsgs") or [])
+            all_user.extend(res.get("userMsgs") or [])
+        return {"ok": True, "groupMsgs": all_group, "userMsgs": all_user, "message": "OK"}
 
     zpw_ver = _get_zpw_ver(zpw_ver)
     payload = {
@@ -133,18 +186,18 @@ def fetch_last_messages(thread_map: dict, cookies: str, zpw_enk: str, imei: str,
             proxies={"http": None, "https": None},
         )
     except requests.exceptions.RequestException as e:
-        return {"ok": False, "groupMsgs": [], "message": f"Lỗi kết nối: {e}"}
+        return {"ok": False, "groupMsgs": [], "userMsgs": [], "message": f"Lỗi kết nối: {e}"}
 
     if response.status_code != 200:
-        return {"ok": False, "groupMsgs": [], "message": f"HTTP {response.status_code}"}
+        return {"ok": False, "groupMsgs": [], "userMsgs": [], "message": f"HTTP {response.status_code}"}
 
     try:
         resp_json = response.json()
     except Exception:
-        return {"ok": False, "groupMsgs": [], "message": "Response không phải JSON"}
+        return {"ok": False, "groupMsgs": [], "userMsgs": [], "message": "Response không phải JSON"}
 
     if resp_json.get("error_code", 0) not in (0, None):
-        return {"ok": False, "groupMsgs": [],
+        return {"ok": False, "groupMsgs": [], "userMsgs": [],
                 "message": resp_json.get("error_message", "Lỗi API")}
 
     data_field = resp_json.get("data", "")
@@ -152,15 +205,15 @@ def fetch_last_messages(thread_map: dict, cookies: str, zpw_enk: str, imei: str,
         try:
             decoded = zalo_decode(data_field, zpw_enk)
         except Exception as e:
-            return {"ok": False, "groupMsgs": [], "message": f"Giải mã thất bại: {e}"}
+            return {"ok": False, "groupMsgs": [], "userMsgs": [], "message": f"Giải mã thất bại: {e}"}
     else:
         decoded = data_field
     if not isinstance(decoded, dict):
-        return {"ok": False, "groupMsgs": [], "message": "Response không hợp lệ"}
+        return {"ok": False, "groupMsgs": [], "userMsgs": [], "message": "Response không hợp lệ"}
 
     inner_code = decoded.get("error_code", 0)
     if inner_code not in (0, None):
-        return {"ok": False, "groupMsgs": [],
+        return {"ok": False, "groupMsgs": [], "userMsgs": [],
                 "message": decoded.get("error_message", "Lỗi API")}
     data_obj = decoded.get("data", decoded)
     if not isinstance(data_obj, dict):
@@ -174,4 +227,12 @@ def fetch_last_messages(thread_map: dict, cookies: str, zpw_enk: str, imei: str,
         if gm["groupId"] and gm["msgId"]:
             group_msgs.append(gm)
 
-    return {"ok": True, "groupMsgs": group_msgs, "message": "OK"}
+    user_msgs = []
+    for m in data_obj.get("msgs", []) or []:
+        if not isinstance(m, dict):
+            continue
+        um = _normalize_user_msg(m)
+        if um["threadId"] and um["msgId"]:
+            user_msgs.append(um)
+
+    return {"ok": True, "groupMsgs": group_msgs, "userMsgs": user_msgs, "message": "OK"}

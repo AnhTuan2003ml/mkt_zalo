@@ -54,6 +54,10 @@
             <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M8 11h6"/></svg></span>
             <span class="nav-copy"><strong>Thành viên</strong><small>Lấy danh sách từ nhóm</small></span>
         </a>
+        <a data-nexus-workspace-nav href="{{ url_for('friends_page') }}" data-nav-color="pink" class="{% if active_page == 'friends' %}active{% endif %}" {% if active_page == 'friends' %}aria-current="page"{% endif %}>
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M19 8v6M22 11h-6"/></svg></span>
+            <span class="nav-copy"><strong>Bạn bè</strong><small>Danh sách bạn bè tài khoản</small></span>
+        </a>
         <a data-nexus-workspace-nav href="{{ url_for('messages_page') }}" data-nav-color="rose" class="{% if active_page == 'messages' %}active{% endif %}" {% if active_page == 'messages' %}aria-current="page"{% endif %}>
             <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></span>
             <span class="nav-copy"><strong>Tin nhắn <span class="nav-beta-tag" title="Tính năng đang trong giai đoạn phát triển">Beta</span></strong><small>Tin nhóm mới</small></span>

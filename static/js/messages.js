@@ -6,6 +6,7 @@ let messageState = {
     items: [],
     groups: {},
     selectedAccount: '',
+    threadFilter: 'group', // 'group' = tin nhóm, 'friend' = tin người dùng (bạn bè)
     selectedGroup: '', // '' = tất cả nhóm có tin
     selectedItemId: '',
     dayFilter: '0', // '0' = hôm nay, '1' = hôm qua, '2' = 2 ngày trước... 'all' = tất cả
@@ -318,14 +319,32 @@ function dayFilterRange() {
     return { from: start.getTime(), to: start.getTime() + 86400000 };
 }
 
+function itemIsFriend(item) {
+    return item.threadType === 'friend';
+}
+
 function filteredItems() {
     const range = dayFilterRange();
-    if (!range) return messageState.items;
+    const wantFriend = messageState.threadFilter === 'friend';
     return messageState.items.filter(item => {
+        if (itemIsFriend(item) !== wantFriend) return false;
+        if (!range) return true;
         const ts = Number(item.createTime || 0);
         return ts >= range.from && ts < range.to;
     });
 }
+
+function msgSetThreadFilter(filter) {
+    messageState.threadFilter = filter === 'friend' ? 'friend' : 'group';
+    messageState.selectedGroup = '';
+    messageState.selectedItemId = '';
+    const gBtn = qs('msgToggleGroup');
+    const fBtn = qs('msgToggleFriend');
+    if (gBtn) gBtn.classList.toggle('active', messageState.threadFilter === 'group');
+    if (fBtn) fBtn.classList.toggle('active', messageState.threadFilter === 'friend');
+    renderAll();
+}
+window.msgSetThreadFilter = msgSetThreadFilter;
 
 function buildDayFilterOptions() {
     const sel = qs('msgDayFilter');
@@ -351,14 +370,18 @@ function visibleGroups() {
         latest[item.groupId] = Math.max(latest[item.groupId] || 0, Number(item.createTime) || 0);
     });
     const rows = [];
+    const wantFriend = messageState.threadFilter === 'friend';
     Object.entries(messageState.groups).forEach(([gid, meta]) => {
         if (messageState.selectedAccount && meta.accountId !== messageState.selectedAccount) return;
+        if (!!meta.isFriend !== wantFriend) return; // đúng loại theo nút gạt Nhóm/Người dùng
         if (!counts[gid]) return; // nhóm không có tin mới thì không đưa vào danh sách
         rows.push({
             groupId: gid,
             name: meta.name || gid,
             avatar: meta.avatar || '',
             lastError: meta.lastError || '',
+            isFriend: !!meta.isFriend,
+            isStranger: !!meta.isStranger,
             count: counts[gid],
             latest: latest[gid] || 0,
         });
@@ -386,7 +409,8 @@ function renderAll() {
 function renderGroupList(groups) {
     const wrap = qs('msgGroupList');
     const countEl = qs('msgGroupCount');
-    if (countEl) countEl.textContent = `${groups.length} nhóm có tin mới`;
+    const threadLabel = messageState.threadFilter === 'friend' ? 'người dùng' : 'nhóm';
+    if (countEl) countEl.textContent = `${groups.length} ${threadLabel} có tin mới`;
     if (!wrap) return;
     if (!groups.length) {
         wrap.innerHTML = '<div class="empty-state">Chưa có tin nhắn mới.<br>Bấm "Quét ngay" để kiểm tra.</div>';
@@ -398,7 +422,7 @@ function renderGroupList(groups) {
             <span class="msg-group-avatar msg-group-avatar-all">☰</span>
             <span class="msg-group-info">
                 <span class="msg-group-name">Tất cả tin nhắn</span>
-                <span class="msg-group-sub">${groups.length} nhóm có tin mới</span>
+                <span class="msg-group-sub">${groups.length} ${threadLabel} có tin mới</span>
             </span>
             <span class="unread-badge">${filteredItems().length}</span>
         </button>`;
@@ -407,7 +431,7 @@ function renderGroupList(groups) {
             ${avatarImg(g.avatar, g.name, 'msg-group-avatar')}
             <span class="msg-group-info">
                 <span class="msg-group-name">${escapeHtml(g.name)}</span>
-                <span class="msg-group-sub ${g.lastError ? 'err' : ''}">${escapeHtml(g.lastError || formatPinTime(g.latest))}</span>
+                <span class="msg-group-sub ${g.lastError ? 'err' : ''}">${g.isFriend ? (g.isStranger ? '🕵️ Người lạ · ' : '👤 Bạn bè · ') : ''}${escapeHtml(g.lastError || formatPinTime(g.latest))}</span>
             </span>
             <span class="unread-badge">${g.count}</span>
         </button>
@@ -457,7 +481,7 @@ function renderMessageList() {
             <span class="mf-snippet">${escapeHtml(snippet) || '<em>(Không có nội dung chữ)</em>'}</span>
             <span class="mf-tags">
                 ${!gid ? `<span class="mf-group">${escapeHtml(item.groupName || '')}</span>` : ''}
-                ${item.thumb ? '<span class="mf-flag">📷 Ảnh</span>' : ''}
+                ${item.thumb ? (item.msgType === 'chat.sticker' ? '<span class="mf-flag">🙂 Sticker</span>' : '<span class="mf-flag">📷 Ảnh</span>') : ''}
                 ${item.href ? '<span class="mf-flag">🔗 Link</span>' : ''}
             </span>
         </button>`;
@@ -484,6 +508,12 @@ function renderDetail() {
     }
     empty.hidden = true;
     detail.hidden = false;
+    // Đổi tin đang xem thì xóa nội dung trả lời đang gõ dở.
+    if (messageState._replyForItem !== item.id) {
+        const rin = qs('msgReplyText');
+        if (rin) rin.value = '';
+        messageState._replyForItem = item.id;
+    }
     qs('msgDetailSender').textContent = item.senderName || 'Không rõ người gửi';
     qs('msgDetailMeta').textContent = `${item.groupName || item.groupId} • ${formatPinTime(item.createTime)}`;
     body.innerHTML = `
@@ -494,6 +524,30 @@ function renderDetail() {
     `;
     body.scrollTop = 0;
 }
+
+async function sendMessageReply() {
+    const item = currentItems().find(x => x.id === messageState.selectedItemId);
+    if (!item) return;
+    const input = qs('msgReplyText');
+    const text = String(input ? input.value : '').trim();
+    if (!text) { showMessageStatus('Chưa nhập nội dung trả lời.', 'error'); return; }
+    const btn = qs('btnMsgReply');
+    const old = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Đang gửi...'; }
+    try {
+        const data = await apiJson('/api/messages/reply', {
+            method: 'POST',
+            body: JSON.stringify({ itemId: item.id, message: text }),
+        });
+        showMessageStatus(data.message || 'Đã gửi trả lời.', 'success');
+        if (input) input.value = '';
+    } catch (err) {
+        showMessageStatus('Gửi trả lời lỗi: ' + err.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = old; }
+    }
+}
+window.sendMessageReply = sendMessageReply;
 
 async function deleteCurrentItem() {
     const items = currentItems();

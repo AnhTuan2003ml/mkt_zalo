@@ -297,6 +297,7 @@ function schedLoadAccounts() {
             var c2 = document.getElementById('schedPhoneAccountDropdown');
             var c3 = document.getElementById('schedPersonalGroupAccountDropdown');
             if (c1) createAccountDropdownForSched(c1, 'schedGroupAccountId');
+            schedRenderExtraAccounts();
             if (c2) createAccountDropdownForSched(c2, 'schedPhoneAccountId');
             if (c3) {
                 createAccountDropdownForSched(c3, 'schedPersonalGroupAccountId');
@@ -311,6 +312,118 @@ function schedLoadAccounts() {
 function schedGetAccountIdValue(acc) {
     return String((acc && (acc.accountId || acc.id || acc.account_id)) || '').trim();
 }
+
+// ─── Tài khoản thực hiện gửi (chọn nhiều qua popup, chia người nhận) ─────────
+// Lưu tập tài khoản thực hiện do người dùng chọn. Mặc định rỗng = dùng tài
+// khoản lấy nhóm. Tài khoản lấy nhóm luôn được coi là một tài khoản thực hiện.
+var _schedGroupExecAccounts = new Set();
+
+function schedExecAccountList() {
+    // Danh sách cuối cùng: tài khoản lấy nhóm đứng đầu + các tài khoản đã tick.
+    var masterId = (document.getElementById('schedGroupAccountId') || {}).value || '';
+    var ids = [];
+    if (masterId) ids.push(masterId);
+    _schedGroupExecAccounts.forEach(function (id) { if (id && ids.indexOf(id) === -1) ids.push(id); });
+    return ids;
+}
+
+function schedRenderExtraAccounts() {
+    // Cập nhật nhãn nút + chip tóm tắt các tài khoản thực hiện đã chọn.
+    var chips = document.getElementById('schedGroupExecChips');
+    var label = document.getElementById('schedGroupExecLabel');
+    var ids = schedExecAccountList();
+    // Loại tài khoản không còn tồn tại.
+    _schedGroupExecAccounts.forEach(function (id) {
+        if (!(_schedAccounts || []).some(function (a) { return schedGetAccountIdValue(a) === id; })) _schedGroupExecAccounts.delete(id);
+    });
+    if (label) label.textContent = ids.length > 1
+        ? ('Đang dùng ' + ids.length + ' tài khoản thực hiện')
+        : 'Chọn tài khoản thực hiện';
+    if (!chips) return;
+    if (!ids.length) { chips.innerHTML = ''; return; }
+    chips.innerHTML = ids.map(function (id, i) {
+        var a = schedFindAccountById(id) || {};
+        var name = a.name || a.zaloName || a.displayName || a.phone || id;
+        var isMaster = i === 0;
+        return '<span class="sched-extra-chip active">' + escapeHtmlSchedules(name)
+            + (isMaster ? ' <small style="opacity:.7">(lấy nhóm)</small>' : '')
+            + (isMaster ? '' : ' <b data-exec-remove="' + escapeHtmlSchedules(id) + '" style="cursor:pointer;margin-left:4px">✕</b>')
+            + '</span>';
+    }).join('');
+    chips.querySelectorAll('[data-exec-remove]').forEach(function (x) {
+        x.addEventListener('click', function () {
+            _schedGroupExecAccounts.delete(x.getAttribute('data-exec-remove'));
+            schedRenderExtraAccounts();
+        });
+    });
+}
+
+// ─── Popup chọn tài khoản thực hiện ─────────────────────────────────────────
+function schedOpenExecPicker() {
+    var ov = document.getElementById('schedExecPickerOverlay');
+    if (ov) ov.classList.add('open');
+    schedRenderExecPickerList();
+}
+function schedCloseExecPicker() {
+    var ov = document.getElementById('schedExecPickerOverlay');
+    if (ov) ov.classList.remove('open');
+    schedRenderExtraAccounts();
+}
+function schedRenderExecPickerList() {
+    var list = document.getElementById('schedExecPickerList');
+    if (!list) return;
+    var masterId = (document.getElementById('schedGroupAccountId') || {}).value || '';
+    var q = String((document.getElementById('schedExecSearch') || {}).value || '').toLowerCase().trim();
+    var accounts = (_schedAccounts || []).filter(function (a) {
+        if (!q) return true;
+        var name = (a.name || a.zaloName || a.displayName || a.phone || '').toLowerCase();
+        return name.indexOf(q) !== -1 || schedGetAccountIdValue(a).indexOf(q) !== -1;
+    });
+    if (!accounts.length) { list.innerHTML = '<div class="exec-picker-empty">Không có tài khoản phù hợp.</div>'; return; }
+    list.innerHTML = accounts.map(function (a) {
+        var id = schedGetAccountIdValue(a);
+        var ready = !!(window.NexusSession && NexusSession.accountReady(a, true));
+        var name = a.name || a.zaloName || a.displayName || a.phone || id;
+        var av = normalizeAvatarUrlSchedules(a.avatarUrl || a.avatar || '');
+        var isMaster = id === masterId;
+        var checked = isMaster || _schedGroupExecAccounts.has(id);
+        return '<label class="exec-picker-item' + (checked ? ' checked' : '') + (ready ? '' : ' disabled') + '">'
+            + '<input type="checkbox" ' + (checked ? 'checked' : '') + ((!ready || isMaster) ? ' disabled' : '')
+            + ' data-exec-id="' + escapeHtmlSchedules(id) + '">'
+            + (av ? '<img src="' + escapeHtmlSchedules(av) + '" class="exec-picker-avatar">' : '<span class="exec-picker-avatar placeholder"></span>')
+            + '<span class="exec-picker-info"><b>' + escapeHtmlSchedules(name) + (isMaster ? ' (lấy nhóm)' : '') + '</b>'
+            + '<small>' + escapeHtmlSchedules(id) + (ready ? '' : ' · thiếu phiên') + '</small></span></label>';
+    }).join('');
+    list.querySelectorAll('input[data-exec-id]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var id = cb.getAttribute('data-exec-id');
+            if (cb.checked) _schedGroupExecAccounts.add(id); else _schedGroupExecAccounts.delete(id);
+            cb.closest('.exec-picker-item').classList.toggle('checked', cb.checked);
+            schedUpdateExecPickerCount();
+        });
+    });
+    schedUpdateExecPickerCount();
+}
+function schedUpdateExecPickerCount() {
+    var el = document.getElementById('schedExecPickerCount');
+    if (el) el.textContent = 'Đã chọn ' + schedExecAccountList().length + ' tài khoản';
+}
+function schedExecToggleAll(on) {
+    var masterId = (document.getElementById('schedGroupAccountId') || {}).value || '';
+    (_schedAccounts || []).forEach(function (a) {
+        var id = schedGetAccountIdValue(a);
+        if (id === masterId) return;
+        var ready = !!(window.NexusSession && NexusSession.accountReady(a, true));
+        if (!ready) return;
+        if (on) _schedGroupExecAccounts.add(id); else _schedGroupExecAccounts.delete(id);
+    });
+    schedRenderExecPickerList();
+}
+window.schedOpenExecPicker = schedOpenExecPicker;
+window.schedCloseExecPicker = schedCloseExecPicker;
+window.schedRenderExecPickerList = schedRenderExecPickerList;
+window.schedExecToggleAll = schedExecToggleAll;
+window.schedRenderExtraAccounts = schedRenderExtraAccounts;
 
 function schedFindAccountById(accountId) {
     accountId = String(accountId || '').trim();
@@ -388,6 +501,8 @@ function createAccountDropdownForSched(container, hiddenInputId) {
                     _schedMembers = [];
                     _schedSelectedMembers.clear();
                     _schedGroupInfo = null;
+                    _schedGroupExecAccounts.delete(aid);
+                    schedRenderExtraAccounts();
                     var sec = document.getElementById('schedMembersSection');
                     if (sec) sec.style.display = 'none';
                 } else if (hiddenInputId === 'schedPhoneAccountId') {
@@ -527,6 +642,8 @@ function schedSaveSchedule() {
         }).map(function(m) { return { userId: m.userId, zaloName: m.zaloName, avatar: m.avatar }; });
         data.groupInfo = _schedGroupInfo;
         data.skipLeaders = schedSkipLeadersOn();
+        // Nhiều tài khoản thực hiện gửi (chọn qua popup): chia người nhận không trùng.
+        data.accountIds = schedExecAccountList();
         data.rateLimit.minDelaySec = parseInt((document.getElementById('schedGroupMinDelay') || {}).value) || 3;
         data.rateLimit.maxDelaySec = parseInt((document.getElementById('schedGroupMaxDelay') || {}).value) || 5;
         data.rateLimit.maxConsecutiveErrors = parseInt((document.getElementById('schedGroupMaxErrors') || {}).value) || 5;
@@ -598,7 +715,11 @@ function schedSaveSchedule() {
         .then(function(r) { return r.json(); })
         .then(function(j) {
             if (j.error) { schedShowNotif('Lỗi', j.error, 'error'); return; }
-            schedShowNotif('Thành công', 'Đã lưu lịch! Xem tiến độ tại trang Lịch gửi.', 'success');
+            if (j.scheduleCount && j.scheduleCount > 1) {
+                schedShowNotif('Thành công', 'Đã tạo ' + j.scheduleCount + ' lịch cho ' + j.accountCount + ' tài khoản (chia người nhận không trùng). Xem tại trang Lịch gửi.', 'success');
+            } else {
+                schedShowNotif('Thành công', 'Đã lưu lịch! Xem tiến độ tại trang Lịch gửi.', 'success');
+            }
         })
         .catch(function(e) { schedShowNotif('Lỗi', e.message, 'error'); })
         .finally(function() { if (btn) { btn.disabled = false; btn.innerHTML = orig; } });

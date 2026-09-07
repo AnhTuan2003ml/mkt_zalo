@@ -777,11 +777,20 @@
             if (!recipients.length) {
                 html += '<div style="color:var(--text-muted);font-size:13px;">Không có người nhận.</div>';
             } else {
-                html += '<div style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;">';
-                html += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>';
-                html += '<th style="text-align:left;padding:8px;border-bottom:1px solid var(--border);">Tên / Nhóm</th>';
-                html += '<th style="text-align:left;padding:8px;border-bottom:1px solid var(--border);">ID / Phone</th>';
-                html += '<th style="text-align:left;padding:8px;border-bottom:1px solid var(--border);">Trạng thái</th>';
+                // Chip lọc để quan sát mạch lạc: ai đã gửi, ai lỗi, ai chưa gửi.
+                var chipDefs = [
+                    { key: 'all', label: 'Tất cả', n: recipients.length },
+                    { key: 'success', label: 'Đã gửi', n: ok },
+                    { key: 'pending', label: 'Chưa gửi', n: pending },
+                    { key: 'failed', label: 'Lỗi', n: fail },
+                ];
+                html += '<div class="schedmon-recip-filters">' + chipDefs.map(function (c) {
+                    return '<button type="button" class="schedmon-recip-chip is-' + c.key + (c.key === 'all' ? ' active' : '') + '" data-recip-filter="' + c.key + '">'
+                        + escHtml(c.label) + '<span>' + c.n + '</span></button>';
+                }).join('') + '</div>';
+                html += '<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;" id="schedmonRecipWrap">';
+                html += '<table class="schedmon-recip-table"><thead><tr>';
+                html += '<th>Tên / Nhóm</th><th>ID / Phone</th><th>Trạng thái</th>';
                 html += '</tr></thead><tbody>';
                 recipients.forEach(function (r) {
                     var rid = r.userId || r.uid || r.id || r.groupId || '';
@@ -789,15 +798,30 @@
                     var phone = r.phone || r.phoneNumber || '';
                     var res = results.find(function (x) { return String(x.userId || x.uid || x.id || x.groupId || '') === String(rid); }) || {};
                     var rst = res.status || 'pending';
-                    var rstText = rst === 'success' ? 'Thành công' : (rst === 'failed' ? 'Lỗi' : 'Chưa gửi');
-                    html += '<tr><td style="padding:8px;border-bottom:1px solid var(--border);">' + escHtml(name) + '</td>' +
-                        '<td style="padding:8px;border-bottom:1px solid var(--border);font-family:monospace;word-break:break-all;">' + escHtml(rid || phone || '-') + '</td>' +
-                        '<td style="padding:8px;border-bottom:1px solid var(--border);">' + escHtml(rstText) + '</td></tr>';
+                    if (rst !== 'success' && rst !== 'failed') rst = 'pending';
+                    var rstText = rst === 'success' ? 'Đã gửi' : (rst === 'failed' ? 'Lỗi' : 'Chưa gửi');
+                    html += '<tr data-recip-status="' + rst + '"><td>' + escHtml(name) + '</td>' +
+                        '<td style="font-family:monospace;word-break:break-all;">' + escHtml(rid || phone || '-') + '</td>' +
+                        '<td><span class="schedmon-recip-badge is-' + rst + '">' + escHtml(rstText) + '</span></td></tr>';
                 });
                 html += '</tbody></table></div>';
             }
 
             setModal('Chi tiết lịch - ' + (sch.title || scheduleId), html);
+            // Gắn lọc trạng thái người nhận sau khi modal render.
+            var modalRoot = document.getElementById('detailModal');
+            if (modalRoot) {
+                var chips = modalRoot.querySelectorAll('[data-recip-filter]');
+                chips.forEach(function (chip) {
+                    chip.addEventListener('click', function () {
+                        var f = chip.getAttribute('data-recip-filter');
+                        chips.forEach(function (c) { c.classList.toggle('active', c === chip); });
+                        modalRoot.querySelectorAll('#schedmonRecipWrap tbody tr').forEach(function (tr) {
+                            tr.hidden = (f !== 'all' && tr.getAttribute('data-recip-status') !== f);
+                        });
+                    });
+                });
+            }
         }).catch(function (e) { showNotif('Lỗi', e.message || 'Không tải được chi tiết lịch', 'error'); });
     }
 

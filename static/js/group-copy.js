@@ -3,6 +3,7 @@
 
     var state = {
         accounts: [],
+        extraAccountIds: new Set(),
         groups: [],
         targetMode: 'new',
         pollingTask: false,
@@ -18,6 +19,7 @@
         detailTab: 'overview',
         detailJob: null,
         memberSearch: '',
+        memberFilter: 'all',
         sourceGroupInfo: null,
         sourcePreviewToken: 0,
         sourcePreviewController: null,
@@ -361,8 +363,100 @@
             state.groupLinkPollTimer = null;
             renderTargetPreview();
         }
+        // Tài khoản chủ không được đồng thời là tài khoản phụ.
+        if (state.extraAccountIds && state.extraAccountIds.has(accountId)) {
+            state.extraAccountIds.delete(accountId);
+        }
+        renderExtraAccounts();
         await loadGroups();
     }
+
+    function escapeText(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ─── Tài khoản thực hiện (chọn nhiều qua popup, chia việc không trùng) ───
+    // Danh sách cuối = tài khoản chủ đứng đầu + các tài khoản đã tick.
+    function execAccountList() {
+        var masterId = (($('groupCopyAccount') || {}).value || '').trim();
+        var ids = [];
+        if (masterId) ids.push(masterId);
+        state.extraAccountIds.forEach(function (id) { if (id && ids.indexOf(id) === -1) ids.push(id); });
+        return ids;
+    }
+
+    function renderExtraAccounts() {
+        if (!state.extraAccountIds) state.extraAccountIds = new Set();
+        // Loại tài khoản không còn tồn tại.
+        state.extraAccountIds.forEach(function (id) {
+            if (!state.accounts.some(function (a) { return getAccountId(a) === id; })) state.extraAccountIds.delete(id);
+        });
+        var label = $('groupCopyExecLabel');
+        var ids = execAccountList();
+        if (label) label.textContent = ids.length > 1 ? ('Đang dùng ' + ids.length + ' tài khoản thực hiện') : 'Chọn tài khoản thực hiện';
+    }
+
+    function renderExecList() {
+        var list = $('groupCopyExecList');
+        if (!list) return;
+        var masterId = (($('groupCopyAccount') || {}).value || '').trim();
+        var q = String(($('groupCopyExecSearch') || {}).value || '').toLowerCase().trim();
+        var accounts = state.accounts.filter(function (a) {
+            if (!q) return true;
+            return getAccountName(a).toLowerCase().indexOf(q) !== -1 || getAccountId(a).indexOf(q) !== -1;
+        });
+        if (!accounts.length) { list.innerHTML = '<div class="exec-picker-empty">Không có tài khoản phù hợp.</div>'; return; }
+        list.innerHTML = accounts.map(function (a) {
+            var id = getAccountId(a);
+            var ready = accountReady(a);
+            var isMaster = id === masterId;
+            var checked = isMaster || state.extraAccountIds.has(id);
+            var av = getAccountAvatar(a);
+            return '<label class="exec-picker-item' + (checked ? ' checked' : '') + (ready ? '' : ' disabled') + '">'
+                + '<input type="checkbox" ' + (checked ? 'checked' : '') + ((!ready || isMaster) ? ' disabled' : '') + ' data-exec-id="' + escapeText(id) + '">'
+                + (av ? '<img src="' + escapeText(av) + '" class="exec-picker-avatar">' : '<span class="exec-picker-avatar placeholder"></span>')
+                + '<span class="exec-picker-info"><b>' + escapeText(getAccountName(a)) + (isMaster ? ' (chủ)' : '') + '</b>'
+                + '<small>' + escapeText(id) + (ready ? '' : ' · thiếu phiên') + '</small></span></label>';
+        }).join('');
+        list.querySelectorAll('input[data-exec-id]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var id = cb.getAttribute('data-exec-id');
+                if (cb.checked) state.extraAccountIds.add(id); else state.extraAccountIds.delete(id);
+                cb.closest('.exec-picker-item').classList.toggle('checked', cb.checked);
+                updateExecCount();
+            });
+        });
+        updateExecCount();
+    }
+    function updateExecCount() {
+        var el = $('groupCopyExecCount');
+        if (el) el.textContent = 'Đã chọn ' + execAccountList().length + ' tài khoản';
+    }
+
+    window.groupCopyOpenExecPicker = function () {
+        var ov = $('groupCopyExecOverlay');
+        if (ov) ov.classList.add('open');
+        renderExecList();
+    };
+    window.groupCopyCloseExecPicker = function () {
+        var ov = $('groupCopyExecOverlay');
+        if (ov) ov.classList.remove('open');
+        renderExtraAccounts();
+    };
+    window.groupCopyRenderExecList = renderExecList;
+    window.groupCopyExecToggleAll = function (on) {
+        var masterId = (($('groupCopyAccount') || {}).value || '').trim();
+        state.accounts.forEach(function (a) {
+            var id = getAccountId(a);
+            if (id === masterId || !accountReady(a)) return;
+            if (on) state.extraAccountIds.add(id); else state.extraAccountIds.delete(id);
+        });
+        renderExecList();
+    };
+    document.addEventListener('click', function (e) {
+        var ov = $('groupCopyExecOverlay');
+        if (ov && e.target === ov) ov.classList.remove('open');
+    });
 
     // ─── Segmented: loại nhóm đích ──────────────────────────────────────────
     function setTargetMode(mode) {
@@ -395,6 +489,7 @@
             $('groupCopyAccount').value = selected;
             renderSelectedAccount();
             renderAccountMenu();
+            renderExtraAccounts();
             await loadGroups();
         } catch (error) {
             state.accounts = [];
@@ -658,6 +753,7 @@
             verifyIntervalMinutes: verifyMinutes,
             removeFriendAfterJoin: !!(($('groupCopyRemoveFriend') || {}).checked),
             skipLeaders: !!(($('groupCopySkipLeaders') || {}).checked),
+            accountIds: [accountId].concat(Array.from(state.extraAccountIds || [])).filter(function (v, i, arr) { return v && arr.indexOf(v) === i; }),
             consentConfirmed: !!(($('groupCopyConsent') || {}).checked)
         };
 
@@ -749,13 +845,18 @@
             if (!response.ok || !data.success) throw new Error(data.error || 'Không bắt đầu được tác vụ.');
             var result = await pollTask(data.taskId);
             var total = Number(result.totalMembers || ((result.job || {}).totalMembers) || 0);
+            var jobCount = Number(result.jobCount || (result.jobs ? result.jobs.length : 1) || 1);
+            var accountCount = Number(result.accountCount || 1);
             var verifyMinutes = Number(result.verifyIntervalMinutes || ((result.job || {}).verifyIntervalMinutes) || 30);
+            var multiNote = accountCount > 1
+                ? (' Chia cho ' + accountCount + ' tài khoản (mỗi tài khoản một khối liên tiếp, không trùng) — tạo ' + jobCount + ' tác vụ.')
+                : '';
             var prefix = payload.targetMode === 'new'
                 ? 'Đã tạo tác vụ. Nhóm mới sẽ được tạo, kích hoạt link và xử lý ngay ở đợt đầu.'
                 : 'Đã tạo tác vụ cho nhóm hiện tại và sẽ lấy link nhóm trước khi xử lý.';
-            setStatus(prefix + ' Tổng ' + total + ' thành viên; hệ thống thêm bạn bè trước, sau đó gửi tối đa ' + payload.dailyLimit + ' lời mời kết bạn/ngày và thử add lại mỗi ' + verifyMinutes + ' phút. Chiến dịch dừng khi đủ thành viên hoặc hết ' + payload.campaignDurationDays + ' ngày.' + (payload.removeFriendAfterJoin ? ' Đã bật xóa kết bạn với người do chiến dịch vừa kết bạn.' : ''), 'success');
-            showToast('Đã tạo tác vụ sao chép nhóm — ' + total + ' thành viên.', 'success');
-            state.highlightJobId = String(((result.job || {}).jobId) || '');
+            setStatus(prefix + multiNote + ' Tổng ' + total + ' thành viên; mỗi tài khoản gửi tối đa ' + payload.dailyLimit + ' lời mời kết bạn/ngày và thử add lại mỗi ' + verifyMinutes + ' phút. Chiến dịch dừng khi đủ thành viên hoặc hết ' + payload.campaignDurationDays + ' ngày.' + (payload.removeFriendAfterJoin ? ' Đã bật xóa kết bạn với người do chiến dịch vừa kết bạn.' : ''), 'success');
+            showToast('Đã tạo ' + jobCount + ' tác vụ sao chép nhóm — ' + total + ' thành viên.', 'success');
+            state.highlightJobId = String((((result.jobs || [])[0] || result.job || {}).jobId) || '');
             $('groupCopyConsent').checked = false;
             resetSourcePreview();
             $('groupCopySource').value = '';
@@ -1053,12 +1154,35 @@
             detailItem('Lần xử lý kế tiếp', esc(formatDateTime(job.nextRunAt))) +
         '</div>' + (job.lastVerificationError ? '<div class="gc-log-item-error">Lỗi kiểm tra gần nhất: ' + esc(job.lastVerificationError) + '</div>' : '');
 
-        var membersHtml = '<div class="gc-member-toolbar"><input type="text" id="groupCopyMemberSearch" placeholder="Tìm theo tên hoặc User ID..." value="' + esc(state.memberSearch) + '"></div>';
+        // Gom trạng thái thành viên về 4 nhóm dễ quan sát.
+        function memberBucket(m) {
+            var s = String(m.status || 'pending');
+            if (s === 'joined' || s === 'success') return 'joined';
+            if (s === 'invited') return 'invited';
+            if (s === 'failed') return 'failed';
+            return 'pending'; // pending / waiting_friend / skipped...
+        }
+        var counts = { all: members.length, joined: 0, invited: 0, pending: 0, failed: 0 };
+        members.forEach(function (m) { counts[memberBucket(m)] += 1; });
+        var filterDefs = [
+            { key: 'all', label: 'Tất cả' },
+            { key: 'joined', label: 'Đã vào nhóm' },
+            { key: 'invited', label: 'Đã gửi lời mời' },
+            { key: 'pending', label: 'Chưa xử lý' },
+            { key: 'failed', label: 'Lỗi' },
+        ];
+        var chipsHtml = '<div class="gc-member-filters">' + filterDefs.map(function (f) {
+            return '<button type="button" class="gc-member-chip' + (state.memberFilter === f.key ? ' active' : '') + ' is-' + f.key + '" data-member-filter="' + f.key + '">'
+                + esc(f.label) + '<span class="gc-member-chip-count">' + counts[f.key] + '</span></button>';
+        }).join('') + '</div>';
+
+        var membersHtml = chipsHtml + '<div class="gc-member-toolbar"><input type="text" id="groupCopyMemberSearch" placeholder="Tìm theo tên hoặc User ID..." value="' + esc(state.memberSearch) + '"></div>';
         if (!members.length) {
             membersHtml += '<div class="group-copy-detail-empty"><span>◎</span><strong>Chưa có dữ liệu thành viên</strong><p>Danh sách sẽ xuất hiện sau khi hệ thống đọc xong nhóm nguồn.</p></div>';
         } else {
             var query = state.memberSearch.trim().toLowerCase();
             var visibleMembers = members.filter(function (m) {
+                if (state.memberFilter !== 'all' && memberBucket(m) !== state.memberFilter) return false;
                 if (!query) return true;
                 return (String(m.zaloName || '').toLowerCase().indexOf(query) !== -1) || (String(m.userId || '').toLowerCase().indexOf(query) !== -1);
             });
@@ -1118,6 +1242,12 @@
                 if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
             });
         }
+        body.querySelectorAll('[data-member-filter]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                state.memberFilter = chip.getAttribute('data-member-filter') || 'all';
+                renderDetailTabs(state.detailJob);
+            });
+        });
         body.querySelectorAll('[data-copy-link]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var link = btn.getAttribute('data-copy-link');

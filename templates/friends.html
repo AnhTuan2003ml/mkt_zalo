@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý bạn bè - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=friends-v1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=friends-v1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=friends-v1">
+    <style>
+        .friends-page { display: flex; flex-direction: column; gap: 14px; }
+        .friends-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+        .friends-header h2 { margin: 0 0 4px; }
+        .friends-header p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+
+        .friends-toolbar {
+            display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 14px 16px;
+        }
+        .friends-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .friends-field > label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+        .friends-field.grow { flex: 1 1 240px; }
+        #friendsAccountDropdown { min-width: 260px; }
+        #friendsSearch {
+            width: 100%; height: 38px; padding: 0 12px;
+            border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface2); color: var(--text); font-size: 13.5px;
+        }
+        .friends-count-pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            height: 38px; padding: 0 14px; border-radius: 999px;
+            background: rgba(59, 130, 246, .1); border: 1px solid rgba(59, 130, 246, .25);
+            color: #2563eb; font-weight: 700; font-size: 13.5px; white-space: nowrap;
+        }
+        .friends-count-pill small { font-weight: 600; color: var(--text-secondary); }
+
+        .friends-table-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden;
+        }
+        .friends-table-scroll { max-height: calc(100vh - 300px); overflow: auto; }
+        .friends-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .friends-table th {
+            position: sticky; top: 0; z-index: 1;
+            background: var(--surface2); color: var(--text-muted);
+            font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+            padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .friends-table td {
+            padding: 8px 12px; border-bottom: 1px solid var(--border);
+            font-size: 13.5px; vertical-align: middle;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .friends-table tbody tr:hover td { background: rgba(88, 166, 255, .06); }
+        .friends-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: block; }
+        .friends-avatar.fallback {
+            display: flex; align-items: center; justify-content: center;
+            background: var(--surface2); color: var(--text-muted); font-weight: 700;
+        }
+        .friends-muted { color: var(--text-secondary); font-size: 12.5px; }
+        .friends-empty {
+            display: none; flex-direction: column; align-items: center; gap: 8px;
+            padding: 56px 20px; color: var(--text-secondary); text-align: center;
+        }
+        .friends-empty b { color: var(--text); }
+        .friends-empty span { max-width: 640px; word-break: break-word; white-space: normal; }
+        #friendsLoading { display: none; padding: 40px 20px; text-align: center; color: var(--text-secondary); }
+        @media (max-width: 900px) {
+            .friends-toolbar { align-items: stretch; }
+            .friends-field.grow { flex-basis: 100%; }
+        }
+        .friends-table tbody tr { cursor: pointer; }
+        .friends-actions { display: flex; gap: 6px; justify-content: flex-end; padding-right: 6px; }
+        .friends-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            height: 28px; padding: 0 11px; font-size: 12px; font-weight: 600;
+            border-radius: 999px; cursor: pointer; white-space: nowrap;
+            border: 1px solid transparent; background: transparent;
+            transition: background .12s ease, border-color .12s ease, color .12s ease;
+        }
+        .friends-chip svg { flex: 0 0 auto; }
+        .friends-chip-msg { color: #2563eb; border-color: rgba(37, 99, 235, .28); }
+        .friends-chip-msg:hover { background: rgba(59, 130, 246, .1); }
+        .friends-chip-del { color: #b91c1c; border-color: rgba(239, 68, 68, .26); }
+        .friends-chip-del:hover { background: rgba(239, 68, 68, .08); }
+        .friends-chip-del.confirming { background: #dc2626; color: #fff; border-color: #dc2626; }
+        .friends-status-cell { color: var(--text-secondary); font-size: 12.5px; }
+
+        /* Toast trạng thái */
+        #friendsStatus {
+            position: fixed; right: 18px; bottom: 18px; z-index: 10090;
+            max-width: 380px; padding: 10px 14px; border-radius: 10px;
+            font-size: 13px; font-weight: 600; display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,.18);
+        }
+        #friendsStatus.ok { display: block; background: #ecfdf5; color: #047857; border: 1px solid rgba(16,185,129,.35); }
+        #friendsStatus.err { display: block; background: #fef2f2; color: #b91c1c; border: 1px solid rgba(239,68,68,.35); }
+
+        /* Overlay chung cho popup chi tiết + nhắn tin */
+        .friends-overlay {
+            position: fixed; inset: 0; z-index: 10080;
+            background: rgba(3, 7, 18, .5); backdrop-filter: blur(3px);
+            display: none; align-items: center; justify-content: center; padding: 20px;
+        }
+        .friends-overlay.open { display: flex; }
+        .friends-modal {
+            width: min(460px, 96vw); max-height: 88vh; overflow: auto;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.3);
+        }
+        .friends-modal-head {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 18px; border-bottom: 1px solid var(--border);
+        }
+        .friends-modal-head img, .friends-modal-head .friends-avatar.fallback {
+            width: 54px; height: 54px; border-radius: 50%; object-fit: cover; font-size: 20px;
+        }
+        .friends-modal-head b { font-size: 16px; display: block; }
+        .friends-modal-head small { color: var(--text-secondary); word-break: break-all; }
+        .friends-modal-close {
+            margin-left: auto; width: 32px; height: 32px; flex: 0 0 auto;
+            border: 1px solid var(--border); border-radius: 9px; background: var(--surface2);
+            color: var(--text-secondary); cursor: pointer; font-size: 15px; line-height: 1;
+        }
+        .friends-modal-body { padding: 14px 18px 18px; }
+        .friends-detail-row {
+            display: flex; justify-content: space-between; gap: 14px;
+            padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13.5px;
+        }
+        .friends-detail-row:last-child { border-bottom: 0; }
+        .friends-detail-row span { color: var(--text-muted); flex: 0 0 auto; }
+        .friends-detail-row b { font-weight: 600; text-align: right; word-break: break-word; }
+        .friends-detail-loading { color: var(--text-secondary); font-size: 12.5px; padding: 6px 0; }
+        #friendsMsgText {
+            width: 100%; min-height: 110px; resize: vertical; box-sizing: border-box;
+            padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface2); color: var(--text); font-size: 13.5px; font-family: inherit;
+        }
+        .friends-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 16px; }
+    </style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+<div class="page friends-page">
+    <div class="friends-header">
+        <div>
+            <h2>Quản lý bạn bè</h2>
+            <p>Chọn tài khoản để xem toàn bộ danh sách bạn bè Zalo của tài khoản đó.</p>
+        </div>
+        <button class="btn btn-primary" type="button" onclick="friendsReload()">↻ Làm mới</button>
+    </div>
+
+    <div class="friends-toolbar">
+        <div class="friends-field">
+            <label>Tài khoản</label>
+            <div id="friendsAccountDropdown" class="account-dropdown"></div>
+            <input type="hidden" id="friendsAccountId">
+        </div>
+        <div class="friends-field grow">
+            <label>Tìm kiếm</label>
+            <input id="friendsSearch" type="text" placeholder="Tìm theo tên hoặc số điện thoại..." oninput="friendsRenderTable()">
+        </div>
+        <span class="friends-count-pill" id="friendsCountPill">
+            <span id="friendsTotal">0</span> bạn bè
+            <small id="friendsShown"></small>
+        </span>
+    </div>
+
+    <div class="friends-table-card">
+        <div class="friends-table-scroll">
+            <table class="friends-table">
+                <colgroup>
+                    <col style="width:46px"><col style="width:54px"><col style="width:230px">
+                    <col><col style="width:84px"><col style="width:106px">
+                    <col style="width:128px"><col style="width:172px">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Ảnh</th>
+                        <th>Tên</th>
+                        <th>Trạng thái</th>
+                        <th>Giới tính</th>
+                        <th>Ngày sinh</th>
+                        <th>Số điện thoại</th>
+                        <th style="text-align:right;padding-right:18px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="friendsBody"></tbody>
+            </table>
+            <div id="friendsLoading">Đang tải danh sách bạn bè...</div>
+            <div class="friends-empty" id="friendsEmpty">
+                <b>Chưa có dữ liệu bạn bè</b>
+                <span id="friendsEmptyHint">Chọn tài khoản ở trên để tải danh sách bạn bè.</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Popup chi tiết bạn bè -->
+<div class="friends-overlay" id="friendsDetailOverlay">
+    <div class="friends-modal">
+        <div class="friends-modal-head">
+            <span id="friendsDetailAvatar"></span>
+            <span style="min-width:0">
+                <b id="friendsDetailName">-</b>
+                <small id="friendsDetailUid">-</small>
+            </span>
+            <button type="button" class="friends-modal-close" onclick="friendsCloseDetail()" title="Đóng">✕</button>
+        </div>
+        <div class="friends-modal-body">
+            <div class="friends-detail-loading" id="friendsDetailLoading" style="display:none">Đang lấy profile chi tiết...</div>
+            <div id="friendsDetailRows"></div>
+        </div>
+        <div class="friends-modal-foot">
+            <button type="button" class="btn btn-primary btn-sm" id="friendsDetailMsgBtn">💬 Nhắn tin</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal nhắn tin -->
+<div class="friends-overlay" id="friendsMsgOverlay">
+    <div class="friends-modal">
+        <div class="friends-modal-head">
+            <span id="friendsMsgAvatar"></span>
+            <span style="min-width:0">
+                <b id="friendsMsgName">-</b>
+                <small>Gửi tin nhắn từ tài khoản đang chọn</small>
+            </span>
+            <button type="button" class="friends-modal-close" onclick="friendsCloseMsg()" title="Đóng">✕</button>
+        </div>
+        <div class="friends-modal-body">
+            <textarea id="friendsMsgText" placeholder="Nhập nội dung tin nhắn..."></textarea>
+        </div>
+        <div class="friends-modal-foot">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="friendsCloseMsg()">Hủy</button>
+            <button type="button" class="btn btn-primary btn-sm" id="friendsMsgSendBtn" onclick="friendsSendMessage()">Gửi tin nhắn</button>
+        </div>
+    </div>
+</div>
+
+<div id="friendsStatus"></div>
+
+<script src="{{ url_for('static', filename='js/friends.js') }}?v=friends-v3"></script>
+</body>
+</html>
