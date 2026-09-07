@@ -657,6 +657,7 @@
             campaignDurationDays: campaignDays,
             verifyIntervalMinutes: verifyMinutes,
             removeFriendAfterJoin: !!(($('groupCopyRemoveFriend') || {}).checked),
+            skipLeaders: !!(($('groupCopySkipLeaders') || {}).checked),
             consentConfirmed: !!(($('groupCopyConsent') || {}).checked)
         };
 

@@ -1242,7 +1242,8 @@ td.personal-group-actions .action-btn {
    cấu hình lịch gọn bên phải. Không đổi id/chức năng, chỉ đổi bố cục. */
 .sched-groups-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+    /* Cột cấu hình bên phải cố định hẹp, nhường bề ngang cho bảng thành viên. */
+    grid-template-columns: minmax(0, 1fr) 350px;
     gap: 16px;
     align-items: start;
 }
@@ -3913,7 +3914,8 @@ body.members-page .members-table {
 
 body.members-page .members-table col.member-select-col { width: 42px !important; }
 body.members-page .members-table col.member-avatar-col { width: 72px !important; }
-body.members-page .members-table col.member-name-col { width: 230px !important; }
+body.members-page .members-table col.member-name-col { width: 200px !important; }
+body.members-page .members-table col.member-role-col { width: 112px !important; }
 body.members-page .members-table col.member-gender-col { width: 82px !important; }
 body.members-page .members-table col.member-dob-col { width: 100px !important; }
 body.members-page .members-table col.member-phone-col { width: 126px !important; }
@@ -3942,35 +3944,40 @@ body.members-page .members-table td.member-avatar-col { width:72px !important; m
 body.members-page .members-table th:nth-child(3),
 body.members-page .members-table td:nth-child(3),
 body.members-page .members-table th.member-name-col,
-body.members-page .members-table td.member-name-col { width:230px !important; min-width:0 !important; max-width:230px !important; }
+body.members-page .members-table td.member-name-col { width:200px !important; min-width:0 !important; max-width:200px !important; }
 
 body.members-page .members-table th:nth-child(4),
 body.members-page .members-table td:nth-child(4),
-body.members-page .members-table th.member-gender-col,
-body.members-page .members-table td.member-gender-col { width:82px !important; min-width:0 !important; max-width:82px !important; }
+body.members-page .members-table th.member-role-col,
+body.members-page .members-table td.member-role-col { width:112px !important; min-width:0 !important; max-width:112px !important; }
 
 body.members-page .members-table th:nth-child(5),
 body.members-page .members-table td:nth-child(5),
-body.members-page .members-table th.member-dob-col,
-body.members-page .members-table td.member-dob-col { width:100px !important; min-width:0 !important; max-width:100px !important; }
+body.members-page .members-table th.member-gender-col,
+body.members-page .members-table td.member-gender-col { width:82px !important; min-width:0 !important; max-width:82px !important; }
 
 body.members-page .members-table th:nth-child(6),
 body.members-page .members-table td:nth-child(6),
-body.members-page .members-table th.member-phone-col,
-body.members-page .members-table td.member-phone-col { width:126px !important; min-width:0 !important; max-width:126px !important; }
+body.members-page .members-table th.member-dob-col,
+body.members-page .members-table td.member-dob-col { width:100px !important; min-width:0 !important; max-width:100px !important; }
 
 body.members-page .members-table th:nth-child(7),
 body.members-page .members-table td:nth-child(7),
-body.members-page .members-table th.member-status-col,
-body.members-page .members-table td.member-status-col { width:260px !important; min-width:0 !important; max-width:260px !important; }
+body.members-page .members-table th.member-phone-col,
+body.members-page .members-table td.member-phone-col { width:126px !important; min-width:0 !important; max-width:126px !important; }
 
 body.members-page .members-table th:nth-child(8),
 body.members-page .members-table td:nth-child(8),
-body.members-page .members-table th.member-friend-col,
-body.members-page .members-table td.member-friend-col { width:86px !important; min-width:0 !important; max-width:86px !important; }
+body.members-page .members-table th.member-status-col,
+body.members-page .members-table td.member-status-col { width:260px !important; min-width:0 !important; max-width:260px !important; text-align:left !important; }
 
 body.members-page .members-table th:nth-child(9),
 body.members-page .members-table td:nth-child(9),
+body.members-page .members-table th.member-friend-col,
+body.members-page .members-table td.member-friend-col { width:86px !important; min-width:0 !important; max-width:86px !important; text-align:left !important; }
+
+body.members-page .members-table th:nth-child(10),
+body.members-page .members-table td:nth-child(10),
 body.members-page .members-table th.member-view-col,
 body.members-page .members-table td.member-view-col { width:74px !important; min-width:0 !important; max-width:74px !important; text-align:center !important; }
 
@@ -4009,19 +4016,24 @@ body.members-page .members-table .member-role-badge {
 }
 
 @media (max-width: 1450px) {
-    body.members-page .members-table col.member-name-col { width: 190px !important; }
+    body.members-page .members-table col.member-name-col { width: 170px !important; }
+    body.members-page .members-table col.member-role-col { width: 104px !important; }
     body.members-page .members-table col.member-phone-col { width: 112px !important; }
     body.members-page .members-table col.member-status-col { width: 210px !important; }
     body.members-page .members-table th:nth-child(3),
     body.members-page .members-table td:nth-child(3),
     body.members-page .members-table th.member-name-col,
-    body.members-page .members-table td.member-name-col { width:190px !important; max-width:190px !important; }
-    body.members-page .members-table th:nth-child(6),
-    body.members-page .members-table td:nth-child(6),
-    body.members-page .members-table th.member-phone-col,
-    body.members-page .members-table td.member-phone-col { width:112px !important; max-width:112px !important; }
+    body.members-page .members-table td.member-name-col { width:170px !important; max-width:170px !important; }
+    body.members-page .members-table th:nth-child(4),
+    body.members-page .members-table td:nth-child(4),
+    body.members-page .members-table th.member-role-col,
+    body.members-page .members-table td.member-role-col { width:104px !important; max-width:104px !important; }
     body.members-page .members-table th:nth-child(7),
     body.members-page .members-table td:nth-child(7),
+    body.members-page .members-table th.member-phone-col,
+    body.members-page .members-table td.member-phone-col { width:112px !important; max-width:112px !important; }
+    body.members-page .members-table th:nth-child(8),
+    body.members-page .members-table td:nth-child(8),
     body.members-page .members-table th.member-status-col,
     body.members-page .members-table td.member-status-col { width:210px !important; max-width:210px !important; }
 }

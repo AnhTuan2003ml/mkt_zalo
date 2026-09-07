@@ -38,6 +38,11 @@
                         <input type="checkbox" id="schedHeaderCheckbox" onchange="schedToggleSelectAll(this)">
                         Chọn tất cả
                     </label>
+                    <label class="sched-check-pill" title="Khi bật: chọn tất cả, tích tay và lưu lịch đều bỏ qua trưởng nhóm + phó nhóm">
+                        <input type="checkbox" id="schedSkipLeaders" onchange="schedApplySkipLeaders()">
+                        Bỏ qua trưởng/phó nhóm
+                    </label>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnSchedExcludeLeaders" onclick="schedUnselectLeaders()" title="Bỏ tích chọn trưởng nhóm và phó nhóm khỏi danh sách người nhận">Bỏ trưởng/phó nhóm</button>
                     <button id="btnSaveScheduleGroup" class="btn btn-success" onclick="schedSaveSchedule()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Lưu lịch</button>
                 </div>
             </div>
@@ -53,6 +58,7 @@
                             <th><input type="checkbox" id="schedSelectAll" onchange="schedToggleSelectAll(this)"></th>
                             <th>Avatar</th>
                             <th>Tên</th>
+                            <th>Vai trò</th>
                             <th>ID</th>
                             <th>Giới tính</th>
                             <th>Ngày sinh</th>

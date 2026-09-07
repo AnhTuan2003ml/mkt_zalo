@@ -8,6 +8,7 @@
         selectedGroupId: '',
         selectedGroup: null,
         members: [],
+        groupInfo: null,
         selectedMembers: new Set(),
         memberFilter: 'all',
         inviteSelectedGroups: new Set(),
@@ -636,6 +637,7 @@
         state.selectedGroupId = groupId;
         state.selectedGroup = g;
         state.members = [];
+        state.groupInfo = null;
         state.selectedMembers.clear();
         state.memberFilter = 'all';
         if ($('groupsMemberSearch')) $('groupsMemberSearch').value = '';
@@ -725,6 +727,7 @@
             window._groupsLastFetchedData = state.members;
 
             var groupInfo = data.groupInfo || {};
+            state.groupInfo = groupInfo;
             if (groupInfo.name && $('groupsDetailName')) $('groupsDetailName').textContent = groupInfo.name;
             if ($('groupsDetailMembers')) $('groupsDetailMembers').textContent = (data.total || state.members.length) + ' thành viên';
             if (loadState) loadState.textContent = 'Đã tải ' + state.members.length + ' thành viên. Bấm Xem để tải chi tiết từng người.';
@@ -744,13 +747,49 @@
         }
     }
 
+    // Vai trò trong nhóm: 'owner' (trưởng nhóm) / 'admin' (phó nhóm) / 'member'.
+    // Ưu tiên groupRole backend gắn sẵn; fallback tính từ creatorId/adminIds trong groupInfo.
+    function getMemberGroupRole(m) {
+        if (!m) return 'member';
+        if (m.groupRole === 'owner' || m.groupRole === 'admin') return m.groupRole;
+        if (m.groupRole === 'member') return 'member';
+        var info = state.groupInfo || {};
+        var uid = getMemberId(m);
+        if (!uid) return 'member';
+        if (info.creatorId && String(info.creatorId) === uid) return 'owner';
+        var admins = info.adminIds || [];
+        for (var i = 0; i < admins.length; i++) {
+            if (String(admins[i]) === uid) return 'admin';
+        }
+        return 'member';
+    }
+
+    function memberRolePriority(m) {
+        var role = getMemberGroupRole(m);
+        return role === 'owner' ? 0 : (role === 'admin' ? 1 : 2);
+    }
+
+    function buildMemberRoleCell(m) {
+        var role = getMemberGroupRole(m);
+        if (role === 'owner') {
+            return '<span class="member-role-badge" title="Trưởng nhóm (người tạo nhóm)" style="padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;color:#b45309;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35)">Trưởng nhóm</span>';
+        }
+        if (role === 'admin') {
+            return '<span class="member-role-badge" title="Phó nhóm (quản trị viên)" style="padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;color:#2563eb;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3)">Phó nhóm</span>';
+        }
+        return '<span class="muted" style="font-size:12px">Thành viên</span>';
+    }
+
     function getFilteredMembers() {
         var q = String(($('groupsMemberSearch') || {}).value || '').toLowerCase().trim();
+        // Trưởng nhóm lên đầu, rồi phó nhóm, rồi thành viên (giữ thứ tự gốc trong cùng vai trò).
         return (state.members || []).filter(function (m) {
             var uid = getMemberId(m).toLowerCase();
             var name = getMemberName(m).toLowerCase();
             var phone = getMemberPhoneText(m).toLowerCase();
             return !q || name.indexOf(q) >= 0 || phone.indexOf(q) >= 0 || uid.indexOf(q) >= 0;
+        }).sort(function (a, b) {
+            return memberRolePriority(a) - memberRolePriority(b);
         });
     }
 
@@ -782,6 +821,7 @@
                     + '<td><input type="checkbox" ' + checked + ' onchange="groupsToggleMember(\'' + esc(uid) + '\')"></td>'
                     + '<td>' + avatarHtml + '</td>'
                     + '<td><div class="groups-member-name">' + esc(name) + '</div></td>'
+                    + '<td>' + buildMemberRoleCell(m) + '</td>'
                     + '<td>' + esc(gender) + '</td>'
                     + '<td><span class="muted">' + esc(dob) + '</span></td>'
                     + '<td>' + (phone ? esc(phone) : '<span class="muted">Chưa có</span>') + '</td>'

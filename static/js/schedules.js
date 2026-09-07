@@ -519,8 +519,14 @@ function schedSaveSchedule() {
         data.title = (document.getElementById('schedGroupTitle') || {}).value || '';
         data.message = (document.getElementById('schedGroupMessage') || {}).value || '';
         data.runAt = (document.getElementById('schedGroupDateTime') || {}).value || '';
-        data.recipients = _schedMembers.filter(function(m) { return _schedSelectedMembers.has(m.userId); }).map(function(m) { return { userId: m.userId, zaloName: m.zaloName, avatar: m.avatar }; });
+        // Chốt chặn cuối: bật "Bỏ qua trưởng/phó nhóm" thì loại owner/admin khỏi danh sách gửi.
+        data.recipients = _schedMembers.filter(function(m) {
+            if (!_schedSelectedMembers.has(m.userId)) return false;
+            if (schedSkipLeadersOn() && schedMemberRolePriority(m) < 2) return false;
+            return true;
+        }).map(function(m) { return { userId: m.userId, zaloName: m.zaloName, avatar: m.avatar }; });
         data.groupInfo = _schedGroupInfo;
+        data.skipLeaders = schedSkipLeadersOn();
         data.rateLimit.minDelaySec = parseInt((document.getElementById('schedGroupMinDelay') || {}).value) || 3;
         data.rateLimit.maxDelaySec = parseInt((document.getElementById('schedGroupMaxDelay') || {}).value) || 5;
         data.rateLimit.maxConsecutiveErrors = parseInt((document.getElementById('schedGroupMaxErrors') || {}).value) || 5;
@@ -659,6 +665,10 @@ async function schedGetGroupMembers() {
         _schedGroupInfo = json.groupInfo || {};
         _schedSelectedMembers.clear();
 
+        // Trưởng nhóm lên đầu, rồi phó nhóm, rồi thành viên.
+        // Sort tại chỗ để index (showMemberDetail/schedOpenMemberAvatar) khớp với bảng.
+        _schedMembers.sort(function(a, b) { return schedMemberRolePriority(a) - schedMemberRolePriority(b); });
+
         // Backend /run đã lấy profile chi tiết rồi mới trả kết quả.
         // Không gọi /api/single-profile tự động lần nữa để tránh lỗi Zalo [221].
         schedRenderMembersTable();
@@ -759,6 +769,77 @@ async function schedEnrichMembersWithProfileData(members, accountId) {
     }
 }
 
+// Vai trò trong nhóm: 'owner' (trưởng nhóm) / 'admin' (phó nhóm) / 'member'.
+// Ưu tiên groupRole backend gắn sẵn; fallback tính từ creatorId/adminIds trong _schedGroupInfo.
+function schedGetMemberRole(member) {
+    if (!member) return 'member';
+    if (member.groupRole === 'owner' || member.groupRole === 'admin') return member.groupRole;
+    if (member.groupRole === 'member') return 'member';
+    var info = _schedGroupInfo || {};
+    var uid = String(member.userId || member.id || member.uid || '').trim();
+    if (!uid) return 'member';
+    if (info.creatorId && String(info.creatorId) === uid) return 'owner';
+    var admins = info.adminIds || [];
+    for (var i = 0; i < admins.length; i++) {
+        if (String(admins[i]) === uid) return 'admin';
+    }
+    return 'member';
+}
+
+function schedMemberRolePriority(member) {
+    var role = schedGetMemberRole(member);
+    return role === 'owner' ? 0 : (role === 'admin' ? 1 : 2);
+}
+
+function schedBuildRoleCell(member) {
+    var role = schedGetMemberRole(member);
+    if (role === 'owner') {
+        return '<span class="member-role-badge" title="Trưởng nhóm (người tạo nhóm)" style="padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;color:#b45309;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35)">Trưởng nhóm</span>';
+    }
+    if (role === 'admin') {
+        return '<span class="member-role-badge" title="Phó nhóm (quản trị viên)" style="padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;color:#2563eb;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3)">Phó nhóm</span>';
+    }
+    return '<span style="font-size:12px;color:var(--text-secondary)">Thành viên</span>';
+}
+
+// Chế độ "Bỏ qua trưởng/phó nhóm": mọi logic chọn/lưu lịch đều loại owner + admin.
+function schedSkipLeadersOn() {
+    var cb = document.getElementById('schedSkipLeaders');
+    return !!(cb && cb.checked);
+}
+
+function schedApplySkipLeaders() {
+    if (schedSkipLeadersOn()) {
+        schedUnselectLeaders();
+    } else {
+        schedRenderMembersTable();
+    }
+}
+
+// Bỏ tích chọn toàn bộ trưởng nhóm + phó nhóm (dùng sau khi "Chọn tất cả").
+function schedUnselectLeaders() {
+    var removed = 0;
+    (_schedMembers || []).forEach(function(member) {
+        var role = schedGetMemberRole(member);
+        if (role !== 'owner' && role !== 'admin') return;
+        var uid = String(member.userId || member.id || member.uid || '').trim();
+        if (uid && _schedSelectedMembers.has(uid)) {
+            _schedSelectedMembers.delete(uid);
+            removed++;
+        }
+        // schedToggleSelectAll thêm theo m.userId thô nên xóa cả key đó cho chắc.
+        if (member.userId && _schedSelectedMembers.has(member.userId)) {
+            _schedSelectedMembers.delete(member.userId);
+        }
+    });
+    schedRenderMembersTable();
+    if (removed > 0) {
+        schedShowNotif('OK', 'Đã bỏ chọn ' + removed + ' trưởng/phó nhóm.', 'success');
+    } else {
+        schedShowNotif('Thông báo', 'Không có trưởng/phó nhóm nào đang được chọn.', 'info');
+    }
+}
+
 function schedRenderMembersTable() {
     var tbody = document.getElementById('schedMembersBody');
     if (!tbody) return;
@@ -802,6 +883,7 @@ function schedRenderMembersTable() {
         html += '</td>';
 
         html += '<td>' + escapeHtmlSchedules(name) + '</td>';
+        html += '<td>' + schedBuildRoleCell(member) + '</td>';
         html += '<td><code style="font-size:11px;color:var(--text-secondary)">' + safeUid + '</code></td>';
         html += '<td>' + escapeHtmlSchedules(genderDisplay) + '</td>';
         html += '<td><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlSchedules(sdob) + '</span></td>';
@@ -820,8 +902,12 @@ function schedRenderMembersTable() {
     var tc = document.getElementById('schedTotalCount');
     if (tc) tc.textContent = _schedMembers.length;
 
-    var checkedAll = _schedSelectedMembers.size === _schedMembers.length && _schedMembers.length > 0;
-    var partial = _schedSelectedMembers.size > 0 && _schedSelectedMembers.size < _schedMembers.length;
+    // Khi bật "Bỏ qua trưởng/phó nhóm" thì tổng đủ điều kiện không tính owner/admin.
+    var eligibleTotal = schedSkipLeadersOn()
+        ? _schedMembers.filter(function(m) { return schedMemberRolePriority(m) >= 2; }).length
+        : _schedMembers.length;
+    var checkedAll = eligibleTotal > 0 && _schedSelectedMembers.size === eligibleTotal;
+    var partial = _schedSelectedMembers.size > 0 && _schedSelectedMembers.size < eligibleTotal;
 
     var hcb = document.getElementById('schedHeaderCheckbox');
     if (hcb) {
@@ -837,12 +923,28 @@ function schedRenderMembersTable() {
 }
 
 function schedToggleMember(uid) {
+    if (!_schedSelectedMembers.has(uid) && schedSkipLeadersOn()) {
+        var member = (_schedMembers || []).find(function(m) {
+            return String(m.userId || m.id || m.uid || '').trim() === String(uid || '').trim();
+        });
+        if (member && schedMemberRolePriority(member) < 2) {
+            schedShowNotif('Thông báo', 'Đang bật "Bỏ qua trưởng/phó nhóm" nên không thể chọn người này.', 'info');
+            return;
+        }
+    }
     if (_schedSelectedMembers.has(uid)) _schedSelectedMembers.delete(uid); else _schedSelectedMembers.add(uid);
     schedRenderMembersTable();
 }
 
 function schedToggleSelectAll(cb) {
-    if (cb.checked) _schedMembers.forEach(function(m) { _schedSelectedMembers.add(m.userId); }); else _schedSelectedMembers.clear();
+    if (cb.checked) {
+        _schedMembers.forEach(function(m) {
+            if (schedSkipLeadersOn() && schedMemberRolePriority(m) < 2) return;
+            _schedSelectedMembers.add(m.userId);
+        });
+    } else {
+        _schedSelectedMembers.clear();
+    }
     schedRenderMembersTable();
 }
 

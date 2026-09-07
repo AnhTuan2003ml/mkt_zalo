@@ -11,7 +11,7 @@
 </head>
 <body>
 {% include '_nav.html' %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=nexus-premium-20260728">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-skip-leaders-v3">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <div class="page group-copy-page">
@@ -157,6 +157,14 @@
                     </div>
                 </div>
 
+                <div class="gc-field gc-col-3">
+                    <label aria-hidden="true">&nbsp;</label>
+                    <label class="gc-skip-leaders" for="groupCopySkipLeaders" title="Trưởng nhóm và phó nhóm của nhóm nguồn sẽ không được thêm hay gửi lời mời">
+                        <input id="groupCopySkipLeaders" type="checkbox">
+                        <span>Bỏ qua trưởng / phó nhóm nguồn</span>
+                    </label>
+                </div>
+
                 <div class="gc-field gc-col-3 gc-run-cell">
                     <label class="gc-consent-check" for="groupCopyConsent">
                         <input id="groupCopyConsent" type="checkbox">
@@ -256,6 +264,6 @@
 
 <div class="member-toast-stack" id="groupCopyToastStack" aria-live="polite" aria-atomic="true"></div>
 
-<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-auto-link-v1-20260731"></script>
+<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-skip-leaders-v1"></script>
 </body>
 </html>

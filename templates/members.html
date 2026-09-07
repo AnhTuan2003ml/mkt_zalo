@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lấy thành viên - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=members-role-col-v1">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=9999">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-masterise.css') }}?v=nexus-masterise-v6-20260728">
@@ -96,12 +96,12 @@
                     </div>
                     <table class="members-table members-table-optimized">
                         <colgroup>
-                            <col class="member-select-col"><col class="member-avatar-col"><col class="member-name-col"><col class="member-gender-col"><col class="member-dob-col"><col class="member-phone-col"><col class="member-status-col"><col class="member-friend-col"><col class="member-view-col">
+                            <col class="member-select-col"><col class="member-avatar-col"><col class="member-name-col"><col class="member-role-col"><col class="member-gender-col"><col class="member-dob-col"><col class="member-phone-col"><col class="member-status-col"><col class="member-friend-col"><col class="member-view-col">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th class="member-select-col" style="text-align:center"><input type="checkbox" id="selectAllMembers" style="cursor:pointer"></th>
-                                <th class="member-avatar-col">AVATAR</th><th class="member-name-col">TÊN</th><th class="member-gender-col">GIỚI TÍNH</th><th class="member-dob-col">NGÀY SINH</th><th class="member-phone-col">SỐ ĐIỆN THOẠI</th><th class="member-status-col">TRẠNG THÁI</th><th class="member-friend-col">KẾT BẠN</th><th class="member-view-col">XEM</th>
+                                <th class="member-avatar-col">AVATAR</th><th class="member-name-col">TÊN</th><th class="member-role-col">VAI TRÒ</th><th class="member-gender-col">GIỚI TÍNH</th><th class="member-dob-col">NGÀY SINH</th><th class="member-phone-col">SỐ ĐIỆN THOẠI</th><th class="member-status-col">TRẠNG THÁI</th><th class="member-friend-col">KẾT BẠN</th><th class="member-view-col">XEM</th>
                             </tr>
                         </thead>
                         <tbody id="resultsBody"></tbody>
@@ -553,6 +553,6 @@
 
 <script src="{{ url_for('static', filename='js/avatar-preview.js') }}?v=107"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v=send-photo-v1"></script>
-<script src="{{ url_for('static', filename='js/members.js') }}?v=nexus-light-v3-20260728"></script>
+<script src="{{ url_for('static', filename='js/members.js') }}?v=members-role-col-v1"></script>
 </body>
 </html>

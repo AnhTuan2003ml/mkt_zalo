@@ -2921,6 +2921,8 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         or account.get("profileId")
         or ""
     ).strip()
+    skip_leaders = bool(payload.get("skipLeaders"))
+    skipped_leader_count = 0
     clean_members = []
     seen = set()
     for member in members:
@@ -2928,6 +2930,10 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         if not uid or uid == account_uid or uid in seen:
             continue
         seen.add(uid)
+        # Bật "Bỏ qua trưởng/phó nhóm": không đưa owner/admin của nhóm nguồn vào tác vụ.
+        if skip_leaders and str(member.get("groupRole") or "") in ("owner", "admin"):
+            skipped_leader_count += 1
+            continue
         relation_value = friend_relations.get(uid)
         raw_friend = relation_value if relation_value is not None else member.get("isFr", member.get("isFriend"))
         friend_text = str(raw_friend).strip().lower()
@@ -2943,6 +2949,8 @@ def _prepare_group_copy_job_worker(task, payload: dict):
             "isFr": 1 if is_friend is True else (0 if is_friend is False else None),
         })
 
+    if skipped_leader_count:
+        task.log(f"Đã bỏ qua {skipped_leader_count} trưởng/phó nhóm của nhóm nguồn theo thiết lập.")
     if not clean_members:
         raise ValueError("Không tìm thấy thành viên hợp lệ trong nhóm nguồn.")
 
@@ -3109,6 +3117,7 @@ def api_group_copy_start():
         "verifyIntervalMinutes": verify_minutes,
         "campaignDurationDays": campaign_days,
         "removeFriendAfterJoin": bool(data.get("removeFriendAfterJoin")),
+        "skipLeaders": bool(data.get("skipLeaders")),
         "startAt": start_at,
         "consentConfirmed": True,
     }

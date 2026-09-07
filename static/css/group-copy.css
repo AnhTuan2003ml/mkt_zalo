@@ -206,6 +206,39 @@
     cursor: pointer;
 }
 .gc-consent-check input { flex: 0 0 auto; width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--accent); }
+
+/* Ô "Bỏ qua trưởng/phó nhóm": trình bày như một input trong grid để thẳng hàng
+   với các ô cạnh bên (label 12px phía trên + khung cao 42px). */
+.gc-skip-leaders {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--input-bg, rgba(8, 16, 27, .55));
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.35;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.gc-skip-leaders:hover { border-color: rgba(72, 184, 255, .4); }
+.gc-skip-leaders input {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+.gc-skip-leaders span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .gc-run-btn {
     width: 100%;
     min-height: 44px;

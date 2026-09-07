@@ -774,7 +774,7 @@ function filterResults() {
         resultsSection.style.display = 'block';
         document.getElementById('emptyState').style.display = 'none';
         
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-secondary);">Không tìm thấy thành viên nào</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-secondary);">Không tìm thấy thành viên nào</td></tr>';
         return;
     }
     
@@ -836,6 +836,27 @@ function buildMemberRoleBadge(member) {
     return '';
 }
 
+// Ô cột "Vai trò": badge cho trưởng/phó nhóm, chữ mờ cho thành viên thường.
+function buildMemberRoleCell(member) {
+    var badge = buildMemberRoleBadge(member);
+    if (badge) return badge;
+    return '<span style="font-size:12px;color:var(--text-secondary)">Thành viên</span>';
+}
+
+function memberRolePriority(member) {
+    var role = getMemberGroupRole(member);
+    if (role === 'owner') return 0;
+    if (role === 'admin') return 1;
+    return 2;
+}
+
+// Trưởng nhóm lên đầu, rồi phó nhóm, rồi thành viên (giữ nguyên thứ tự gốc trong cùng vai trò).
+function sortMembersByRole(members) {
+    return (members || []).slice().sort(function (a, b) {
+        return memberRolePriority(a) - memberRolePriority(b);
+    });
+}
+
 function renderResults(members) {
     var tbody = document.getElementById('resultsBody');
     var totalCount = document.getElementById('totalCount');
@@ -854,6 +875,8 @@ function renderResults(members) {
 
     totalCount.textContent = members.length;
     emptyState.style.display = 'none';
+
+    members = sortMembersByRole(members);
 
     var html = '';
     members.forEach(function(member) {
@@ -885,10 +908,12 @@ function renderResults(members) {
         html += '</td>';
 
         // 3. tên - ẩn ID kỹ thuật khỏi bảng chính, vẫn giữ trong popup chi tiết.
-        // Kèm badge vai trò: Trưởng nhóm (creatorId) / Phó nhóm (adminIds).
-        html += '<td class="member-name-col"><div class="member-name-cell" title="Bấm Xem để mở chi tiết"><span class="member-name-text">' + escapeHtmlMembers(name) + '</span>' + buildMemberRoleBadge(member) + '</div></td>';
+        html += '<td class="member-name-col"><div class="member-name-cell" title="Bấm Xem để mở chi tiết"><span class="member-name-text">' + escapeHtmlMembers(name) + '</span></div></td>';
 
-        // 4. giới tính
+        // 4. vai trò: Trưởng nhóm (creatorId) / Phó nhóm (adminIds) / Thành viên.
+        html += '<td class="member-role-col">' + buildMemberRoleCell(member) + '</td>';
+
+        // 5. giới tính
         html += '<td class="member-gender-col">' + escapeHtmlMembers(genderDisplay) + '</td>';
 
         // 5. ngày sinh
