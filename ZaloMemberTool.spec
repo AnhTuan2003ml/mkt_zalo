@@ -7,6 +7,16 @@ import sys
 
 def collect_python_runtime_binaries():
     binaries = []
+    # OpenSSL DLL PHẢI lấy đúng từ Python build (conda: Library\bin), khai báo
+    # TRƯỚC để thắng bản trùng tên mà PyInstaller tự nhặt theo PATH (vd. Git
+    # mingw64\bin) — bản sai làm `import _ssl` fail trong exe → smtplib mất SSL
+    # → không gửi được mã kích hoạt ("No SSL support included in this Python").
+    ssl_dirs = [
+        os.path.join(sys.base_prefix, "Library", "bin"),
+        os.path.join(sys.base_prefix, "DLLs"),
+        os.path.dirname(sys.executable),
+    ]
+    ssl_patterns = ["libcrypto-3*.dll", "libssl-3*.dll", "libcrypto-1*.dll", "libssl-1*.dll"]
     search_dirs = {
         os.path.dirname(sys.executable),
         sys.base_prefix,
@@ -18,6 +28,17 @@ def collect_python_runtime_binaries():
         "api-ms-win-*.dll",
     ]
     seen = set()
+    ssl_names = set()
+    for folder in ssl_dirs:
+        if not folder or not os.path.isdir(folder):
+            continue
+        for pattern in ssl_patterns:
+            for path in glob.glob(os.path.join(folder, pattern)):
+                name = os.path.basename(path).lower()
+                if os.path.isfile(path) and name not in ssl_names:
+                    binaries.append((path, "."))
+                    ssl_names.add(name)
+                    seen.add(os.path.normcase(os.path.abspath(path)))
     for folder in search_dirs:
         if not folder or not os.path.isdir(folder):
             continue
