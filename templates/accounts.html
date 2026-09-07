@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tài khoản Zalo - Nexus</title>
     <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=nexus-light-v3-20260728">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=accounts-limit-v1">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/accounts.css') }}?v=accounts-v7-editmodal">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 </head>
@@ -45,6 +45,7 @@
         </div>
     </header>
 
+    <div id="accountLimitHint" class="account-limit-hint" style="display:none"></div>
     <div id="accountsStatus" class="status-bar" hidden></div>
 
     <div class="card">
@@ -82,6 +83,6 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}?v=accounts-v7-editmodal"></script>
-<script src="{{ url_for('static', filename='js/accounts.js') }}?v=accounts-v7-editmodal"></script>
+<script src="{{ url_for('static', filename='js/accounts.js') }}?v=accounts-limit-v1"></script>
 </body>
 </html>

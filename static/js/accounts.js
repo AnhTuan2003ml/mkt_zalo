@@ -153,6 +153,40 @@ function defaultAvatarEl(name) {
 
 var _lastAccountsSnapshot = [];
 
+// Giới hạn số tài khoản theo gói: đủ số lượng thì khóa nút "Thêm tài khoản".
+var _accountPlan = null;
+
+async function loadAccountPlan() {
+    try {
+        _accountPlan = await fetch('/api/license/plan').then(function (r) { return r.json(); });
+    } catch (e) {
+        _accountPlan = null;
+    }
+    return _accountPlan;
+}
+
+function updateAddAccountLimit(count) {
+    var btn = document.getElementById('btnAddAccount');
+    if (!btn) return;
+    var max = _accountPlan ? Number(_accountPlan.maxAccounts || 0) : 0;
+    var hintEl = document.getElementById('accountLimitHint');
+    // maxAccounts = 0 nghĩa không giới hạn.
+    if (max > 0 && count >= max) {
+        btn.disabled = true;
+        btn.classList.add('is-disabled');
+        btn.title = 'Gói hiện tại chỉ cho phép tối đa ' + max + ' tài khoản Zalo. Nâng lên gói 6 tháng trở lên để không giới hạn.';
+        if (hintEl) {
+            hintEl.textContent = 'Đã đạt giới hạn ' + max + ' tài khoản của gói hiện tại. Nâng gói 6 tháng trở lên để thêm tài khoản.';
+            hintEl.style.display = 'block';
+        }
+    } else {
+        btn.disabled = false;
+        btn.classList.remove('is-disabled');
+        btn.title = '';
+        if (hintEl) hintEl.style.display = 'none';
+    }
+}
+
 async function loadAccountsList(silent) {
     var listEl = document.getElementById('accountsList');
     var emptyEl = document.getElementById('accountsEmpty');
@@ -170,6 +204,7 @@ async function loadAccountsList(silent) {
         _lastAccountsSnapshot = accounts;
         listEl.innerHTML = '';
         renderAccountsStats(accounts);
+        updateAddAccountLimit(accounts.length);
 
         if (accounts.length === 0) {
             if (emptyEl) emptyEl.style.display = 'block';
@@ -198,6 +233,12 @@ async function loadAccountsList(silent) {
 // ─── Thêm tài khoản: setup tên + proxy trước, không mở Chrome ngay ─────────
 
 function openNewAccountModal() {
+    // Chặn mở form khi đã đủ số tài khoản theo gói.
+    var max = _accountPlan ? Number(_accountPlan.maxAccounts || 0) : 0;
+    if (max > 0 && (_lastAccountsSnapshot || []).length >= max) {
+        setAccountsStatus('Gói hiện tại chỉ cho phép tối đa ' + max + ' tài khoản Zalo. Nâng lên gói 6 tháng trở lên để không giới hạn.', 'error');
+        return;
+    }
     var backdrop = document.getElementById('newAccountModalBackdrop');
     var nameInput = document.getElementById('newAccountName');
     var proxyInput = document.getElementById('newAccountProxy');
@@ -472,7 +513,7 @@ async function deleteAccount(accountId, name) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadAccountsList();
+    loadAccountPlan().then(function () { loadAccountsList(); });
     startAccountsHeartbeat();
     var newAccountBackdrop = document.getElementById('newAccountModalBackdrop');
     if (newAccountBackdrop) {

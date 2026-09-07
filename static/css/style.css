@@ -6793,3 +6793,14 @@ body.members-page .log-drawer-tab { display: none !important; }
 .exec-picker-foot { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--border); }
 .exec-picker-foot span { font-size: 12.5px; color: var(--text-secondary); }
 .exec-picker-empty { color: var(--text-secondary); font-size: 13px; padding: 20px; text-align: center; }
+
+/* Nút thêm tài khoản bị khóa khi đủ giới hạn gói + hint */
+#btnAddAccount:disabled, #btnAddAccount.is-disabled {
+    opacity: .5 !important; cursor: not-allowed !important; filter: grayscale(.3);
+    box-shadow: none !important;
+}
+.account-limit-hint {
+    margin: 10px 0 0; padding: 9px 13px; border-radius: 9px;
+    background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3);
+    color: #b45309; font-size: 12.5px; font-weight: 600;
+}
