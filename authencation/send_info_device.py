@@ -1160,8 +1160,10 @@ def create_activation_code(fingerprint_hash, duration_key=None):
         option = normalize_requested_duration(duration_key)
         expiry_date = _safe_iso_expiry(option)
         nonce = secrets.token_hex(16)
-        payload = f"{fingerprint_hash}|{expiry_date}|{nonce}"
-        signature = hashlib.sha256(f"{payload}:{SECRET_KEY}".encode()).hexdigest()
+        signature = _compute_activation_signature(
+            fingerprint_hash, expiry_date, nonce,
+            option["key"], bool(option.get("is_permanent")),
+        )
         full_activation_code = f"{fingerprint_hash}|{expiry_date}|{nonce}|{signature}"
         short_code = _generate_short_activation_code(SHORT_CODE_LENGTH)
 
@@ -1322,7 +1324,7 @@ def validate_activation_code():
             return False, 0, "❌ Activation key is for another device"
         if not _is_secret_key_valid():
             return False, 0, "❌ SECRET_KEY missing. Cannot verify activation code."
-        expected_sig = hashlib.sha256(f"{stored_fp}|{expiry_str}|{stored_nonce}:{SECRET_KEY}".encode()).hexdigest()
+        expected_sig = _compute_activation_signature(stored_fp, expiry_str, stored_nonce, code_data.get("plan_key"), bool(code_data.get("is_permanent")))
         if not hmac.compare_digest(expected_sig, stored_signature):
             return False, 0, "❌ Code signature verification FAILED - code is invalid or tampered"
         is_permanent = bool(code_data.get("is_permanent"))
@@ -1419,7 +1421,7 @@ def save_user_activation_code(code_text):
             return False, "❌ This is an old activation key. A newer key has been issued for this device. Please use the latest key from your email."
         if not _is_secret_key_valid():
             return False, "❌ SECRET_KEY missing. Cannot verify activation code."
-        expected_sig = hashlib.sha256(f"{fingerprint_hash}|{expiry_str}|{nonce}:{SECRET_KEY}".encode()).hexdigest()
+        expected_sig = _compute_activation_signature(fingerprint_hash, expiry_str, nonce, pending.get("plan_key"), bool(pending.get("is_permanent")))
         if not hmac.compare_digest(expected_sig, signature):
             return False, "❌ Code signature verification FAILED - code is invalid or tampered"
         code_data = {
@@ -1716,8 +1718,10 @@ def create_activation_code(fingerprint_hash, duration_key=None):
         option = normalize_requested_duration(duration_key)
         expiry_date = _safe_iso_expiry(option)
         nonce = secrets.token_hex(16)
-        payload = f"{fingerprint_hash}|{expiry_date}|{nonce}"
-        signature = hashlib.sha256(f"{payload}:{SECRET_KEY}".encode()).hexdigest()
+        signature = _compute_activation_signature(
+            fingerprint_hash, expiry_date, nonce,
+            option["key"], bool(option.get("is_permanent")),
+        )
         full_activation_code = f"{fingerprint_hash}|{expiry_date}|{nonce}|{signature}"
         short_code = _generate_short_activation_code(SHORT_CODE_LENGTH)
 
@@ -1877,7 +1881,7 @@ def validate_activation_code():
         if not _is_secret_key_valid():
             return False, 0, "❌ SECRET_KEY missing. Cannot verify activation code."
 
-        expected_sig = hashlib.sha256(f"{stored_fp}|{expiry_str}|{stored_nonce}:{SECRET_KEY}".encode()).hexdigest()
+        expected_sig = _compute_activation_signature(stored_fp, expiry_str, stored_nonce, code_data.get("plan_key"), bool(code_data.get("is_permanent")))
         if not hmac.compare_digest(expected_sig, stored_signature):
             return False, 0, "❌ License đã bị sửa hoặc không hợp lệ"
 
@@ -1941,7 +1945,7 @@ def save_user_activation_code(code_text):
         if not _is_secret_key_valid():
             return False, "❌ SECRET_KEY missing. Cannot verify activation code."
 
-        expected_sig = hashlib.sha256(f"{fingerprint_hash}|{expiry_str}|{nonce}:{SECRET_KEY}".encode()).hexdigest()
+        expected_sig = _compute_activation_signature(fingerprint_hash, expiry_str, nonce, pending.get("plan_key"), bool(pending.get("is_permanent")))
         if not hmac.compare_digest(expected_sig, signature):
             return False, "❌ Code signature verification FAILED - code is invalid or tampered"
 
@@ -2292,8 +2296,10 @@ def create_activation_code(fingerprint_hash, duration_key=None):
         option = normalize_requested_duration(duration_key)
         expiry_date = _safe_iso_expiry(option)
         nonce = secrets.token_hex(16)
-        payload = f"{fingerprint_hash}|{expiry_date}|{nonce}"
-        signature = hashlib.sha256(f"{payload}:{SECRET_KEY}".encode()).hexdigest()
+        signature = _compute_activation_signature(
+            fingerprint_hash, expiry_date, nonce,
+            option["key"], bool(option.get("is_permanent")),
+        )
         full_activation_code = f"{fingerprint_hash}|{expiry_date}|{nonce}|{signature}"
         short_code = _generate_short_activation_code(SHORT_CODE_LENGTH)
 
@@ -2360,7 +2366,7 @@ def validate_activation_code():
             return False, 0, "❌ License này thuộc thiết bị khác"
         if not _is_secret_key_valid():
             return False, 0, "❌ SECRET_KEY missing. Cannot verify activation code."
-        expected_sig = hashlib.sha256(f"{stored_fp}|{expiry_str}|{stored_nonce}:{SECRET_KEY}".encode()).hexdigest()
+        expected_sig = _compute_activation_signature(stored_fp, expiry_str, stored_nonce, code_data.get("plan_key"), bool(code_data.get("is_permanent")))
         if not hmac.compare_digest(expected_sig, stored_signature):
             return False, 0, "❌ License đã bị sửa hoặc không hợp lệ"
         is_permanent = bool(code_data.get("is_permanent"))
@@ -2406,7 +2412,7 @@ def save_user_activation_code(code_text):
             return False, "❌ Đây là mã cũ. Hãy dùng mã mới nhất trong email."
         if not _is_secret_key_valid():
             return False, "❌ SECRET_KEY missing. Cannot verify activation code."
-        expected_sig = hashlib.sha256(f"{fingerprint_hash}|{expiry_str}|{nonce}:{SECRET_KEY}".encode()).hexdigest()
+        expected_sig = _compute_activation_signature(fingerprint_hash, expiry_str, nonce, pending.get("plan_key"), bool(pending.get("is_permanent")))
         if not hmac.compare_digest(expected_sig, signature):
             return False, "❌ Code signature verification FAILED - code is invalid or tampered"
         code_data = {
@@ -2510,6 +2516,16 @@ _PLAN_DAYS_MAP = {
     "3d": 3, "7d": 7, "10d": 10, "1m": 30, "2m": 60, "3m": 90, "6m": 180,
     "lifetime": 99999,
 }
+
+
+def _compute_activation_signature(fingerprint_hash, expiry_str, nonce, plan_key="", is_permanent=False):
+    """Chữ ký license — GẮN plan_key + is_permanent vào để không thể sửa gói.
+
+    Nếu người dùng sửa file license đổi plan_key/is_permanent nhằm nâng gói,
+    chữ ký tính lại sẽ khác chữ ký đã lưu -> license bị coi là không hợp lệ.
+    """
+    base = f"{fingerprint_hash}|{expiry_str}|{nonce}|{str(plan_key or '')}|{1 if is_permanent else 0}"
+    return hashlib.sha256(f"{base}:{SECRET_KEY}".encode()).hexdigest()
 
 
 def get_license_plan():
