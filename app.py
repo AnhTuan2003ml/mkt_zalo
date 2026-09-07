@@ -274,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.1.4"
+APP_VERSION = "1.1.5"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -3131,8 +3131,49 @@ def _prepare_group_copy_job_worker(task, payload: dict):
 
     is_multi = n > 1
     target_mode = str(payload.get("targetMode") or "existing").strip()
+
+    # Nhiều tài khoản + tạo nhóm mới: TÀI KHOẢN CHÍNH tạo nhóm NGAY tại đây rồi
+    # lấy link nhóm, để mọi tài khoản (chủ + phụ) cùng dùng chung một nhóm và
+    # mời vào bằng link đó — thay vì mỗi tài khoản tự tạo một nhóm riêng.
+    shared_target_id = str(payload.get("targetGroupId") or "").strip()
+    shared_target_link = str(payload.get("targetGroupLink") or "").strip()
+    shared_target_name = str(payload.get("newGroupName") or payload.get("targetGroupName") or "").strip()
+    if is_multi and target_mode == "new":
+        from features.groups.add_group import create_group as _create_group
+        from features.groups.group_link import create_group_link as _create_group_link
+        from features.groups.group_copy_worker import _extract_group_id, _decoded_dict, _error_message
+
+        master_acc = get_account(account_ids[0]) or {}
+        m_cookies = str(master_acc.get("cookies") or "").strip()
+        m_enk = str(master_acc.get("zpwEnk") or "").strip()
+        m_imei = str(master_acc.get("imei") or "").strip()
+        group_name = shared_target_name or "Nhóm mới"
+        # Ưu tiên bạn bè của khối tài khoản chính làm thành viên khởi tạo nhóm.
+        seed_block = blocks[0] or clean_members
+        seed_ids = [
+            str(mem.get("userId") or "").strip()
+            for mem in sorted(seed_block, key=lambda x: 0 if x.get("isFriend") is True else 1)
+            if str(mem.get("userId") or "").strip()
+        ][:50]
+        task.log(f"Tài khoản chính đang tạo nhóm đích chung '{group_name}'...")
+        resp_json, decoded_raw = _create_group(group_name, seed_ids, m_enk, m_cookies, m_imei, zpw_ver=zpw_ver)
+        resp_json = resp_json if isinstance(resp_json, dict) else {}
+        decoded = _decoded_dict(decoded_raw)
+        shared_target_id = _extract_group_id(resp_json, decoded)
+        if not shared_target_id:
+            raise RuntimeError(_error_message(resp_json, decoded) or "Không tạo được nhóm đích chung bằng tài khoản chính.")
+        # Lấy link nhóm để các tài khoản khác mời thành viên vào.
+        try:
+            link_result = _create_group_link(shared_target_id, m_imei, m_enk, m_cookies, zpw_ver=zpw_ver)
+            shared_target_link = str((link_result or {}).get("link") or "").strip()
+        except Exception as exc:
+            shared_target_link = ""
+            task.log(f"Đã tạo nhóm nhưng chưa lấy được link ngay: {exc}", "warn")
+        task.log(f"Đã tạo nhóm đích chung (ID {shared_target_id})." + (f" Link: {shared_target_link}" if shared_target_link else ""))
+        # Từ đây mọi job dùng nhóm CÓ SẴN này, không tạo nhóm mới nữa.
+        target_mode = "existing"
+
     jobs_created = []
-    master_job_id = ""
     for idx, aid in enumerate(account_ids):
         block = blocks[idx]
         if not block:
@@ -3146,31 +3187,24 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         sub.pop("accountIds", None)
         if is_multi:
             sub["title"] = f"{payload.get('title') or 'Sao chép thành viên nhóm'} (TK {idx + 1}/{n} - {acc_name})"
-        if is_multi and idx > 0:
-            # Tài khoản phụ dùng CHUNG nhóm đích của tài khoản chủ.
-            if target_mode == "new":
-                # Nhóm chưa tạo lúc này -> chờ tài khoản chủ tạo xong (worker tự lấy).
-                sub["targetMode"] = "existing"
-                sub["targetGroupId"] = ""
-                sub["targetGroupLink"] = ""
-                sub["sharedTargetFromJobId"] = master_job_id
+            # Mọi tài khoản dùng chung nhóm đích đã tạo/đã chọn.
+            sub["targetMode"] = target_mode
+            if shared_target_id:
+                sub["targetGroupId"] = shared_target_id
+                sub["targetGroupLink"] = shared_target_link
+                sub["targetGroupName"] = shared_target_name or sub.get("targetGroupName") or ""
             else:
-                sub["targetMode"] = "existing"
                 sub["targetGroupId"] = str(payload.get("targetGroupId") or "")
                 sub["targetGroupLink"] = str(payload.get("targetGroupLink") or "")
 
         job = create_group_copy_job(sub, block, source_group, acc_name, account_avatar=acc_avatar)
-        # Ghi cờ nhiều tài khoản để worker biết + gắn master.
+        # Ghi cờ nhiều tài khoản để hiển thị/quản lý.
         if is_multi:
-            def _tag(j, midx=idx, mid=master_job_id):
+            def _tag(j, midx=idx):
                 j["multiAccount"] = True
                 j["multiAccountIndex"] = midx
                 j["multiAccountTotal"] = n
-                if midx > 0 and target_mode == "new":
-                    j["sharedTargetFromJobId"] = mid
             save_group_copy_job_mutation(job.get("jobId"), _tag)
-        if idx == 0:
-            master_job_id = job.get("jobId")
         jobs_created.append(job)
 
     task.log(
