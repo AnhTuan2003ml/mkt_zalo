@@ -113,10 +113,26 @@ SENDMAIL_USER = (os.getenv("SENDMAIL_USER", "") or "").strip()
 # Gmail App Password thường được hiển thị theo nhóm có dấu cách.
 # SMTP login cần chuỗi liền 16 ký tự, nên loại bỏ toàn bộ khoảng trắng để tránh lỗi 535 BadCredentials.
 SENDMAIL_PASS = ''.join((os.getenv("SENDMAIL_PASS", "") or "").split())
+# Tên hiển thị của người gửi trong email (From: "Nexus <gmail>")
+SMTP_FROM_NAME = (os.getenv("SMTP_FROM_NAME", "") or "").strip()
 RECEIVER_EMAIL_1 = (os.getenv("RECEIVER_EMAIL_1", "") or "").strip()
 RECEIVER_EMAIL_2 = (os.getenv("RECEIVER_EMAIL_2", "") or "").strip()
 RECEIVER_EMAIL_3 = (os.getenv("RECEIVER_EMAIL_3", "") or "").strip()
 ACTIVATION_DAYS_VALID = int(os.getenv("ACTIVATION_DAYS_VALID", "30"))
+
+
+def _smtp_from_header():
+    """From header: 'SMTP_FROM_NAME <SENDMAIL_USER>' nếu có tên, ngược lại chỉ email."""
+    if not SMTP_FROM_NAME:
+        return SENDMAIL_USER
+    from email.header import Header
+    from email.utils import formataddr
+    try:
+        SMTP_FROM_NAME.encode("ascii")
+        name = SMTP_FROM_NAME
+    except UnicodeEncodeError:
+        name = str(Header(SMTP_FROM_NAME, "utf-8"))
+    return formataddr((name, SENDMAIL_USER))
 SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key_change_this")
 
 def _is_secret_key_valid(sk=None):
@@ -655,7 +671,7 @@ def send_activation_code_by_email(device_info, activation_code):
             
             # Create email
             msg = MIMEMultipart('alternative')
-            msg['From'] = SENDMAIL_USER
+            msg['From'] = _smtp_from_header()
             msg['To'] = recipient
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'html'))
@@ -1255,7 +1271,7 @@ def send_activation_code_by_email(device_info, activation_code):
             </html>
             """
             msg = MIMEMultipart('alternative')
-            msg['From'] = SENDMAIL_USER
+            msg['From'] = _smtp_from_header()
             msg['To'] = recipient
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'html'))
@@ -1816,7 +1832,7 @@ def send_activation_code_by_email(device_info, activation_code):
             </html>
             """
             msg = MIMEMultipart('alternative')
-            msg['From'] = SENDMAIL_USER
+            msg['From'] = _smtp_from_header()
             msg['To'] = recipient
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'html'))
