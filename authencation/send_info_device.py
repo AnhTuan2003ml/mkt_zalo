@@ -2498,3 +2498,47 @@ def register_device_on_startup(verbose=True):
         if not is_valid:
             print("🔐 Chưa kích hoạt. Mở /activation, chọn thời gian kích hoạt, rồi gửi mã qua email.")
     return bool(is_valid)
+
+
+# ─── Phân quyền tính năng theo gói license ──────────────────────────────────
+# Ma trận:
+#   - Gói đến 3 tháng (3d/7d/10d/1m/2m/3m): đăng nhập tối đa 2 tài khoản Zalo,
+#     chiến dịch + sao chép nhóm chỉ chạy bằng 1 tài khoản thực hiện.
+#   - Gói 6 tháng trở lên (6m, vĩnh viễn): đăng nhập KHÔNG giới hạn tài khoản,
+#     được chọn nhiều tài khoản Zalo đồng thời để chạy chiến dịch/sao chép nhóm.
+_PLAN_DAYS_MAP = {
+    "3d": 3, "7d": 7, "10d": 10, "1m": 30, "2m": 60, "3m": 90, "6m": 180,
+    "lifetime": 99999,
+}
+
+
+def get_license_plan():
+    """Trả về thông tin gói + quyền tính năng hiện tại.
+
+    Keys: activated, planKey, planLabel, isPermanent, daysRemaining,
+          maxAccounts (0 = không giới hạn), multiAccountExec (bool).
+    """
+    try:
+        code_data = _encrypted_read_json(PATHS["code"]) or {}
+    except Exception:
+        code_data = {}
+    try:
+        is_valid, days, _msg = validate_activation_code()
+    except Exception:
+        is_valid, days = False, 0
+
+    plan_key = str(code_data.get("plan_key") or "").strip().lower()
+    is_permanent = bool(code_data.get("is_permanent"))
+    plan_days = 99999 if is_permanent else _PLAN_DAYS_MAP.get(plan_key, 0)
+    # Gói 6 tháng (>=180 ngày) trở lên hoặc vĩnh viễn = mở full tính năng.
+    full_tier = bool(is_valid) and (is_permanent or plan_days >= 180)
+
+    return {
+        "activated": bool(is_valid),
+        "planKey": plan_key,
+        "planLabel": code_data.get("plan_label") or "",
+        "isPermanent": is_permanent,
+        "daysRemaining": int(days or 0),
+        "maxAccounts": 0 if full_tier else 2,
+        "multiAccountExec": bool(full_tier),
+    }

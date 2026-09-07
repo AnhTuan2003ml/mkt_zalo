@@ -1461,12 +1461,33 @@
         }
     }
 
+    async function applyPlanCapabilities() {
+        // Ẩn nút chọn nhiều tài khoản thực hiện nếu gói không cho phép.
+        try {
+            var plan = await fetch('/api/license/plan').then(function (r) { return r.json(); });
+            state.multiAccountExec = !!plan.multiAccountExec;
+        } catch (e) {
+            state.multiAccountExec = true;
+        }
+        var field = document.getElementById('groupCopyExecTrigger');
+        if (field) {
+            var wrap = field.closest('.gc-field');
+            if (!state.multiAccountExec) {
+                state.extraAccountIds.clear();
+                if (wrap) wrap.hidden = true;
+            } else if (wrap) {
+                wrap.hidden = false;
+            }
+        }
+    }
+
     async function init() {
         bindEvents();
         setDefaultStartTime();
         setTargetMode('new');
         renderTargetPreview();
         await loadAccounts();
+        await applyPlanCapabilities();
         await loadJobs();
         updateRunButtonState();
         state.jobsTimer = window.setInterval(loadJobs, 10000);

@@ -1592,6 +1592,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
 window.addEventListener('load', function() {
     schedLoadAccounts();
+    // Ẩn khối chọn nhiều tài khoản thực hiện nếu gói license không cho phép.
+    fetch('/api/license/plan').then(function(r){return r.json();}).then(function(plan){
+        if (plan && plan.multiAccountExec === false) {
+            _schedGroupExecAccounts.clear();
+            var btn = document.getElementById('schedGroupPickExecBtn');
+            var chips = document.getElementById('schedGroupExecChips');
+            if (btn && btn.closest('.form-group')) btn.closest('.form-group').style.display = 'none';
+            if (chips) chips.innerHTML = '';
+        }
+    }).catch(function(){});
     var cb = document.getElementById('schedAcctCloseBtn');
     if (cb) {
         cb.addEventListener('click', function(e) {

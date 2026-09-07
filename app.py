@@ -274,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.4"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -845,6 +845,7 @@ try:
         save_user_activation_code,
         send_device_log,
         get_activation_duration_options,
+        get_license_plan,
     )
     DEVICE_TRACKING_ENABLED = True
 except Exception as e:
@@ -880,6 +881,11 @@ except Exception as e:
             {"key": "6m", "label": "6 Tháng", "icon": "📊"},
             {"key": "lifetime", "label": "Vĩnh viễn", "icon": "💎"},
         ]
+
+    def get_license_plan():
+        # Module kích hoạt bị tắt: mở full để không chặn khi phát triển.
+        return {"activated": True, "planKey": "", "planLabel": "", "isPermanent": True,
+                "daysRemaining": 9999, "maxAccounts": 0, "multiAccountExec": True}
 
 # ─── Global log queue for SSE streaming ───────────────────────────────────────
 _log_queue = queue.Queue()
@@ -1083,6 +1089,26 @@ def activation_page():
 @app.route("/api/activation/status", methods=["GET"])
 def api_activation_status():
     return jsonify(_activation_status_payload())
+
+
+def _current_plan():
+    try:
+        return get_license_plan()
+    except Exception:
+        # Lỗi đọc gói: mở full để không chặn nhầm người dùng hợp lệ.
+        return {"activated": True, "planKey": "", "planLabel": "", "isPermanent": True,
+                "daysRemaining": 0, "maxAccounts": 0, "multiAccountExec": True}
+
+
+@app.route("/api/license/plan", methods=["GET"])
+def api_license_plan():
+    """Quyền tính năng theo gói license (giới hạn tài khoản, chọn nhiều TK)."""
+    plan = _current_plan()
+    try:
+        plan["accountCount"] = len(load_accounts() or [])
+    except Exception:
+        plan["accountCount"] = 0
+    return jsonify({"success": True, **plan})
 
 
 @app.route("/api/activation/save", methods=["POST"])
@@ -1506,6 +1532,22 @@ def api_create_account():
     name = str(data.get("name") or "").strip()
     proxy = str(data.get("proxy") or "").strip()
     auto_launch = bool(data.get("autoLaunch", False))
+    # Giới hạn số tài khoản đăng nhập theo gói license.
+    plan = _current_plan()
+    max_accounts = int(plan.get("maxAccounts") or 0)
+    if max_accounts > 0:
+        try:
+            current = len(load_accounts() or [])
+        except Exception:
+            current = 0
+        if current >= max_accounts:
+            return jsonify({
+                "success": False,
+                "error": f"Gói hiện tại chỉ cho phép đăng nhập tối đa {max_accounts} tài khoản Zalo. "
+                         f"Nâng lên gói 6 tháng trở lên để đăng nhập không giới hạn tài khoản.",
+                "limitReached": True,
+                "maxAccounts": max_accounts,
+            }), 403
     try:
         account = create_account(name=name or None, proxy=proxy, auto_launch=auto_launch)
         return jsonify({"success": True, "account": account})
@@ -3221,6 +3263,9 @@ def api_group_copy_start():
             account_ids.append(aid)
     if not account_id and account_ids:
         account_id = account_ids[0]
+    # Gói không cho chọn nhiều tài khoản thực hiện: chỉ giữ 1 tài khoản.
+    if not _current_plan().get("multiAccountExec") and len(account_ids) > 1:
+        account_ids = [account_id or account_ids[0]]
     source_input = str(data.get("sourceInput") or data.get("sourceGroup") or "").strip()
     source_group_id = str(data.get("sourceGroupId") or data.get("resolvedSourceGroupId") or "").strip()
     source_input_type, normalized_source_input = normalize_group_input(source_input)
@@ -3452,6 +3497,9 @@ def api_create_schedule_api():
                 account_ids.append(aid)
         if not account_id and account_ids:
             account_id = account_ids[0]
+        # Gói không cho chọn nhiều tài khoản thực hiện: chỉ giữ 1 tài khoản.
+        if not _current_plan().get("multiAccountExec") and len(account_ids) > 1:
+            account_ids = [account_id or account_ids[0]]
 
         # Map accountId -> tên hiển thị (để lịch không hiện N/A).
         name_by_id = {}
