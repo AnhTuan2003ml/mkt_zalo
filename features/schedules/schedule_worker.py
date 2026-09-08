@@ -16,7 +16,7 @@ from features.groups.send_sms_group import send_group_msg
 from features.messaging.send_sms import send_sms
 from features.messaging.send_photo import send_photo
 from features.messaging.send_link import extract_zalo_group_link, resolve_group_link_info, send_message_smart
-from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result
+from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result, get_schedule
 
 
 def _prepare_link_info(message: str, zpw_enk: str, cookies: str, zpw_ver: str, imei: str = ""):
@@ -70,11 +70,18 @@ def _resume_progress(recipients, results, id_key):
     return remaining, success_count, failed_count, consecutive_errors
 
 
+# Số chiến dịch tối đa chạy SONG SONG cùng lúc (mỗi chiến dịch 1 thread riêng).
+MAX_CONCURRENT_SCHEDULES = 16
+
+
 class ScheduleWorker:
     def __init__(self):
         self.running = False
         self.thread = None
-        
+        # Các scheduleId đang được một thread xử lý — tránh chạy trùng 1 lịch.
+        self._active = set()
+        self._active_lock = threading.Lock()
+
     def start(self):
         """Start worker thread."""
         if self.running:
@@ -83,35 +90,68 @@ class ScheduleWorker:
         self.thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.thread.start()
         print("[schedule_worker] Worker started")
-        
+
     def stop(self):
         """Stop worker thread."""
         self.running = False
-        
+
     def _worker_loop(self):
-        """Main worker loop: check every 5 seconds."""
+        """Vòng điều phối: mỗi 5 giây quét lịch cần chạy rồi GIAO cho thread riêng.
+
+        Worker KHÔNG tự gửi tin trong vòng lặp này (tránh blocking): mỗi chiến
+        dịch đến hạn được chạy trong một thread độc lập nên nhiều tài khoản /
+        nhiều chiến dịch chạy SONG SONG, không cái nào chặn cái nào.
+        """
         print("[schedule_worker] Worker loop started")
         while self.running:
             try:
-                self._check_and_run_schedules()
+                self._dispatch()
             except Exception as e:
                 print(f"[schedule_worker] Error in loop: {e}")
             time.sleep(5)
-            
-    def _check_and_run_schedules(self):
-        """Kiểm tra và chạy lịch cần chạy."""
+
+    def _dispatch(self):
+        """Quét lịch đến hạn và spawn thread xử lý cho từng lịch (song song)."""
         schedules = load_schedules()
         now = datetime.now().isoformat()
-        
+
         for sch in schedules:
             sch_id = sch.get("scheduleId")
             status = sch.get("status")
             run_at = sch.get("runAt", "")
-            
-            # Worker chạy tuần tự: lịch running còn lưu là lượt đã bị ngắt.
-            if status == "running" or (status == "pending" and run_at and run_at <= now):
+
+            # Lịch cần chạy: đang pending & đến giờ, HOẶC đang running (bị ngắt
+            # giữa chừng do tắt app) cần chạy tiếp.
+            due = status == "running" or (status == "pending" and run_at and run_at <= now)
+            if not due:
+                continue
+
+            with self._active_lock:
+                if sch_id in self._active:
+                    continue  # đã có thread đang chạy lịch này
+                if len(self._active) >= MAX_CONCURRENT_SCHEDULES:
+                    continue  # đủ tải, chờ lượt quét sau
+                self._active.add(sch_id)
+
+            t = threading.Thread(target=self._run_and_release, args=(sch_id,), daemon=True)
+            t.start()
+
+    def _run_and_release(self, sch_id):
+        """Chạy 1 chiến dịch trong thread riêng rồi giải phóng khỏi danh sách active."""
+        try:
+            sch = get_schedule(sch_id)
+            if sch:
                 print(f"[schedule_worker] Running schedule: {sch_id}")
                 self._run_schedule(sch)
+        except Exception as e:
+            print(f"[schedule_worker] Schedule {sch_id} crashed: {e}")
+            try:
+                update_schedule(sch_id, {"status": "failed"})
+            except Exception:
+                pass
+        finally:
+            with self._active_lock:
+                self._active.discard(sch_id)
                 
     def _run_schedule(self, schedule: dict):
         """Chạy một lịch gửi tin - xử lý theo batch."""
