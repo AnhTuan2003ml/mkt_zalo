@@ -62,8 +62,13 @@
 </head>
 <body>
 <div class="wrap">
-    <h1>🔑 Nexus License — Quản trị kích hoạt</h1>
-    <div class="sub">Quản lý key, kích hoạt / hủy kích hoạt cho từng máy. Lọc theo thời gian, IP, tên máy.</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div>
+            <h1>🔑 Nexus License — Quản trị kích hoạt</h1>
+            <div class="sub">Quản lý key, kích hoạt / hủy kích hoạt cho từng máy. Lọc theo thời gian, IP, tên máy.</div>
+        </div>
+        <button class="btn btn-ghost" onclick="location.href='/logout'">Đăng xuất</button>
+    </div>
 
     <div class="stats" id="stats"></div>
 
@@ -106,9 +111,11 @@
 </div>
 
 <script>
-    var TOKEN = new URLSearchParams(location.search).get('token') || '';
-    function hdr() { return TOKEN ? { 'X-Admin-Token': TOKEN } : {}; }
+    // Đã đăng nhập bằng session cookie — không cần token trên URL.
+    function hdr() { return {}; }
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    // Session hết hạn -> quay lại trang đăng nhập.
+    function guard(res){ if (res && res.status === 401) { location.href = '/login'; return true; } return false; }
 
     async function loadMachines() {
         var p = new URLSearchParams();
@@ -117,10 +124,11 @@
         if (fltStatus.value) p.set('status', fltStatus.value);
         if (fltFrom.value) p.set('from', fltFrom.value);
         if (fltTo.value) p.set('to', fltTo.value);
-        if (TOKEN) p.set('token', TOKEN);
         document.getElementById('status').textContent = 'Đang tải...';
         try {
-            var data = await fetch('/api/admin/machines?' + p.toString(), { headers: hdr() }).then(r => r.json());
+            var res = await fetch('/api/admin/machines?' + p.toString(), { headers: hdr() });
+            if (guard(res)) return;
+            var data = await res.json();
             if (!data.success) throw new Error(data.error || 'Lỗi');
             renderStats(data.stats);
             renderRows(data.machines);
@@ -169,7 +177,7 @@
         try {
             var data = await fetch('/api/admin/machines/' + id + '/' + action, {
                 method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr()),
-                body: JSON.stringify({ token: TOKEN })
+                body: JSON.stringify({})
             }).then(r => r.json());
             if (!data.success) throw new Error(data.error || 'Lỗi');
             if (action === 'regen') alert('Đã tạo key mới' + (data.sent ? ' và gửi email.' : ' (gửi email thất bại).'));
@@ -179,7 +187,7 @@
     async function delMachine(id) {
         if (!confirm('Xóa máy này khỏi hệ thống?')) return;
         try {
-            await fetch('/api/admin/machines/' + id + (TOKEN ? '?token=' + TOKEN : ''), { method: 'DELETE', headers: hdr() });
+            await fetch('/api/admin/machines/' + id, { method: 'DELETE', headers: hdr() });
             loadMachines();
         } catch (e) { alert('Lỗi: ' + e.message); }
     }
@@ -212,8 +220,7 @@
     // Email nhận key: env mặc định (khóa) + phụ (thêm được).
     async function loadEmails() {
         try {
-            var p = TOKEN ? '?token=' + TOKEN : '';
-            var data = await fetch('/api/admin/settings' + p, { headers: hdr() }).then(r => r.json());
+            var data = await fetch('/api/admin/settings', { headers: hdr() }).then(r => r.json());
             if (!data.success) return;
             document.getElementById('extraEmails').value = (data.extraEmails || []).join(', ');
             document.getElementById('emailChips').innerHTML =
@@ -223,9 +230,9 @@
     }
     async function saveEmails() {
         try {
-            var data = await fetch('/api/admin/settings' + (TOKEN ? '?token=' + TOKEN : ''), {
+            var data = await fetch('/api/admin/settings', {
                 method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr()),
-                body: JSON.stringify({ extraEmails: document.getElementById('extraEmails').value, token: TOKEN })
+                body: JSON.stringify({ extraEmails: document.getElementById('extraEmails').value })
             }).then(r => r.json());
             if (!data.success) throw new Error(data.error || 'Lỗi');
             loadEmails();

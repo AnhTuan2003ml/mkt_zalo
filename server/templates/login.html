@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - Nexus License</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+               font: 14px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
+               background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #0f172a; }
+        .card { width: min(380px, 92vw); background: #fff; border-radius: 16px; padding: 30px 28px;
+                box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+        .logo { font-size: 30px; text-align: center; }
+        h1 { font-size: 18px; text-align: center; margin: 8px 0 4px; }
+        .sub { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 22px; }
+        label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; }
+        input { width: 100%; height: 44px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 10px;
+                font-size: 14px; }
+        input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+        button { width: 100%; height: 44px; margin-top: 16px; border: 0; border-radius: 10px;
+                 background: #2563eb; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        button:disabled { opacity: .6; cursor: not-allowed; }
+        .err { margin-top: 12px; padding: 9px 12px; border-radius: 8px; background: #fef2f2;
+               color: #b91c1c; font-size: 13px; display: none; }
+        .err.show { display: block; }
+    </style>
+</head>
+<body>
+    <form class="card" id="loginForm" onsubmit="return doLogin(event)">
+        <div class="logo">🔑</div>
+        <h1>Nexus License</h1>
+        <div class="sub">Đăng nhập quản trị</div>
+        <label for="token">Mật khẩu quản trị</label>
+        <input type="password" id="token" placeholder="Nhập mật khẩu (ADMIN_TOKEN)" autocomplete="current-password" autofocus>
+        <button type="submit" id="btn">Đăng nhập</button>
+        <div class="err" id="err"></div>
+    </form>
+    <script>
+        async function doLogin(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btn');
+            var err = document.getElementById('err');
+            var token = document.getElementById('token').value.trim();
+            err.classList.remove('show');
+            btn.disabled = true; btn.textContent = 'Đang đăng nhập...';
+            try {
+                var res = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token })
+                });
+                var data = await res.json();
+                if (data.success) { location.href = '/'; return false; }
+                err.textContent = data.error || 'Đăng nhập thất bại.';
+                err.classList.add('show');
+            } catch (ex) {
+                err.textContent = 'Lỗi kết nối: ' + ex.message;
+                err.classList.add('show');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Đăng nhập';
+            }
+            return false;
+        }
+    </script>
+</body>
+</html>

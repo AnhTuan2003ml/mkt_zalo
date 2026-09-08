@@ -29,7 +29,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 from email.header import Header
 
-from flask import Flask, request, jsonify, render_template, Response
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "data", "licenses.db")
@@ -230,6 +230,8 @@ def send_key_email(machine, key):
 
 # ─── Flask app ───────────────────────────────────────────────────────────────
 app = Flask(__name__)
+# Khóa ký session (đăng nhập dashboard). Ổn định qua restart nếu có ADMIN_TOKEN.
+app.secret_key = os.getenv("SESSION_SECRET", "") or (ADMIN_TOKEN + "::nexus-session") or secrets.token_hex(32)
 init_db()
 
 
@@ -292,13 +294,40 @@ def _record_verify_ok(ip):
 
 
 def _require_admin():
-    """Kiểm tra token admin cho dashboard/API quản trị."""
+    """Đã đăng nhập (session) HOẶC token đúng (cho script/API)."""
     if not ADMIN_TOKEN:
+        return True
+    if session.get("admin") is True:
         return True
     token = request.headers.get("X-Admin-Token") or request.args.get("token") or ""
     if request.is_json:
         token = token or (request.get_json(silent=True) or {}).get("token", "")
     return token == ADMIN_TOKEN
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """Trang đăng nhập dashboard. Token so khớp ADMIN_TOKEN trong .env."""
+    if not ADMIN_TOKEN:
+        session["admin"] = True
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        data = request.get_json(silent=True) or request.form or {}
+        token = str(data.get("token") or "").strip()
+        if token and token == ADMIN_TOKEN:
+            session["admin"] = True
+            session.permanent = True
+            return jsonify({"success": True})
+        return jsonify({"success": False, "error": "Mật khẩu quản trị không đúng."}), 401
+    if session.get("admin") is True:
+        return redirect(url_for("dashboard"))
+    return render_template("login.html")
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    session.pop("admin", None)
+    return redirect(url_for("login"))
 
 
 # ── API cho CLIENT ──
@@ -422,7 +451,7 @@ def api_verify():
 @app.route("/")
 def dashboard():
     if not _require_admin():
-        return Response("Cần token admin. Thêm ?token=... vào URL.", status=401)
+        return redirect(url_for("login"))
     return render_template("dashboard.html", plans=PLAN_OPTIONS)
 
 
