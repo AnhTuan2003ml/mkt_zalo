@@ -1,7 +1,6 @@
-"""Xác thực license qua MÁY CHỦ (thay cho cấp phép offline).
+"""Xác thực license qua MÁY CHỦ (toàn bộ việc sinh key + gửi email nằm ở server).
 
-Chỉ hoạt động khi cấu hình LICENSE_SERVER_URL (trong .env). Nếu chưa cấu hình,
-app dùng lại luồng offline cũ trong send_info_device.py (không phá vỡ).
+Cấu hình LICENSE_SERVER_URL trong .env để trỏ tới máy chủ license.
 
 Luồng:
 - register_with_server(plan): gửi MAC + tên máy lên server -> server sinh key,
@@ -20,7 +19,8 @@ import requests
 
 # Bỏ qua system proxy (tool bắt gói gây lỗi SSL) — gọi thẳng.
 NO_PROXY = {"http": None, "https": None}
-GRACE_SECONDS = 3 * 24 * 3600  # cho phép dùng cache tối đa 3 ngày khi mất mạng
+GRACE_SECONDS = 3 * 24 * 3600     # cho phép dùng cache tối đa 3 ngày khi mất mạng
+REVERIFY_SECONDS = 60             # chỉ verify online lại sau mỗi 60s (tránh spam server)
 
 
 def get_server_url():
@@ -32,14 +32,14 @@ def is_server_mode():
 
 
 def _cache_path():
+    """Nơi lưu cache license: %LOCALAPPDATA%/Nexus/.license (Windows), fallback ~."""
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "Nexus", ".license")
     try:
-        from authencation.send_info_device import PATHS, get_app_root
-        base = os.path.dirname(PATHS.get("code") or "")
-        if base:
-            return os.path.join(base, ".server_license_cache")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, ".server_license_cache")
     except Exception:
-        pass
-    return os.path.join(os.path.expanduser("~"), ".nexus_server_license_cache")
+        return os.path.join(os.path.expanduser("~"), ".nexus_server_license_cache")
 
 
 def _read_cache():
@@ -144,6 +144,11 @@ def get_server_plan():
     # Không có key đã lưu -> chưa kích hoạt.
     if not key:
         return _plan_result(False, cache, reason="chưa kích hoạt")
+
+    # Vừa verify online gần đây -> dùng cache, không gọi server (giảm tải + nhanh).
+    last = float(cache.get("lastVerifiedAt") or 0)
+    if last and (datetime.now().timestamp() - last) < REVERIFY_SECONDS and _cache_not_expired(cache):
+        return _plan_result(True, cache, offline=True)
 
     # Thử verify online để phản ánh hủy kích hoạt / hết hạn kịp thời.
     data = verify_with_server(key, timeout=8)

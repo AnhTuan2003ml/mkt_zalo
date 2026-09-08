@@ -274,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.1.8"
+APP_VERSION = "1.1.9"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -835,40 +835,13 @@ def _update_action_plan_batch_status(plan_type: str, plan_id: str, batch_day, pa
     _save_action_plan_store(plan_type, plans)
     return plan, batch
 
-# ─── Device Activation / Info (optional - for device management) ─────────────
+# ─── Danh sách gói kích hoạt (xác thực thực tế qua máy chủ license) ───────────
 try:
-    from authencation.send_info_device import (
-        register_device_on_startup,
-        register_device_with_activation,
-        check_activation_on_startup,
-        validate_activation_code,
-        save_user_activation_code,
-        send_device_log,
-        get_activation_duration_options,
-        get_license_plan,
-    )
+    from authencation.send_info_device import get_activation_duration_options
     DEVICE_TRACKING_ENABLED = True
 except Exception as e:
-    print(f"⚠️  Device activation disabled: {str(e)}")
+    print(f"⚠️  Activation options unavailable: {str(e)}")
     DEVICE_TRACKING_ENABLED = False
-
-    def validate_activation_code():
-        return True, 9999, "Activation module disabled"
-
-    def save_user_activation_code(code_text):
-        return False, "Activation module disabled"
-
-    def register_device_on_startup(*args, **kwargs):
-        return False
-
-    def register_device_with_activation(*args, **kwargs):
-        return False
-
-    def check_activation_on_startup():
-        return True
-
-    def send_device_log(action, details=None):
-        return False
 
     def get_activation_duration_options():
         return [
@@ -881,11 +854,6 @@ except Exception as e:
             {"key": "6m", "label": "6 Tháng", "icon": "📊"},
             {"key": "lifetime", "label": "Vĩnh viễn", "icon": "💎"},
         ]
-
-    def get_license_plan():
-        # Module kích hoạt bị tắt: mở full để không chặn khi phát triển.
-        return {"activated": True, "planKey": "", "planLabel": "", "isPermanent": True,
-                "daysRemaining": 9999, "maxAccounts": 0, "multiAccountExec": True}
 
 # ─── Global log queue for SSE streaming ───────────────────────────────────────
 _log_queue = queue.Queue()
@@ -965,41 +933,30 @@ def ensure_schedule_worker_started():
 
 
 def _activation_status_payload():
-    # Chế độ máy chủ: trạng thái kích hoạt lấy từ license server.
-    if _server_license_mode():
-        try:
-            from authencation.server_license import get_server_plan
-            plan = get_server_plan()
-            activated = bool(plan.get("activated"))
-            if activated:
-                label = plan.get("planLabel") or plan.get("planKey") or ""
-                if plan.get("isPermanent"):
-                    msg = f"✅ License {label} hợp lệ".strip()
-                else:
-                    msg = f"✅ License {label} còn {plan.get('daysRemaining', 0)} ngày".strip()
-            else:
-                msg = "🔐 Chưa kích hoạt. Gửi thông tin máy lên máy chủ để nhận key qua email."
-                if plan.get("reason"):
-                    msg += f" ({plan.get('reason')})"
-            return {
-                "success": True,
-                "activated": activated,
-                "days_remaining": int(plan.get("daysRemaining") or 0),
-                "message": msg,
-            }
-        except Exception as e:
-            return {"success": True, "activated": False, "days_remaining": 0,
-                    "message": f"Lỗi kiểm tra kích hoạt qua máy chủ: {e}"}
+    # Trạng thái kích hoạt lấy TỪ MÁY CHỦ license.
     try:
-        is_valid, days_remaining, message = validate_activation_code()
+        from authencation.server_license import get_server_plan
+        plan = get_server_plan()
+        activated = bool(plan.get("activated"))
+        if activated:
+            label = plan.get("planLabel") or plan.get("planKey") or ""
+            if plan.get("isPermanent"):
+                msg = f"✅ License {label} hợp lệ".strip()
+            else:
+                msg = f"✅ License {label} còn {plan.get('daysRemaining', 0)} ngày".strip()
+        else:
+            msg = "🔐 Chưa kích hoạt. Gửi thông tin máy lên máy chủ để nhận key qua email."
+            if plan.get("reason"):
+                msg += f" ({plan.get('reason')})"
+        return {
+            "success": True,
+            "activated": activated,
+            "days_remaining": int(plan.get("daysRemaining") or 0),
+            "message": msg,
+        }
     except Exception as e:
-        is_valid, days_remaining, message = False, 0, f"Lỗi kiểm tra kích hoạt: {e}"
-    return {
-        "success": True,
-        "activated": bool(is_valid),
-        "days_remaining": int(days_remaining or 0),
-        "message": message,
-    }
+        return {"success": True, "activated": False, "days_remaining": 0,
+                "message": f"Lỗi kiểm tra kích hoạt qua máy chủ: {e}"}
 
 
 @app.before_request
@@ -1032,6 +989,7 @@ def require_activation_before_use():
         "api_activation_resend",
         "api_device_register",
         "api_device_log",
+        "api_device_mac",
         "static",
     }
 
@@ -1126,20 +1084,14 @@ def _server_license_mode():
 
 
 def _current_plan():
-    # Ưu tiên xác thực qua máy chủ nếu đã cấu hình LICENSE_SERVER_URL.
-    if _server_license_mode():
-        try:
-            from authencation.server_license import get_server_plan
-            return get_server_plan()
-        except Exception:
-            return {"activated": False, "planKey": "", "planLabel": "", "isPermanent": False,
-                    "daysRemaining": 0, "maxAccounts": 2, "multiAccountExec": False}
+    # Xác thực license HOÀN TOÀN qua máy chủ (không còn cấp phép offline).
     try:
-        return get_license_plan()
+        from authencation.server_license import get_server_plan
+        return get_server_plan()
     except Exception:
-        # Lỗi đọc gói: mở full để không chặn nhầm người dùng hợp lệ.
-        return {"activated": True, "planKey": "", "planLabel": "", "isPermanent": True,
-                "daysRemaining": 0, "maxAccounts": 0, "multiAccountExec": True}
+        # Không đọc được -> coi như chưa kích hoạt (khóa an toàn, gói cơ bản).
+        return {"activated": False, "planKey": "", "planLabel": "", "isPermanent": False,
+                "daysRemaining": 0, "maxAccounts": 2, "multiAccountExec": False}
 
 
 @app.route("/api/license/plan", methods=["GET"])
@@ -1168,32 +1120,19 @@ def api_activation_save():
     data = request.get_json(silent=True) or request.form or {}
     code_text = (data.get("code") or data.get("activation_code") or "").strip()
 
-    # Chế độ máy chủ: xác thực key với license server.
-    if _server_license_mode():
-        try:
-            from authencation.server_license import verify_with_server
-            result = verify_with_server(code_text)
-        except Exception as e:
-            return jsonify({"success": False, "message": f"Lỗi xác thực máy chủ: {e}"}), 500
-        ok = bool(result.get("valid"))
-        message = "✅ Kích hoạt thành công!" if ok else (result.get("error") or "Key không hợp lệ.")
-        status = _activation_status_payload()
-        if ok:
-            ensure_schedule_worker_started()
-        return jsonify({
-            "success": ok,
-            "message": message,
-            "activated": bool(status.get("activated")),
-            "days_remaining": status.get("days_remaining", 0),
-            "status_message": status.get("message", ""),
-        }), 200 if ok else 400
-
-    ok, message = save_user_activation_code(code_text)
+    # Xác thực key với MÁY CHỦ license (client chỉ check, không tự cấp).
+    try:
+        from authencation.server_license import verify_with_server
+        result = verify_with_server(code_text)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Lỗi xác thực máy chủ: {e}"}), 500
+    ok = bool(result.get("valid"))
+    message = "✅ Kích hoạt thành công!" if ok else (result.get("error") or "Key không hợp lệ.")
     status = _activation_status_payload()
-    if ok and status.get("activated"):
+    if ok:
         ensure_schedule_worker_started()
     return jsonify({
-        "success": bool(ok),
+        "success": ok,
         "message": message,
         "activated": bool(status.get("activated")),
         "days_remaining": status.get("days_remaining", 0),
@@ -1209,50 +1148,22 @@ def api_activation_resend():
         options_map = {item["key"]: item for item in get_activation_duration_options()}
         selected = options_map.get(duration_key, options_map.get("1m", {"key": duration_key, "label": duration_key}))
 
-        # Chế độ máy chủ: gửi thông tin máy lên server để nhận key qua email.
-        if _server_license_mode():
-            from authencation.server_license import register_with_server
-            result = register_with_server(duration_key)
-            sent = bool(result.get("success") and result.get("sent"))
-            status = _activation_status_payload()
-            return jsonify({
-                "success": bool(result.get("success")),
-                "sent": sent,
-                "activated": bool(status.get("activated")),
-                "selected_duration": selected,
-                "message": result.get("message") or (
-                    "Đã gửi thông tin máy lên máy chủ. Kiểm tra email để lấy key."
-                    if sent else (result.get("error") or "Không gửi được yêu cầu tới máy chủ cấp phép.")
-                ),
-                "status_message": status.get("message", ""),
-            }), (200 if result.get("success") else 400)
-
-        sent = register_device_with_activation(verbose=True, duration_key=duration_key, force=True)
+        # Gửi thông tin máy lên MÁY CHỦ để server sinh key + gửi email admin.
+        from authencation.server_license import register_with_server
+        result = register_with_server(duration_key)
+        sent = bool(result.get("success") and result.get("sent"))
         status = _activation_status_payload()
-        if not sent:
-            return jsonify({
-                "success": False,
-                "sent": False,
-                "activated": bool(status.get("activated")),
-                "selected_duration": selected,
-                "message": (
-                    "Không gửi được mã kích hoạt. Kiểm tra cấu hình email trong .env: "
-                    "SENDMAIL_USER phải đúng Gmail gửi, SENDMAIL_PASS phải là App Password 16 ký tự "
-                    "chứ không phải mật khẩu Gmail thường. Nếu App Password có dấu cách, hệ thống đã tự bỏ khoảng trắng khi đăng nhập SMTP."
-                ),
-                "status_message": status.get("message", ""),
-            }), 400
         return jsonify({
-            "success": True,
-            "sent": True,
+            "success": bool(result.get("success")),
+            "sent": sent,
             "activated": bool(status.get("activated")),
             "selected_duration": selected,
-            "message": (
-                f"Đã gửi mã kích hoạt 12 ký tự cho gói {selected.get('label', duration_key)}. "
-                "Lưu ý: mã mới sẽ làm mã cũ hết hiệu lực."
+            "message": result.get("message") or (
+                "Đã gửi thông tin máy lên máy chủ. Kiểm tra email để lấy key."
+                if sent else (result.get("error") or "Không gửi được yêu cầu tới máy chủ cấp phép.")
             ),
             "status_message": status.get("message", ""),
-        })
+        }), (200 if result.get("success") else 400)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -4985,21 +4896,16 @@ def _start_backend_server():
     try:
         _enable_windows_terminal_copy_mode()
 
-        # Kiểm tra/kích hoạt thiết bị trước khi cho worker chạy nền.
-        if DEVICE_TRACKING_ENABLED:
-            try:
-                register_device_on_startup(verbose=True)
-                is_valid, days_remaining, message = validate_activation_code()
-                print(message, flush=True)
-                if is_valid:
-                    ensure_schedule_worker_started()
-                    print(f"✅ License còn {days_remaining} ngày", flush=True)
-                else:
-                    print("🔐 Phần mềm chưa kích hoạt. Mở giao diện /activation để chọn thời gian kích hoạt và nhận mã 12 ký tự qua email.", flush=True)
-            except Exception as e:
-                print(f"⚠️  Lỗi kiểm tra/kích hoạt thiết bị: {str(e)}", flush=True)
-        else:
-            ensure_schedule_worker_started()
+        # Kiểm tra kích hoạt qua MÁY CHỦ license trước khi cho worker chạy nền.
+        try:
+            status = _activation_status_payload()
+            print(status.get("message", ""), flush=True)
+            if status.get("activated"):
+                ensure_schedule_worker_started()
+            else:
+                print("🔐 Phần mềm chưa kích hoạt. Mở /activation, gửi thông tin máy lên máy chủ để nhận key qua email.", flush=True)
+        except Exception as e:
+            print(f"⚠️  Lỗi kiểm tra kích hoạt: {str(e)}", flush=True)
 
         print("✅ Backend đã sẵn sàng", flush=True)
         print("🌐 Giao diện: http://127.0.0.1:5000/policy", flush=True)
