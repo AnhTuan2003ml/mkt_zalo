@@ -394,6 +394,7 @@
                 '<button class="schedule-icon-btn" title="Xem chi tiết" onclick="SchedMon.showDetail(\'' + sch.scheduleId + '\')">' + iconSvg('eye') + '</button>' +
                 '<button class="schedule-icon-btn" title="Sửa lịch" onclick="SchedMon.showEditModal(\'' + sch.scheduleId + '\')">' + iconSvg('edit') + '</button>' +
                 (st === 'pending' ? '<button class="schedule-icon-btn" title="Chạy ngay" onclick="SchedMon.runNow(\'' + sch.scheduleId + '\')">' + iconSvg('play') + '</button>' : '') +
+                (st !== 'running' ? '<button class="schedule-icon-btn" title="Chạy lại" onclick="SchedMon.runAgain(\'' + sch.scheduleId + '\')">' + iconSvg('refresh') + '</button>' : '') +
                 (st !== 'running' ? '<button class="schedule-icon-btn is-danger" title="Xóa" onclick="SchedMon.deleteSchedule(\'' + sch.scheduleId + '\')">' + iconSvg('trash') + '</button>' : '<button class="schedule-icon-btn is-danger" title="Hủy" onclick="SchedMon.cancelSchedule(\'' + sch.scheduleId + '\')">' + iconSvg('stop') + '</button>') +
             '</div>';
         return row;
@@ -435,6 +436,7 @@
             eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
             edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>',
             play: '<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></svg>',
+            refresh: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4L4 9"/><path d="M4 4v5h5M4 13a8 8 0 0 0 14.7 4L20 15"/><path d="M20 20v-5h-5"/></svg>',
             trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>',
             stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
         };
@@ -861,6 +863,28 @@
         });
     }
 
+    function chooseRerunMode() {
+        return new Promise(function (resolve) {
+            var overlay = document.createElement('div');
+            overlay.className = 'schedmon-rerun-overlay';
+            overlay.innerHTML = '<div class="schedmon-rerun-modal" role="dialog" aria-modal="true"><h3>Chạy lại lịch</h3><p>Chọn phạm vi muốn chạy lại:</p><button type="button" class="btn btn-primary" data-mode="all">Chạy lại toàn bộ</button><button type="button" class="btn btn-secondary" data-mode="retry">Chạy người chưa gửi / bị lỗi / chưa vào nhóm</button><button type="button" class="btn btn-ghost" data-mode="cancel">Hủy</button></div>';
+            document.body.appendChild(overlay);
+            function close(value) { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); resolve(value === 'cancel' ? null : value); }
+            overlay.querySelectorAll('[data-mode]').forEach(function (button) { button.addEventListener('click', function () { close(button.dataset.mode); }); });
+            overlay.addEventListener('click', function (e) { if (e.target === overlay) close('cancel'); });
+        });
+    }
+
+    async function runAgain(scheduleId) {
+        var mode = await chooseRerunMode();
+        if (!mode) return;
+        fetch('/api/schedules/' + encodeURIComponent(scheduleId) + '/rerun', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode }) })
+            .then(function (r) { return r.json(); }).then(function (j) {
+                if (j.error) showNotif('Lỗi', j.error, 'error');
+                else { showNotif('OK', mode === 'all' ? 'Đã chạy lại toàn bộ lịch.' : 'Đã chạy lại các mục chưa gửi và bị lỗi.', 'success'); reload(); }
+            }).catch(function (e) { showNotif('Lỗi', e.message || 'Không thể chạy lại lịch', 'error'); });
+    }
+
     async function cancelSchedule(scheduleId) {
         if (!(await nexusConfirm('Hủy lịch này?', { title: 'Hủy lịch' }))) return;
         fetch('/api/schedules/' + scheduleId + '/cancel', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (j) {
@@ -1035,6 +1059,7 @@
         showActionPlanDetail: showActionPlanDetail,
         updateActionPlanBatch: updateActionPlanBatch,
         runNow: runNow,
+        runAgain: runAgain,
         cancelSchedule: cancelSchedule,
         deleteSchedule: deleteSchedule,
         closeDetailModal: closeDetailModal,

@@ -56,7 +56,10 @@
 
             state.checked = true;
             state.canApply = data.state === 'ready';
-            setText('nexusUpdateHint', state.canApply ? 'Có bản mới' : 'Đã mới nhất');
+            setText('nexusUpdateHint', 'Kiểm tra phiên bản');
+            setText('nexusUpdateVersion', 'Đang dùng v' + (data.currentVersion || '—') + (state.canApply ? ' · Có v' + (data.latestVersion || 'mới') : ' · Đã mới nhất'));
+            var updateDot = $('nexusUpdateDot');
+            if (updateDot) updateDot.hidden = !state.canApply;
 
             if (state.canApply) {
                 setStatus(data.message || 'Có bản mới. Bấm "Tải và cập nhật" để tải gói cập nhật.', 'success');
@@ -65,7 +68,8 @@
             }
         } catch (err) {
             state.canApply = false;
-            setText('nexusUpdateHint', 'Kiểm tra lỗi');
+            setText('nexusUpdateHint', 'Kiểm tra phiên bản');
+            setText('nexusUpdateVersion', 'Không kiểm tra được phiên bản mới');
             setStatus(err.message || 'Lỗi kiểm tra cập nhật.', 'error');
         } finally {
             setBusy(false);
@@ -154,7 +158,10 @@
             if (!data.success) return;
 
             var hasUpdate = data.state === 'ready';
-            setText('nexusUpdateHint', hasUpdate ? 'Có bản mới' : 'Đã mới nhất');
+            setText('nexusUpdateHint', 'Kiểm tra phiên bản');
+            setText('nexusUpdateVersion', 'Đang dùng v' + (data.currentVersion || '—') + (hasUpdate ? ' · Có v' + (data.latestVersion || 'mới') : ' · Đã mới nhất'));
+            var autoUpdateDot = $('nexusUpdateDot');
+            if (autoUpdateDot) autoUpdateDot.hidden = !hasUpdate;
             state.canApply = hasUpdate;
 
             if (!hasUpdate) return;

@@ -274,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.7"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -3699,6 +3699,35 @@ def api_run_schedule_now(schedule_id):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/schedules/<schedule_id>/rerun", methods=["POST"])
+def api_rerun_schedule(schedule_id):
+    """Chạy lại lịch: toàn bộ hoặc chỉ người chưa gửi/lỗi."""
+    try:
+        schedule = get_schedule(schedule_id)
+        if not schedule:
+            return jsonify({"error": "Không tìm thấy lịch"}), 404
+        if schedule.get("status") == "running":
+            return jsonify({"error": "Lịch đang chạy, không thể chạy lại lúc này"}), 400
+        mode = str((request.get_json(silent=True) or {}).get("mode") or "retry").strip().lower()
+        if mode not in {"all", "retry"}:
+            return jsonify({"error": "Chế độ chạy lại không hợp lệ"}), 400
+        if mode == "all":
+            results = []
+        else:
+            # Giữ người đã gửi thành công; xóa kết quả lỗi để worker gửi lại.
+            results = [r for r in (schedule.get("results") or []) if r.get("status") == "success"]
+        schedule = update_schedule(schedule_id, {
+            "results": results,
+            "status": "running",
+            "runAt": datetime.now().isoformat(timespec="seconds"),
+            "updatedAt": int(time.time() * 1000),
+        })
+        return jsonify({"success": True, "schedule": schedule, "mode": mode,
+                        "message": "Đã đưa lịch vào hàng đợi chạy lại."})
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
