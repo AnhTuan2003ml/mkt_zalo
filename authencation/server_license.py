@@ -12,10 +12,46 @@ Luồng:
 import json
 import os
 import socket
+import sys
 import uuid
 from datetime import datetime
 
 import requests
+
+
+def _load_client_env():
+    """Nạp .env của client vào os.environ (LICENSE_SERVER_URL, ...).
+
+    Hỗ trợ cả khi chạy source lẫn khi đã đóng gói PyInstaller (frozen): .env được
+    nhúng và giải nén vào sys._MEIPASS, hoặc đặt cạnh Nexus.exe. Dùng setdefault
+    nên không đè biến môi trường đã có sẵn.
+    """
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", "")
+        if meipass:
+            candidates.append(os.path.join(meipass, ".env"))
+        candidates.append(os.path.join(os.path.dirname(sys.executable), ".env"))
+    # Chạy từ source: .env ở thư mục gốc dự án (cha của thư mục authencation).
+    candidates.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+    for env_path in candidates:
+        if not env_path or not os.path.exists(env_path):
+            continue
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            return env_path
+        except Exception as exc:
+            print(f"[server_license] Lỗi đọc .env ({env_path}): {exc}")
+    return ""
+
+
+_LOADED_ENV_PATH = _load_client_env()
 
 # Bỏ qua system proxy (tool bắt gói gây lỗi SSL) — gọi thẳng.
 NO_PROXY = {"http": None, "https": None}

@@ -15,6 +15,7 @@ Nguyên tắc:
 from __future__ import annotations
 
 import json
+import random
 import threading
 import time
 from datetime import datetime, timedelta
@@ -26,6 +27,7 @@ from features.groups.add_group import create_group
 from features.groups.group_copy_manager import claim_due_job, save_job, get_job, recover_running_jobs
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
+from features.groups.group_join_leave import join_group_by_link
 from features.members.get_members import get_members_by_group_id
 from features.messaging.add_friend import send_friend_request
 from features.messaging.remove_friend import remove_friend
@@ -108,7 +110,7 @@ def _daily_limit(job: dict) -> int:
                     or job.get("batchSize")
                     or 10
                 ),
-                100,
+                30,   # tối đa 30 lời mời kết bạn / tài khoản / ngày
             ),
         )
     except (TypeError, ValueError):
@@ -149,6 +151,30 @@ def _next_daily_run(job: dict, after: Optional[datetime] = None) -> str:
 def _next_verify_run(job: dict, after: Optional[datetime] = None) -> str:
     after = after or datetime.now()
     return (after + timedelta(minutes=_verify_interval(job))).isoformat(timespec="seconds")
+
+
+def _send_gap_minutes(job: dict) -> int:
+    """Khoảng nghỉ NGẪU NHIÊN (phút) giữa 2 lần gửi kết bạn/mời của MỖI tài khoản.
+
+    Mặc định random 5–20 phút để tránh Zalo chặn do gửi dồn dập. Có thể chỉnh
+    qua job: sendMinMinutes / sendMaxMinutes.
+    """
+    try:
+        lo = int(job.get("sendMinMinutes") or 5)
+    except (TypeError, ValueError):
+        lo = 5
+    try:
+        hi = int(job.get("sendMaxMinutes") or 20)
+    except (TypeError, ValueError):
+        hi = 20
+    lo = max(1, min(lo, 1440))
+    hi = max(lo, min(hi, 1440))
+    return random.randint(lo, hi)
+
+
+def _next_send_run(job: dict, after: Optional[datetime] = None) -> str:
+    after = after or datetime.now()
+    return (after + timedelta(minutes=_send_gap_minutes(job))).isoformat(timespec="seconds")
 
 
 def _parse_iso(value: str) -> Optional[datetime]:
@@ -354,6 +380,41 @@ def _sync_job_schedule(job: dict, now: Optional[datetime] = None) -> None:
     job["nextRunAt"] = ""
 
 
+def _ensure_joined_target_group(job: dict, zpw_enk: str, cookies: str, imei: str) -> bool:
+    """Bảo đảm TÀI KHOẢN ĐANG CHẠY đã ở trong nhóm đích (vào bằng link mời).
+
+    Mỗi tài khoản (chính lẫn phụ) chạy logic y hệt: tự add/đọc/mời trên nhóm đích
+    bằng credentials của chính nó. Muốn add/đọc được thì phải là thành viên nhóm,
+    nên nếu chưa vào thì tự tham gia qua link một lần. Chủ nhóm (đã tạo/đã có
+    nhóm) sẽ được đánh dấu là đã vào ngay. Best-effort: lỗi không làm hỏng run.
+    """
+    if job.get("accountJoinedTarget") is True:
+        return True
+    group_id = str(job.get("targetGroupId") or "").strip()
+    if not group_id:
+        return False
+    # Chủ nhóm đích: đã ở trong nhóm sẵn.
+    owner_account_id = str(job.get("targetOwnerAccountId") or "").strip()
+    current_account_id = str(job.get("accountId") or "").strip()
+    if not owner_account_id or owner_account_id == current_account_id:
+        job["accountJoinedTarget"] = True
+        return True
+
+    link = str(job.get("groupLink") or job.get("targetGroupLink") or "").strip()
+    if not link:
+        return False
+    try:
+        result = join_group_by_link(link, zpw_enk, cookies, zpw_ver=get_zpw_ver()) or {}
+        msg = str(result.get("message") or "").lower()
+        # Coi là thành công nếu ok, hoặc Zalo báo đã là thành viên rồi.
+        if result.get("ok") or "đã" in msg or "already" in msg or "member" in msg:
+            job["accountJoinedTarget"] = True
+            return True
+    except Exception as exc:
+        print(f"[group_copy_worker] Tài khoản phụ vào nhóm đích thất bại: {exc}", flush=True)
+    return False
+
+
 def _verify_target_members(
     job: dict,
     zpw_enk: str,
@@ -371,6 +432,7 @@ def _verify_target_members(
     if not force and not _is_due(str(job.get("nextVerifyAt") or ""), now):
         return {"checked": False, "newlyJoined": 0, "leftCount": 0, "targetCount": int(job.get("targetMemberCount") or 0)}
 
+    # Mỗi tài khoản đọc nhóm đích bằng chính credentials của nó (đã tự vào nhóm).
     try:
         result = get_members_by_group_id(
             group_id=group_id,
@@ -463,6 +525,7 @@ def _retry_awaiting_group_adds(
         return {"attempted": 0}
 
     member_ids = [str(member.get("userId") or "").strip() for member in candidates]
+    # Mỗi tài khoản tự add lại vào nhóm đích bằng credentials của chính nó.
     result = invite_members_to_group(
         str(job.get("targetGroupId") or ""),
         member_ids,
@@ -641,6 +704,11 @@ class GroupCopyWorker:
                 save_job(job)
                 return
 
+            # Bảo đảm tài khoản đang chạy đã ở trong nhóm đích (vào bằng link) để
+            # tự add/đọc/mời bằng chính credentials của nó — logic y hệt tài khoản chính.
+            if str(job.get("targetGroupId") or "").strip():
+                _ensure_joined_target_group(job, zpw_enk, cookies, imei)
+
             # Chỉ coi đợt mời là đến hạn dựa trên danh sách pending trước lúc
             # kiểm tra. Nếu lần kiểm tra phát hiện ai vừa rời nhóm, người đó được
             # đưa vào đợt hằng ngày kế tiếp, không bị mời lại ngay trong cùng chu kỳ.
@@ -798,16 +866,15 @@ class GroupCopyWorker:
         run_record["groupLink"] = group_link
 
         # Sau bước tạo nhóm/kiểm tra ban đầu, chỉ xử lý những người chưa có mặt.
-        direct_candidates = sorted(
-            [
-                member for member in _pending_members(job)
-                if member.get("isFriend") is not False
-            ],
-            key=lambda member: 0 if member.get("isFriend") is True else 1,
-        )
+        # Giãn nhịp: mỗi run chỉ mời TRỰC TIẾP 1 người là bạn bè (và chưa thử mời
+        # quá 2 lần) để tránh add dồn dập; người còn lại xử lý ở các run kế tiếp.
+        direct_candidates = [
+            member for member in _pending_members(job)
+            if member.get("isFriend") is True and int(member.get("inviteAttempts") or 0) < 2
+        ]
         direct_ids = [
             str(member.get("userId") or "").strip()
-            for member in direct_candidates
+            for member in direct_candidates[:1]
             if str(member.get("userId") or "").strip()
         ]
         direct_result = {
@@ -816,6 +883,8 @@ class GroupCopyWorker:
             "failedCount": 0,
         }
         if direct_ids:
+            # Mỗi tài khoản tự mời trực tiếp vào nhóm bằng credentials của chính nó
+            # (đã tự vào nhóm đích trước đó).
             direct_result = invite_members_to_group(
                 str(job.get("targetGroupId") or ""),
                 direct_ids,
@@ -869,58 +938,56 @@ class GroupCopyWorker:
         quota_deferred = 0
         friend_text = _friend_request_text(job, group_link)
 
-        # Mọi UID vẫn chưa có mặt trong nhóm sau bước thêm trực tiếp được xem là
-        # chưa kết bạn/không thể thêm trực tiếp. Gửi tối đa X lời mời kết bạn
-        # trong ngày; không gửi thêm tin nhắn riêng.
-        for member in list(_pending_members(job)):
-            uid = str(member.get("userId") or "").strip()
-            if not uid:
-                continue
-            if remaining_quota <= 0:
-                quota_deferred += 1
-                member["error"] = "Đã đạt hạn mức lời mời kết bạn hôm nay; sẽ tiếp tục vào ngày kế tiếp."
-                continue
+        # Giãn nhịp chống spam: chỉ khi run này CHƯA mời trực tiếp ai mới gửi 1 lời
+        # mời kết bạn kèm link nhóm cho MỘT người chưa vào nhóm. Người còn lại chờ
+        # run kế tiếp (mỗi tài khoản cách nhau ngẫu nhiên 5–20 phút).
+        if run_record["directInviteCount"] == 0 and remaining_quota > 0:
+            target = next(
+                (m for m in _pending_members(job) if str(m.get("userId") or "").strip()),
+                None,
+            )
+            if target is not None:
+                uid = str(target.get("userId") or "").strip()
+                _consume_friend_request_slot(job, started_at)
+                remaining_quota -= 1
+                target["friendRequestAttempts"] = int(target.get("friendRequestAttempts") or 0) + 1
+                target["friendRequestAt"] = int(time.time() * 1000)
+                try:
+                    response_json, decoded_raw = send_friend_request(
+                        toid=uid,
+                        msg=friend_text,
+                        imei=imei,
+                        zpw_enk=zpw_enk,
+                        cookies=cookies,
+                        zpw_ver=get_zpw_ver(),
+                    )
+                    success, code, message = _friend_request_result(response_json, decoded_raw)
+                except Exception as exc:
+                    success, code, message = False, -1, str(exc)
 
-            _consume_friend_request_slot(job, started_at)
-            remaining_quota -= 1
-            member["friendRequestAttempts"] = int(member.get("friendRequestAttempts") or 0) + 1
-            member["friendRequestAt"] = int(time.time() * 1000)
-            try:
-                response_json, decoded_raw = send_friend_request(
-                    toid=uid,
-                    msg=friend_text,
-                    imei=imei,
-                    zpw_enk=zpw_enk,
-                    cookies=cookies,
-                    zpw_ver=get_zpw_ver(),
-                )
-                success, code, message = _friend_request_result(response_json, decoded_raw)
-            except Exception as exc:
-                success, code, message = False, -1, str(exc)
-
-            member["friendRequestCode"] = code
-            member["friendRequestMessage"] = message
-            if success:
-                member["status"] = "invited"
-                member["invitedAt"] = member.get("invitedAt") or member["friendRequestAt"]
-                member["friendRequestDelivery"] = "friend_request_with_group_link"
-                member["friendRequestCreatedByCampaign"] = True
-                member["friendRemoveAttempts"] = 0
-                member["friendRemovedAt"] = 0
-                member["friendRemoveCode"] = -1
-                member["friendRemoveMessage"] = ""
-                member["friendRemoveDelivery"] = ""
-                member["joinedAfterCampaignAddRetry"] = False
-                member["error"] = (
-                    "Đã gửi lời mời kết bạn. Hệ thống sẽ thử add lại vào nhóm "
-                    f"mỗi {_verify_interval(job)} phút."
-                )
-                friend_request_sent += 1
-            else:
-                member["status"] = "pending"
-                member["friendRequestDelivery"] = "failed"
-                member["error"] = message or "Zalo từ chối gửi lời mời kết bạn."
-                friend_request_failed += 1
+                target["friendRequestCode"] = code
+                target["friendRequestMessage"] = message
+                if success:
+                    target["status"] = "invited"
+                    target["invitedAt"] = target.get("invitedAt") or target["friendRequestAt"]
+                    target["friendRequestDelivery"] = "friend_request_with_group_link"
+                    target["friendRequestCreatedByCampaign"] = True
+                    target["friendRemoveAttempts"] = 0
+                    target["friendRemovedAt"] = 0
+                    target["friendRemoveCode"] = -1
+                    target["friendRemoveMessage"] = ""
+                    target["friendRemoveDelivery"] = ""
+                    target["joinedAfterCampaignAddRetry"] = False
+                    target["error"] = (
+                        "Đã gửi lời mời kết bạn. Hệ thống sẽ thử add lại vào nhóm "
+                        f"mỗi {_verify_interval(job)} phút."
+                    )
+                    friend_request_sent += 1
+                else:
+                    target["status"] = "pending"
+                    target["friendRequestDelivery"] = "failed"
+                    target["error"] = message or "Zalo từ chối gửi lời mời kết bạn."
+                    friend_request_failed += 1
 
         run_record["friendRequestCount"] = friend_request_sent
         run_record["friendRequestFailedCount"] = friend_request_failed
@@ -934,8 +1001,21 @@ class GroupCopyWorker:
             else f"Có {friend_request_failed} lời mời kết bạn chưa gửi được; hệ thống sẽ thử lại vào đợt sau."
         )
 
-        if _pending_members(job):
-            job["nextInviteAt"] = _next_daily_run(job, started_at)
+        # Lịch gửi kế tiếp: còn người chưa vào nhóm thì hẹn cách ngẫu nhiên 5–20
+        # phút (giãn nhịp/tài khoản). Nếu đã hết hạn mức kết bạn hôm nay và không
+        # còn bạn bè để mời trực tiếp thì lùi sang giờ chạy ngày kế tiếp.
+        pending_left = _pending_members(job)
+        if pending_left:
+            now_after = datetime.now()
+            remaining_quota_now = _remaining_friend_requests_today(job, now_after)
+            friends_left = any(
+                m.get("isFriend") is True and int(m.get("inviteAttempts") or 0) < 2
+                for m in pending_left
+            )
+            if friends_left or remaining_quota_now > 0:
+                job["nextInviteAt"] = _next_send_run(job, now_after)
+            else:
+                job["nextInviteAt"] = _next_daily_run(job, now_after)
         else:
             job["nextInviteAt"] = ""
 

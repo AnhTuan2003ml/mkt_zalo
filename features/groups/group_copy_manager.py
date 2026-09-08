@@ -332,7 +332,7 @@ def _normalize_job(job: dict) -> dict:
 
     daily_limit = job.get("friendRequestDailyLimit", job.get("dailyLimit", job.get("batchSize", 10)))
     try:
-        daily_limit = max(1, min(int(daily_limit or 10), 100))
+        daily_limit = max(1, min(int(daily_limit or 10), 30))
     except (TypeError, ValueError):
         daily_limit = 10
     job["dailyLimit"] = daily_limit
@@ -481,7 +481,7 @@ def create_job(
 
     start_at = str(payload.get("startAt") or datetime.now().isoformat(timespec="minutes")).strip()
     try:
-        daily_limit = max(1, min(int(payload.get("friendRequestDailyLimit") or payload.get("dailyLimit") or payload.get("batchSize") or 10), 100))
+        daily_limit = max(1, min(int(payload.get("friendRequestDailyLimit") or payload.get("dailyLimit") or payload.get("batchSize") or 10), 30))
     except (TypeError, ValueError):
         daily_limit = 10
     try:
@@ -516,6 +516,9 @@ def create_job(
         "sourceGroup": source_group or {},
         "targetMode": target_mode,
         "targetGroupId": target_group_id,
+        # Tài khoản CHÍNH sở hữu nhóm đích — dùng để đọc/mời nhóm đích thay cho
+        # tài khoản phụ (tránh lỗi "Tham số không hợp lệ" khi phụ không ở trong nhóm).
+        "targetOwnerAccountId": str(payload.get("targetOwnerAccountId") or payload.get("accountId") or "").strip(),
         "targetGroupName": str(payload.get("targetGroupName") or payload.get("newGroupName") or "").strip(),
         "newGroupName": str(payload.get("newGroupName") or "").strip(),
         "dailyLimit": daily_limit,

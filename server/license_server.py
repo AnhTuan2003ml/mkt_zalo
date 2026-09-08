@@ -16,6 +16,8 @@ Dashboard quản trị tại "/" : xem/lọc máy, kích hoạt / hủy kích ho
 Chạy:  python server/license_server.py  (mặc định cổng 5555)
 Cấu hình email + admin token qua server/.env (xem .env.example).
 """
+import hashlib
+import hmac
 import os
 import sqlite3
 import secrets
@@ -63,8 +65,38 @@ ADMIN_EMAILS = [
     e.strip() for e in (os.getenv("ADMIN_EMAILS", os.getenv("RECEIVER_EMAIL_1", "")) or "").split(",")
     if e.strip()
 ]
-# Token bảo vệ dashboard + API admin (đặt trong .env). Rỗng = không chặn (chỉ nên dùng khi chạy nội bộ).
+# Token API admin (hệ thống tự load từ .env — dùng cho script/tự động, KHÔNG để đăng nhập).
 ADMIN_TOKEN = (os.getenv("ADMIN_TOKEN", "") or "").strip()
+
+
+def _load_admin_credentials():
+    """Đăng nhập dashboard bằng EMAIL + MẬT KHẨU. Chỉ 2 admin trong ADMIN_EMAILS.
+
+    Cấu hình mật khẩu qua .env:
+    - ADMIN_CREDENTIALS = email1:matkhau1,email2:matkhau2   (ưu tiên)
+    - hoặc ADMIN_PASSWORDS = matkhau1,matkhau2  (khớp theo thứ tự ADMIN_EMAILS)
+    Trả dict {email_lower: password_plaintext}. UI sẽ gửi SHA-256(password),
+    server so với SHA-256(password trong env).
+    """
+    creds = {}
+    raw = (os.getenv("ADMIN_CREDENTIALS", "") or "").strip()
+    if raw:
+        for pair in raw.split(","):
+            pair = pair.strip()
+            if ":" in pair:
+                email, pwd = pair.split(":", 1)
+                email, pwd = email.strip().lower(), pwd.strip()
+                if email and pwd:
+                    creds[email] = pwd
+    else:
+        pwds = [p.strip() for p in (os.getenv("ADMIN_PASSWORDS", "") or "").split(",")]
+        for email, pwd in zip(ADMIN_EMAILS, pwds):
+            if email and pwd:
+                creds[email.strip().lower()] = pwd
+    return creds
+
+
+ADMIN_CREDENTIALS = _load_admin_credentials()
 
 # Gói: key -> (số ngày, nhãn, is_permanent)
 PLAN_OPTIONS = {
@@ -115,6 +147,10 @@ def init_db():
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT DEFAULT '')"
         )
+        # Migration: thời điểm CẤP key hiện tại (để kill-switch vô hiệu key cũ).
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
+        if "key_issued_at" not in cols:
+            conn.execute("ALTER TABLE machines ADD COLUMN key_issued_at TEXT DEFAULT ''")
         conn.commit()
 
 
@@ -137,6 +173,19 @@ def get_extra_emails():
     """Danh sách gmail phụ nhận key (cấu hình qua dashboard)."""
     raw = get_setting("extra_emails", "")
     return [e.strip() for e in raw.split(",") if e.strip()]
+
+
+def _mask_email(email):
+    """Che email để không lộ đầy đủ trên dashboard: tu***fdnc@gmail.com."""
+    email = str(email or "").strip()
+    if "@" not in email:
+        return email
+    name, domain = email.split("@", 1)
+    if len(name) <= 3:
+        masked = name[0] + "***"
+    else:
+        masked = name[:2] + "***" + name[-2:]
+    return f"{masked}@{domain}"
 
 
 def get_all_recipients():
@@ -232,7 +281,51 @@ def send_key_email(machine, key):
 app = Flask(__name__)
 # Khóa ký session (đăng nhập dashboard). Ổn định qua restart nếu có ADMIN_TOKEN.
 app.secret_key = os.getenv("SESSION_SECRET", "") or (ADMIN_TOKEN + "::nexus-session") or secrets.token_hex(32)
+app.permanent_session_lifetime = timedelta(hours=24)   # phiên đăng nhập sống 24h
 init_db()
+
+# ─── Đăng nhập bằng EMAIL + MẬT KHẨU (UI hash SHA-256 trước khi gửi) ──────────
+MAX_ACTIVE_SESSIONS = 2          # tối đa 2 thiết bị đăng nhập cùng lúc
+SESSION_TTL = 24 * 3600          # phiên 24h
+_otp_lock = threading.Lock()     # khóa dùng chung cho _active_sessions
+_active_sessions = {}            # sid -> {"email", "created"}
+
+
+def _admin_email_match(email):
+    """True nếu email trùng một trong các email admin (ADMIN_EMAILS)."""
+    email = str(email or "").strip().lower()
+    return email in {e.strip().lower() for e in ADMIN_EMAILS}
+
+
+def _sha256_hex(text):
+    return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
+
+
+def _check_admin_password(email, password_hash):
+    """So khớp SHA-256(password) do UI gửi với SHA-256(mật khẩu trong env).
+
+    Chỉ chấp nhận email nằm trong ADMIN_EMAILS và có cấu hình mật khẩu.
+    Dùng so sánh hằng thời gian để tránh dò theo thời gian phản hồi.
+    """
+    email = str(email or "").strip().lower()
+    password_hash = str(password_hash or "").strip().lower()
+    if not _admin_email_match(email) or not password_hash:
+        return False
+    expected_pwd = ADMIN_CREDENTIALS.get(email)
+    if not expected_pwd:
+        return False
+    return hmac.compare_digest(_sha256_hex(expected_pwd), password_hash)
+
+
+def _prune_sessions():
+    now = _now_ts()
+    for sid in [s for s, v in _active_sessions.items() if now - v["created"] > SESSION_TTL]:
+        _active_sessions.pop(sid, None)
+
+
+def _now_ts():
+    import time as _t
+    return _t.time()
 
 
 def _client_ip():
@@ -293,40 +386,84 @@ def _record_verify_ok(ip):
         _blocked.pop(ip, None)
 
 
+def _session_valid():
+    """Phiên hợp lệ: đã đăng nhập, sid còn active và chưa quá 24h."""
+    if session.get("admin") is not True:
+        return False
+    sid = session.get("sid")
+    with _otp_lock:
+        _prune_sessions()
+        info = _active_sessions.get(sid)
+    if not info:
+        return False
+    return (_now_ts() - info["created"]) <= SESSION_TTL
+
+
 def _require_admin():
-    """Đã đăng nhập (session) HOẶC token đúng (cho script/API)."""
-    if not ADMIN_TOKEN:
+    """Đã đăng nhập (phiên mật khẩu) HOẶC token API đúng (cho script tự động)."""
+    if _session_valid():
         return True
-    if session.get("admin") is True:
-        return True
-    token = request.headers.get("X-Admin-Token") or request.args.get("token") or ""
-    if request.is_json:
-        token = token or (request.get_json(silent=True) or {}).get("token", "")
-    return token == ADMIN_TOKEN
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    """Trang đăng nhập dashboard. Token so khớp ADMIN_TOKEN trong .env."""
-    if not ADMIN_TOKEN:
-        session["admin"] = True
-        return redirect(url_for("dashboard"))
-    if request.method == "POST":
-        data = request.get_json(silent=True) or request.form or {}
-        token = str(data.get("token") or "").strip()
+    if ADMIN_TOKEN:
+        token = request.headers.get("X-Admin-Token") or request.args.get("token") or ""
+        if request.is_json:
+            token = token or (request.get_json(silent=True) or {}).get("token", "")
         if token and token == ADMIN_TOKEN:
-            session["admin"] = True
-            session.permanent = True
-            return jsonify({"success": True})
-        return jsonify({"success": False, "error": "Mật khẩu quản trị không đúng."}), 401
-    if session.get("admin") is True:
+            return True
+    # Không cấu hình email admin lẫn token -> chạy nội bộ, không chặn.
+    if not ADMIN_EMAILS and not ADMIN_TOKEN:
+        return True
+    return False
+
+
+@app.route("/login")
+def login():
+    if _session_valid():
         return redirect(url_for("dashboard"))
     return render_template("login.html")
 
 
+@app.route("/api/admin/login", methods=["POST"])
+def api_admin_login():
+    """Đăng nhập bằng email + SHA-256(mật khẩu) do UI gửi (không gửi mật khẩu thô).
+
+    So khớp với SHA-256(mật khẩu trong env) của đúng email admin. Đúng -> tạo
+    phiên 24h, tối đa 2 thiết bị (đá phiên cũ nhất). Chống dò: khóa IP khi sai nhiều.
+    """
+    ip = _client_ip()
+    blocked_for = _is_blocked(ip)
+    if blocked_for:
+        return jsonify({"success": False, "error": f"Tạm khóa do thử sai quá nhiều. Thử lại sau {blocked_for}s."}), 429
+    if not _rate_ok(ip, limit=10, window=60, bucket="login"):
+        return jsonify({"success": False, "error": "Quá nhiều yêu cầu, thử lại sau ít phút."}), 429
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email") or "").strip().lower()
+    password_hash = str(data.get("passwordHash") or "").strip()
+    if not _check_admin_password(email, password_hash):
+        _record_verify_fail(ip)
+        return jsonify({"success": False, "error": "Email hoặc mật khẩu không đúng."}), 401
+    _record_verify_ok(ip)
+    with _otp_lock:
+        _prune_sessions()
+        sid = secrets.token_hex(16)
+        _active_sessions[sid] = {"email": email, "created": _now_ts()}
+        # Giới hạn số thiết bị: giữ MAX phiên mới nhất, đá phiên cũ nhất.
+        if len(_active_sessions) > MAX_ACTIVE_SESSIONS:
+            oldest = sorted(_active_sessions.items(), key=lambda kv: kv[1]["created"])
+            for old_sid, _ in oldest[: len(_active_sessions) - MAX_ACTIVE_SESSIONS]:
+                _active_sessions.pop(old_sid, None)
+    session.permanent = True
+    session["admin"] = True
+    session["sid"] = sid
+    session["email"] = email
+    return jsonify({"success": True})
+
+
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
-    session.pop("admin", None)
+    sid = session.get("sid")
+    with _otp_lock:
+        _active_sessions.pop(sid, None)
+    session.clear()
     return redirect(url_for("login"))
 
 
@@ -358,17 +495,17 @@ def api_register():
             conn.execute(
                 """UPDATE machines SET machine_name=?, ip=?, plan_key=?, plan_label=?,
                    license_key=?, is_permanent=?, expiry=?, status='pending',
-                   email_sent_at=?, note='' WHERE mac=?""",
+                   email_sent_at=?, key_issued_at=?, note='' WHERE mac=?""",
                 (machine_name or existing["machine_name"], ip, plan_key, plan_label,
-                 key, 1 if is_permanent else 0, expiry, now, mac),
+                 key, 1 if is_permanent else 0, expiry, now, now, mac),
             )
         else:
             conn.execute(
                 """INSERT INTO machines (mac, machine_name, ip, plan_key, plan_label, license_key,
-                   status, is_permanent, created_at, expiry, email_sent_at)
-                   VALUES (?,?,?,?,?,?,'pending',?,?,?,?)""",
+                   status, is_permanent, created_at, expiry, email_sent_at, key_issued_at)
+                   VALUES (?,?,?,?,?,?,'pending',?,?,?,?,?)""",
                 (mac, machine_name, ip, plan_key, plan_label, key,
-                 1 if is_permanent else 0, now, expiry, now),
+                 1 if is_permanent else 0, now, expiry, now, now),
             )
         conn.commit()
         machine = _row_to_dict(conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone())
@@ -408,6 +545,13 @@ def api_verify():
         if m["license_key"] != key:
             _record_verify_fail(ip)  # sai key -> đếm để chống dò
             return jsonify({"valid": False, "error": "Key không đúng cho máy này."}), 403
+        # Kill-switch: mọi key cấp TRƯỚC mốc key_cutoff đều bị vô hiệu (kể cả key
+        # chưa có key_issued_at = key cũ trước bản nâng cấp) -> buộc đăng ký lại.
+        cutoff = get_setting("key_cutoff", "")
+        if cutoff:
+            issued = str(m.get("key_issued_at") or "")
+            if not issued or issued < cutoff:
+                return jsonify({"valid": False, "error": "Key cũ đã bị vô hiệu hóa. Vui lòng đăng ký lại để nhận key mới."}), 403
         if m["status"] == "disabled":
             return jsonify({"valid": False, "error": "License đã bị hủy kích hoạt."}), 403
         # Kiểm hạn dùng
@@ -472,9 +616,10 @@ def api_settings():
         set_setting("extra_emails", ",".join(emails))
     return jsonify({
         "success": True,
-        "defaultEmails": ADMIN_EMAILS,      # 2 gmail env mặc định (không sửa qua UI)
-        "extraEmails": get_extra_emails(),  # gmail phụ thêm qua dashboard
-        "allRecipients": get_all_recipients(),
+        "defaultEmails": [_mask_email(e) for e in ADMIN_EMAILS],  # ẩn 2 gmail env mặc định
+        "defaultCount": len(ADMIN_EMAILS),
+        "extraEmails": get_extra_emails(),                        # gmail phụ (hiện đầy đủ để sửa)
+        "recipientCount": len(get_all_recipients()),
     })
 
 
@@ -548,6 +693,30 @@ def api_deactivate(machine_id):
     return jsonify({"success": True, "machine": m})
 
 
+@app.route("/api/admin/machines/<int:machine_id>/plan", methods=["POST"])
+def api_change_plan(machine_id):
+    """Đổi gói của một máy (tăng/hạ). Tính lại hạn dùng từ thời điểm đổi."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    plan_key = str(data.get("plan") or "").strip().lower()
+    if plan_key not in PLAN_OPTIONS:
+        return jsonify({"success": False, "error": "Gói không hợp lệ."}), 400
+    days, plan_label, is_permanent = PLAN_OPTIONS[plan_key]
+    expiry = "" if is_permanent else (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
+    with _db_lock, closing(_conn()) as conn:
+        row = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Không tìm thấy máy."}), 404
+        conn.execute(
+            "UPDATE machines SET plan_key=?, plan_label=?, is_permanent=?, expiry=? WHERE id=?",
+            (plan_key, plan_label, 1 if is_permanent else 0, expiry, machine_id),
+        )
+        conn.commit()
+        m = _row_to_dict(conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone())
+    return jsonify({"success": True, "machine": m})
+
+
 @app.route("/api/admin/machines/<int:machine_id>/regen", methods=["POST"])
 def api_regen(machine_id):
     """Tạo lại key cho máy + gửi email lại."""
@@ -558,8 +727,8 @@ def api_regen(machine_id):
         row = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not row:
             return jsonify({"success": False, "error": "Không tìm thấy máy."}), 404
-        conn.execute("UPDATE machines SET license_key=?, status='pending', email_sent_at=? WHERE id=?",
-                     (key, _now(), machine_id))
+        conn.execute("UPDATE machines SET license_key=?, status='pending', email_sent_at=?, key_issued_at=? WHERE id=?",
+                     (key, _now(), _now(), machine_id))
         conn.commit()
         m = _row_to_dict(conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone())
     sent = send_key_email(m, key)
@@ -574,6 +743,45 @@ def api_delete(machine_id):
         conn.execute("DELETE FROM machines WHERE id=?", (machine_id,))
         conn.commit()
     return jsonify({"success": True})
+
+
+@app.route("/api/admin/key-cutoff", methods=["GET"])
+def api_key_cutoff_status():
+    """Trạng thái kill-switch: mốc cắt hiện tại + số máy đang bị coi là key cũ."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    cutoff = get_setting("key_cutoff", "")
+    affected = 0
+    if cutoff:
+        with closing(_conn()) as conn:
+            rows = conn.execute("SELECT key_issued_at FROM machines").fetchall()
+        affected = sum(1 for r in rows if not (r["key_issued_at"] or "") or str(r["key_issued_at"]) < cutoff)
+    return jsonify({"success": True, "cutoff": cutoff, "affected": affected})
+
+
+@app.route("/api/admin/invalidate-old-keys", methods=["POST"])
+def api_invalidate_old_keys():
+    """Vô hiệu hóa TẤT CẢ key cấp trước thời điểm này (buộc đăng ký lại).
+
+    Gửi {"clear": true} để bỏ mốc cắt (khôi phục hiệu lực key cũ).
+    """
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    if data.get("clear"):
+        set_setting("key_cutoff", "")
+        return jsonify({"success": True, "cutoff": "", "message": "Đã bỏ mốc cắt — key cũ có hiệu lực trở lại."})
+    cutoff = _now()
+    with closing(_conn()) as conn:
+        rows = conn.execute("SELECT key_issued_at FROM machines").fetchall()
+    affected = sum(1 for r in rows if not (r["key_issued_at"] or "") or str(r["key_issued_at"]) < cutoff)
+    set_setting("key_cutoff", cutoff)
+    return jsonify({
+        "success": True,
+        "cutoff": cutoff,
+        "affected": affected,
+        "message": f"Đã vô hiệu hóa {affected} key cũ. Các máy này phải đăng ký lại để nhận key mới.",
+    })
 
 
 @app.route("/health")
