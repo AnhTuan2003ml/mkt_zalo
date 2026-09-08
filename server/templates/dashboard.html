@@ -5,245 +5,542 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nexus License - Quản trị</title>
     <style>
-        :root { color-scheme: light; }
+        :root {
+            color-scheme: light;
+            --brand: #2563eb;
+            --brand-strong: #1d4ed8;
+            --ink: #0f172a;
+            --muted: #64748b;
+            --faint: #94a3b8;
+            --line: #e2e8f0;
+            --line-soft: #eef2f7;
+            --bg: #f1f5f9;
+            --surface: #ffffff;
+            --surface-alt: #f8fafc;
+            --ok: #16a34a; --ok-bg: #dcfce7;
+            --warn: #d97706; --warn-bg: #fef3c7;
+            --danger: #dc2626; --danger-bg: #fee2e2;
+            --info: #0369a1; --info-bg: #e0f2fe;
+            --radius: 12px; --radius-sm: 8px;
+            --ctrl-h: 38px;
+            --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.05);
+        }
         * { box-sizing: border-box; }
-        body { margin: 0; font: 14px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #0f172a; }
-        .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        h1 { font-size: 20px; margin: 0 0 4px; }
-        .sub { color: #64748b; font-size: 13px; margin-bottom: 16px; }
-        .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-        .stat { flex: 1 1 120px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; }
-        .stat b { display: block; font-size: 24px; }
-        .stat span { color: #64748b; font-size: 12px; }
-        .stat.active b { color: #16a34a; } .stat.pending b { color: #d97706; }
-        .stat.disabled b { color: #dc2626; } .stat.expired b { color: #94a3b8; }
-        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: #fff;
-                   border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
-        .toolbar input, .toolbar select { height: 36px; padding: 0 10px; border: 1px solid #cbd5e1;
-                   border-radius: 8px; font-size: 13px; background: #fff; }
-        .toolbar input[type=text] { min-width: 200px; flex: 1 1 200px; }
-        .btn { height: 36px; padding: 0 14px; border: 0; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
-        .btn-primary { background: #2563eb; color: #fff; }
-        .btn-ghost { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
-        table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eef2f7; font-size: 13px; white-space: nowrap; }
-        th { background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-        tr:hover td { background: #f8fbff; }
+        body { margin: 0; font: 14px/1.55 system-ui, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+
+        /* Top bar */
+        .topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+        .topbar-in { max-width: min(1800px, 97vw); margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+        .logo { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+                background: #eff6ff; border-radius: 10px; font-size: 20px; flex: none; }
+        .brand-name { font-size: 16px; font-weight: 700; }
+        .brand-sub { font-size: 12px; color: var(--muted); }
+        .topbar .spacer { flex: 1; }
+
+        .wrap { max-width: min(1800px, 97vw); margin: 0 auto; padding: 20px; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line);
+                border-radius: var(--radius); padding: 5px; margin-bottom: 18px; overflow-x: auto; }
+        .tab { flex: 1 0 auto; height: 40px; padding: 0 18px; border: 1px solid transparent; border-radius: var(--radius-sm);
+               background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer;
+               white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 7px;
+               transition: background .12s, color .12s, border-color .12s; }
+        .tab:hover { color: var(--ink); background: var(--surface-alt); }
+        .tab.active { background: #eff6ff; color: var(--brand-strong); border-color: #bfdbfe; }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+        .panel-head { margin-bottom: 14px; }
+        .panel-head h2 { font-size: 17px; margin: 0 0 3px; }
+        .panel-head p { color: var(--muted); font-size: 13px; margin: 0; }
+
+        /* Buttons */
+        .btn { height: var(--ctrl-h); padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-sm);
+               cursor: pointer; font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;
+               transition: background .12s, border-color .12s, opacity .12s; }
+        .btn:disabled { opacity: .55; cursor: not-allowed; }
+        .btn-primary { background: var(--brand); color: #fff; }
+        .btn-primary:hover { background: var(--brand-strong); }
+        .btn-ghost { background: var(--surface); color: #334155; border-color: #cbd5e1; }
+        .btn-ghost:hover { background: var(--surface-alt); }
+
+        /* Stat cards */
+        .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+        .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+        .stat b { display: block; font-size: 28px; line-height: 1.1; }
+        .stat span { color: var(--muted); font-size: 12.5px; }
+        .stat.active b { color: var(--ok); } .stat.pending b { color: var(--warn); }
+        .stat.disabled b { color: var(--danger); } .stat.expired b { color: var(--faint); }
+
+        .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+        .card-pad { padding: 18px; }
+
+        /* Toolbar */
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 14px; border-bottom: 1px solid var(--line-soft); }
+        .toolbar input, .toolbar select { height: var(--ctrl-h); padding: 0 12px; border: 1px solid #cbd5e1;
+                   border-radius: var(--radius-sm); font-size: 13px; background: #fff; color: var(--ink); }
+        .toolbar input:focus, .toolbar select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+        .toolbar input[type=text] { min-width: 190px; flex: 1 1 190px; }
+        .toolbar .date-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+        .toolbar .count { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+
+        /* Table: dùng hết chiều rộng khung, mỗi ô 1 dòng (không xuống hàng) */
+        .table-scroll { max-height: calc(100vh - 320px); overflow-y: auto; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line-soft);
+                 font-size: 13px; white-space: nowrap; }
+        thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-alt); color: var(--muted);
+                   font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+        tbody tr:hover td { background: #f8fbff; }
         .mac { font-family: ui-monospace, monospace; font-size: 12px; }
-        /* Key bọc border, click để copy; mặc định che (chống nhìn trộm), hover/bấm hiện. */
+
         .key-chip { display: inline-flex; align-items: center; gap: 6px; font-family: ui-monospace, monospace;
                     font-size: 12px; font-weight: 700; letter-spacing: 1px; padding: 4px 10px;
-                    border: 1.5px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #0f172a;
-                    cursor: pointer; user-select: none; transition: border-color .12s ease, background .12s ease; }
-        .key-chip:hover { border-color: #2563eb; background: #eff6ff; }
-        .key-chip.copied { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
-        .key-chip .key-text { filter: blur(4px); transition: filter .12s ease; }
+                    border: 1.5px solid #cbd5e1; border-radius: var(--radius-sm); background: var(--surface-alt); color: var(--ink);
+                    cursor: pointer; user-select: none; transition: border-color .12s, background .12s; }
+        .key-chip:hover { border-color: var(--brand); background: #eff6ff; }
+        .key-chip.copied { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+        .key-chip .key-text { filter: blur(4px); transition: filter .12s; }
         .key-chip:hover .key-text, .key-chip.revealed .key-text { filter: none; }
-        .key-chip .key-ico { font-size: 11px; color: #64748b; }
-        .settings-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
-        .settings-card h3 { margin: 0 0 6px; font-size: 15px; }
-        .settings-card .muted { color: #64748b; font-size: 12.5px; margin-bottom: 10px; }
-        .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        .settings-row input { flex: 1 1 320px; height: 38px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; }
-        .chip-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-        .email-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; }
-        .email-chip.def { background: #e0f2fe; color: #0369a1; }
-        .email-chip.extra { background: #dcfce7; color: #16a34a; }
+        .key-chip .key-ico { font-size: 11px; color: var(--muted); }
+
         .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
-        .badge.active { background: #dcfce7; color: #16a34a; } .badge.pending { background: #fef3c7; color: #d97706; }
-        .badge.disabled { background: #fee2e2; color: #dc2626; } .badge.expired { background: #e2e8f0; color: #64748b; }
-        .act { display: flex; gap: 6px; }
-        .act button { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 7px; border: 1px solid transparent; cursor: pointer; font-weight: 600; }
-        .a-on { background: #dcfce7; color: #16a34a; } .a-off { background: #fee2e2; color: #dc2626; }
-        .a-regen { background: #e0f2fe; color: #0369a1; } .a-del { background: #f1f5f9; color: #64748b; }
-        .empty { text-align: center; color: #94a3b8; padding: 30px; }
-        #status { margin-left: auto; color: #64748b; font-size: 12px; }
+        .badge.active { background: var(--ok-bg); color: var(--ok); }
+        .badge.pending { background: var(--warn-bg); color: var(--warn); }
+        .badge.disabled { background: var(--danger-bg); color: var(--danger); }
+        .badge.expired { background: #e2e8f0; color: var(--muted); }
+
+        .act { display: flex; gap: 6px; flex-wrap: wrap; }
+        .act button { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 7px; border: 1px solid transparent; cursor: pointer; font-weight: 600; white-space: nowrap; }
+        .a-on { background: var(--ok-bg); color: var(--ok); }
+        .a-off { background: var(--danger-bg); color: var(--danger); }
+        .a-plan { background: var(--warn-bg); color: var(--warn); }
+        .a-regen { background: var(--info-bg); color: var(--info); }
+        .a-del { background: var(--surface-alt); color: var(--muted); }
+        .act button:hover { filter: brightness(.96); }
+
+        .empty { text-align: center; color: var(--faint); padding: 40px 20px; }
+
+        /* Email config */
+        .field-label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin: 0 0 7px; }
+        .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+        .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .settings-row input { flex: 1 1 320px; height: var(--ctrl-h); padding: 0 12px; border: 1px solid #cbd5e1; border-radius: var(--radius-sm); font-size: 13px; }
+        .settings-row input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+        .chip-list { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+        .email-chip { padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+        .email-chip.def { background: var(--info-bg); color: var(--info); }
+        .email-chip.extra { background: var(--ok-bg); color: var(--ok); }
+        .recip-note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+        .recip-note b { color: var(--ink); }
+
+        /* Modal */
+        .modal-mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+        .modal-mask.show { display: flex; }
+        .modal { width: min(400px, 100%); background: var(--surface); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.3); padding: 22px; }
+        .modal h3 { margin: 0 0 6px; font-size: 16px; }
+        .modal p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+        .modal select { width: 100%; height: var(--ctrl-h); padding: 0 12px; border: 1px solid #cbd5e1; border-radius: var(--radius-sm); font-size: 14px; background: #fff; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+        /* Toast */
+        #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+                 background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+                 opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 80; max-width: 90vw; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.ok { background: #166534; } #toast.err { background: #991b1b; }
+
+        @media (max-width: 900px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .table-scroll { max-height: none; }
+        }
+        @media (max-width: 560px) {
+            .wrap { padding: 14px; }
+            .stats { grid-template-columns: 1fr 1fr; }
+            .tab { padding: 0 12px; font-size: 13px; }
+            .brand-sub { display: none; }
+        }
     </style>
 </head>
 <body>
-<div class="wrap">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div>
-            <h1>🔑 Nexus License — Quản trị kích hoạt</h1>
-            <div class="sub">Quản lý key, kích hoạt / hủy kích hoạt cho từng máy. Lọc theo thời gian, IP, tên máy.</div>
+    <div class="topbar">
+        <div class="topbar-in">
+            <div class="logo">🔑</div>
+            <div>
+                <div class="brand-name">Nexus License</div>
+                <div class="brand-sub">Hệ thống quản trị kích hoạt</div>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-ghost" onclick="location.href='/logout'">Đăng xuất</button>
         </div>
-        <button class="btn btn-ghost" onclick="location.href='/logout'">Đăng xuất</button>
     </div>
 
-    <div class="stats" id="stats"></div>
-
-    <div class="settings-card">
-        <h3>📧 Email nhận key</h3>
-        <div class="muted">2 Gmail mặc định lấy từ cấu hình <code>.env</code> của máy chủ (không sửa ở đây). Thêm Gmail phụ (2–3 email) để cùng nhận key.</div>
-        <div class="settings-row">
-            <input type="text" id="extraEmails" placeholder="email1@gmail.com, email2@gmail.com">
-            <button class="btn btn-primary" onclick="saveEmails()">Lưu email phụ</button>
+    <div class="wrap">
+        <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="overview" onclick="switchTab('overview')">📊 Tổng quan</button>
+            <button class="tab" data-tab="machines" onclick="switchTab('machines')">💻 Máy &amp; Kích hoạt</button>
+            <button class="tab" data-tab="email" onclick="switchTab('email')">📧 Cấu hình email</button>
         </div>
-        <div class="chip-list" id="emailChips"></div>
+
+        <!-- TAB: Tổng quan -->
+        <section class="panel active" id="panel-overview">
+            <div class="panel-head">
+                <h2>Tổng quan hệ thống</h2>
+                <p>Thống kê nhanh trạng thái các máy đã đăng ký.</p>
+            </div>
+            <div class="stats" id="stats"></div>
+
+            <div class="card card-pad" style="margin-top:18px">
+                <label class="field-label">🔒 Bảo mật — Thu hồi key cũ</label>
+                <p class="hint">Vô hiệu hóa toàn bộ key đã cấp trước thời điểm bấm nút. Các máy đó sẽ bị khóa và phải <b>đăng ký lại</b> để nhận key mới. Dùng khi nghi ngờ key bị lộ hoặc sau khi nâng cấp hệ thống.</p>
+                <div class="settings-row">
+                    <button class="btn btn-primary" style="background:#dc2626" onclick="invalidateOldKeys()">Vô hiệu hóa tất cả key cũ</button>
+                    <button class="btn btn-ghost" onclick="restoreOldKeys()">Bỏ mốc cắt</button>
+                </div>
+                <div class="recip-note" id="cutoffNote"></div>
+            </div>
+        </section>
+
+        <!-- TAB: Máy & Kích hoạt -->
+        <section class="panel" id="panel-machines">
+            <div class="panel-head">
+                <h2>Máy &amp; Kích hoạt</h2>
+                <p>Quản lý key, kích hoạt / hủy, đổi gói cho từng máy. Lọc theo tên máy, IP, thời gian.</p>
+            </div>
+            <div class="card">
+                <div class="toolbar">
+                    <input type="text" id="fltQ" placeholder="Tìm tên máy / MAC / IP...">
+                    <input type="text" id="fltIp" placeholder="Lọc IP...">
+                    <select id="fltStatus">
+                        <option value="">Mọi trạng thái</option>
+                        <option value="active">Đang kích hoạt</option>
+                        <option value="pending">Chờ nhập key</option>
+                        <option value="disabled">Đã hủy</option>
+                        <option value="expired">Hết hạn</option>
+                    </select>
+                    <span class="date-field">Từ <input type="date" id="fltFrom"></span>
+                    <span class="date-field">Đến <input type="date" id="fltTo"></span>
+                    <button class="btn btn-primary" onclick="loadMachines()">Lọc</button>
+                    <button class="btn btn-ghost" onclick="resetFilters()">Xóa lọc</button>
+                    <span class="count" id="count"></span>
+                </div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="c-id">#</th><th class="c-name">Tên máy</th><th class="c-mac">MAC</th>
+                                <th class="c-ip">IP</th><th class="c-plan">Gói</th><th class="c-key">Key</th>
+                                <th class="c-status">Trạng thái</th><th class="c-act-at">Kích hoạt lúc</th>
+                                <th class="c-exp">Hết hạn</th><th class="c-reg">Đăng ký</th><th class="c-actions">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows"><tr><td colspan="11" class="empty">Đang tải...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Cấu hình email -->
+        <section class="panel" id="panel-email">
+            <div class="panel-head">
+                <h2>Cấu hình email nhận key</h2>
+                <p>Mỗi khi hệ thống tạo key, email sẽ được gửi tới các địa chỉ bên dưới.</p>
+            </div>
+            <div class="card card-pad">
+                <label class="field-label" for="extraEmails">Gmail phụ nhận key</label>
+                <p class="hint">2 email mặc định lấy từ cấu hình máy chủ (ẩn, không sửa tại đây). Thêm 2–3 Gmail phụ để cùng nhận key, phân tách bằng dấu phẩy.</p>
+                <div class="settings-row">
+                    <input type="text" id="extraEmails" placeholder="email1@gmail.com, email2@gmail.com">
+                    <button class="btn btn-primary" onclick="saveEmails()">Lưu email phụ</button>
+                </div>
+                <div class="chip-list" id="emailChips"></div>
+                <div class="recip-note" id="recipNote"></div>
+            </div>
+        </section>
     </div>
 
-    <div class="toolbar">
-        <input type="text" id="fltQ" placeholder="Tìm tên máy / MAC / IP...">
-        <input type="text" id="fltIp" placeholder="Lọc IP...">
-        <select id="fltStatus">
-            <option value="">Mọi trạng thái</option>
-            <option value="active">Đang kích hoạt</option>
-            <option value="pending">Chờ nhập key</option>
-            <option value="disabled">Đã hủy</option>
-            <option value="expired">Hết hạn</option>
-        </select>
-        <label style="font-size:12px;color:#64748b">Từ <input type="date" id="fltFrom"></label>
-        <label style="font-size:12px;color:#64748b">Đến <input type="date" id="fltTo"></label>
-        <button class="btn btn-primary" onclick="loadMachines()">Lọc</button>
-        <button class="btn btn-ghost" onclick="resetFilters()">Xóa lọc</button>
-        <span id="status"></span>
+    <!-- Modal đổi gói -->
+    <div class="modal-mask" id="planModal">
+        <div class="modal">
+            <h3>Đổi gói máy</h3>
+            <p id="planModalSub"></p>
+            <select id="planSelect"></select>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closePlanModal()">Hủy</button>
+                <button class="btn btn-primary" id="planConfirm">Cập nhật gói</button>
+            </div>
+        </div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>#</th><th>Tên máy</th><th>MAC</th><th>IP</th><th>Gói</th><th>Key</th>
-                <th>Trạng thái</th><th>Kích hoạt lúc</th><th>Hết hạn</th><th>Đăng ký</th><th>Thao tác</th>
-            </tr>
-        </thead>
-        <tbody id="rows"><tr><td colspan="11" class="empty">Đang tải...</td></tr></tbody>
-    </table>
-</div>
+    <!-- Modal xác nhận xóa -->
+    <div class="modal-mask" id="confirmModal">
+        <div class="modal">
+            <h3 id="confirmTitle">Xác nhận</h3>
+            <p id="confirmMsg"></p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeConfirm()">Hủy</button>
+                <button class="btn btn-primary" id="confirmOk">Đồng ý</button>
+            </div>
+        </div>
+    </div>
 
-<script>
-    // Đã đăng nhập bằng session cookie — không cần token trên URL.
-    function hdr() { return {}; }
-    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    // Session hết hạn -> quay lại trang đăng nhập.
-    function guard(res){ if (res && res.status === 401) { location.href = '/login'; return true; } return false; }
+    <div id="toast"></div>
 
-    async function loadMachines() {
-        var p = new URLSearchParams();
-        if (fltQ.value.trim()) p.set('q', fltQ.value.trim());
-        if (fltIp.value.trim()) p.set('ip', fltIp.value.trim());
-        if (fltStatus.value) p.set('status', fltStatus.value);
-        if (fltFrom.value) p.set('from', fltFrom.value);
-        if (fltTo.value) p.set('to', fltTo.value);
-        document.getElementById('status').textContent = 'Đang tải...';
-        try {
-            var res = await fetch('/api/admin/machines?' + p.toString(), { headers: hdr() });
-            if (guard(res)) return;
-            var data = await res.json();
-            if (!data.success) throw new Error(data.error || 'Lỗi');
-            renderStats(data.stats);
-            renderRows(data.machines);
-            document.getElementById('status').textContent = data.machines.length + ' máy';
-        } catch (e) {
-            document.getElementById('status').textContent = 'Lỗi: ' + e.message;
+    <script>
+        var PLANS = {{ plans|tojson }};   // { key: [days, label, is_permanent] }
+
+        function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function guard(res){ if (res && res.status === 401) { location.href = '/login'; return true; } return false; }
+        function fmt(v){ return esc((v || '-').replace('T', ' ')); }
+
+        var toastTimer;
+        function toast(msg, kind) {
+            var t = document.getElementById('toast');
+            t.textContent = msg; t.className = 'show ' + (kind || '');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(function(){ t.className = ''; }, 2600);
         }
-    }
-    function renderStats(s) {
-        document.getElementById('stats').innerHTML =
-            '<div class="stat"><b>' + s.total + '</b><span>Tổng máy</span></div>' +
-            '<div class="stat active"><b>' + s.active + '</b><span>Đang kích hoạt</span></div>' +
-            '<div class="stat pending"><b>' + s.pending + '</b><span>Chờ nhập key</span></div>' +
-            '<div class="stat disabled"><b>' + s.disabled + '</b><span>Đã hủy</span></div>' +
-            '<div class="stat expired"><b>' + s.expired + '</b><span>Hết hạn</span></div>';
-    }
-    function renderRows(machines) {
-        var tb = document.getElementById('rows');
-        if (!machines.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Không có máy nào khớp bộ lọc.</td></tr>'; return; }
-        tb.innerHTML = machines.map(function (m) {
-            var acts = '';
-            if (m.status !== 'active') acts += '<button class="a-on" onclick="act(' + m.id + ',\'activate\')">Kích hoạt</button>';
-            if (m.status !== 'disabled') acts += '<button class="a-off" onclick="act(' + m.id + ',\'deactivate\')">Hủy</button>';
-            acts += '<button class="a-regen" onclick="act(' + m.id + ',\'regen\')">Key mới</button>';
-            acts += '<button class="a-del" onclick="delMachine(' + m.id + ')">Xóa</button>';
-            return '<tr>' +
-                '<td>' + m.id + '</td>' +
-                '<td>' + esc(m.machine_name || '-') + '</td>' +
-                '<td class="mac">' + esc(m.mac) + '</td>' +
-                '<td>' + esc(m.ip || '-') + '</td>' +
-                '<td>' + esc(m.plan_label || m.plan_key || '-') + '</td>' +
-                '<td>' + (m.license_key
-                    ? '<span class="key-chip" title="Bấm để copy key" data-key="' + esc(m.license_key) + '" onclick="copyKey(this)"><span class="key-text">' + esc(m.license_key) + '</span><span class="key-ico">📋</span></span>'
-                    : '-') + '</td>' +
-                '<td><span class="badge ' + esc(m.status) + '">' + statusLabel(m.status) + '</span></td>' +
-                '<td>' + esc((m.activated_at || '-').replace('T', ' ')) + '</td>' +
-                '<td>' + (m.is_permanent ? 'Vĩnh viễn' : esc((m.expiry || '-').replace('T', ' '))) + '</td>' +
-                '<td>' + esc((m.created_at || '-').replace('T', ' ')) + '</td>' +
-                '<td><div class="act">' + acts + '</div></td>' +
-            '</tr>';
-        }).join('');
-    }
-    function statusLabel(s){ return {active:'Đang kích hoạt',pending:'Chờ nhập key',disabled:'Đã hủy',expired:'Hết hạn'}[s]||s; }
 
-    async function act(id, action) {
-        try {
-            var data = await fetch('/api/admin/machines/' + id + '/' + action, {
-                method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr()),
-                body: JSON.stringify({})
-            }).then(r => r.json());
-            if (!data.success) throw new Error(data.error || 'Lỗi');
-            if (action === 'regen') alert('Đã tạo key mới' + (data.sent ? ' và gửi email.' : ' (gửi email thất bại).'));
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === name); });
+            document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.id === 'panel-' + name); });
+        }
+
+        /* ── Máy ────────────────────────────────────────────── */
+        async function loadMachines() {
+            var p = new URLSearchParams();
+            if (fltQ.value.trim()) p.set('q', fltQ.value.trim());
+            if (fltIp.value.trim()) p.set('ip', fltIp.value.trim());
+            if (fltStatus.value) p.set('status', fltStatus.value);
+            if (fltFrom.value) p.set('from', fltFrom.value);
+            if (fltTo.value) p.set('to', fltTo.value);
+            document.getElementById('count').textContent = 'Đang tải...';
+            try {
+                var res = await fetch('/api/admin/machines?' + p.toString());
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Lỗi');
+                renderStats(data.stats);
+                renderRows(data.machines);
+                document.getElementById('count').textContent = data.machines.length + ' máy';
+            } catch (e) {
+                document.getElementById('count').textContent = 'Lỗi: ' + e.message;
+            }
+        }
+        function renderStats(s) {
+            document.getElementById('stats').innerHTML =
+                '<div class="stat"><b>' + s.total + '</b><span>Tổng máy</span></div>' +
+                '<div class="stat active"><b>' + s.active + '</b><span>Đang kích hoạt</span></div>' +
+                '<div class="stat pending"><b>' + s.pending + '</b><span>Chờ nhập key</span></div>' +
+                '<div class="stat disabled"><b>' + s.disabled + '</b><span>Đã hủy</span></div>' +
+                '<div class="stat expired"><b>' + s.expired + '</b><span>Hết hạn</span></div>';
+        }
+        function renderRows(machines) {
+            var tb = document.getElementById('rows');
+            if (!machines.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Không có máy nào khớp bộ lọc.</td></tr>'; return; }
+            tb.innerHTML = machines.map(function (m) {
+                var acts = '';
+                if (m.status !== 'active') acts += '<button class="a-on" onclick="act(' + m.id + ',\'activate\')">Kích hoạt</button>';
+                if (m.status !== 'disabled') acts += '<button class="a-off" onclick="act(' + m.id + ',\'deactivate\')">Hủy</button>';
+                acts += '<button class="a-plan" onclick="openPlanModal(' + m.id + ',\'' + esc(m.plan_key || '') + '\',\'' + esc(m.machine_name || m.mac || '') + '\')">Đổi gói</button>';
+                acts += '<button class="a-regen" onclick="act(' + m.id + ',\'regen\')">Key mới</button>';
+                acts += '<button class="a-del" onclick="delMachine(' + m.id + ')">Xóa</button>';
+                return '<tr>' +
+                    '<td>' + m.id + '</td>' +
+                    '<td>' + esc(m.machine_name || '-') + '</td>' +
+                    '<td class="mac">' + esc(m.mac) + '</td>' +
+                    '<td>' + esc(m.ip || '-') + '</td>' +
+                    '<td>' + esc(m.plan_label || m.plan_key || '-') + '</td>' +
+                    '<td>' + (m.license_key
+                        ? '<span class="key-chip" title="Bấm để copy key" data-key="' + esc(m.license_key) + '" onclick="copyKey(this)"><span class="key-text">' + esc(m.license_key) + '</span><span class="key-ico">📋</span></span>'
+                        : '-') + '</td>' +
+                    '<td><span class="badge ' + esc(m.status) + '">' + statusLabel(m.status) + '</span></td>' +
+                    '<td>' + fmt(m.activated_at) + '</td>' +
+                    '<td>' + (m.is_permanent ? 'Vĩnh viễn' : fmt(m.expiry)) + '</td>' +
+                    '<td>' + fmt(m.created_at) + '</td>' +
+                    '<td><div class="act">' + acts + '</div></td>' +
+                '</tr>';
+            }).join('');
+        }
+        function statusLabel(s){ return {active:'Đang kích hoạt',pending:'Chờ nhập key',disabled:'Đã hủy',expired:'Hết hạn'}[s]||s; }
+
+        async function act(id, action) {
+            try {
+                var res = await fetch('/api/admin/machines/' + id + '/' + action, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+                });
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Lỗi');
+                if (action === 'regen') toast(data.sent ? 'Đã tạo key mới và gửi email.' : 'Đã tạo key mới (gửi email thất bại).', data.sent ? 'ok' : 'err');
+                else toast('Cập nhật thành công.', 'ok');
+                loadMachines();
+            } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+        }
+
+        /* ── Đổi gói (modal) ────────────────────────────────── */
+        var planTargetId = null;
+        function openPlanModal(id, currentKey, name) {
+            planTargetId = id;
+            document.getElementById('planModalSub').textContent = 'Máy: ' + name;
+            var sel = document.getElementById('planSelect');
+            sel.innerHTML = Object.keys(PLANS).map(function(k){
+                var label = PLANS[k][1];
+                return '<option value="' + k + '"' + (k === currentKey ? ' selected' : '') + '>' + esc(label) + '</option>';
+            }).join('');
+            document.getElementById('planModal').classList.add('show');
+        }
+        function closePlanModal(){ document.getElementById('planModal').classList.remove('show'); planTargetId = null; }
+        document.getElementById('planConfirm').onclick = async function() {
+            if (planTargetId == null) return;
+            var plan = document.getElementById('planSelect').value;
+            try {
+                var res = await fetch('/api/admin/machines/' + planTargetId + '/plan', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: plan })
+                });
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Lỗi');
+                closePlanModal();
+                toast('Đã đổi gói máy.', 'ok');
+                loadMachines();
+            } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+        };
+
+        /* ── Xóa (modal xác nhận) ───────────────────────────── */
+        var confirmCb = null;
+        function askConfirm(title, msg, cb) {
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMsg').textContent = msg;
+            confirmCb = cb;
+            document.getElementById('confirmModal').classList.add('show');
+        }
+        function closeConfirm(){ document.getElementById('confirmModal').classList.remove('show'); confirmCb = null; }
+        document.getElementById('confirmOk').onclick = function(){ var cb = confirmCb; closeConfirm(); if (cb) cb(); };
+
+        function delMachine(id) {
+            askConfirm('Xóa máy', 'Xóa máy này khỏi hệ thống? Hành động không thể hoàn tác.', async function() {
+                try {
+                    var res = await fetch('/api/admin/machines/' + id, { method: 'DELETE' });
+                    if (guard(res)) return;
+                    toast('Đã xóa máy.', 'ok');
+                    loadMachines();
+                } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+            });
+        }
+        function resetFilters() {
+            fltQ.value = ''; fltIp.value = ''; fltStatus.value = ''; fltFrom.value = ''; fltTo.value = '';
             loadMachines();
-        } catch (e) { alert('Lỗi: ' + e.message); }
-    }
-    async function delMachine(id) {
-        if (!confirm('Xóa máy này khỏi hệ thống?')) return;
-        try {
-            await fetch('/api/admin/machines/' + id, { method: 'DELETE', headers: hdr() });
-            loadMachines();
-        } catch (e) { alert('Lỗi: ' + e.message); }
-    }
-    function resetFilters() {
-        fltQ.value = ''; fltIp.value = ''; fltStatus.value = ''; fltFrom.value = ''; fltTo.value = '';
+        }
+
+        async function copyKey(el) {
+            var key = el.dataset.key || '';
+            if (!key) return;
+            el.classList.add('revealed');
+            try { await navigator.clipboard.writeText(key); }
+            catch (e) {
+                var ta = document.createElement('textarea'); ta.value = key;
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); } catch (err) {}
+                document.body.removeChild(ta);
+            }
+            el.classList.add('copied');
+            var ico = el.querySelector('.key-ico'); var old = ico ? ico.textContent : '';
+            if (ico) ico.textContent = '✓';
+            setTimeout(function () { el.classList.remove('copied', 'revealed'); if (ico) ico.textContent = old; }, 1500);
+        }
+        window.copyKey = copyKey;
+
+        /* ── Email ──────────────────────────────────────────── */
+        async function loadEmails() {
+            try {
+                var res = await fetch('/api/admin/settings');
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) return;
+                document.getElementById('extraEmails').value = (data.extraEmails || []).join(', ');
+                document.getElementById('emailChips').innerHTML =
+                    (data.defaultEmails || []).map(function (e) { return '<span class="email-chip def">🔒 ' + esc(e) + ' (mặc định)</span>'; }).join('') +
+                    (data.extraEmails || []).map(function (e) { return '<span class="email-chip extra">➕ ' + esc(e) + '</span>'; }).join('');
+                document.getElementById('recipNote').innerHTML =
+                    'Tổng số địa chỉ nhận key hiện tại: <b>' + (data.recipientCount || 0) + '</b> (' + (data.defaultCount || 0) + ' mặc định + ' + ((data.extraEmails || []).length) + ' phụ).';
+            } catch (e) {}
+        }
+        async function saveEmails() {
+            try {
+                var res = await fetch('/api/admin/settings', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ extraEmails: document.getElementById('extraEmails').value })
+                });
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Lỗi');
+                loadEmails();
+                toast('Đã lưu email phụ nhận key.', 'ok');
+            } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+        }
+        window.saveEmails = saveEmails;
+
+        // Đóng modal khi bấm nền
+        document.querySelectorAll('.modal-mask').forEach(function(m){
+            m.addEventListener('click', function(e){ if (e.target === m) m.classList.remove('show'); });
+        });
+
+        /* ── Bảo mật: thu hồi key cũ ────────────────────────── */
+        async function loadKeyCutoff() {
+            try {
+                var res = await fetch('/api/admin/key-cutoff');
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) return;
+                var el = document.getElementById('cutoffNote');
+                if (data.cutoff) {
+                    el.innerHTML = '⚠️ Đang áp dụng mốc cắt từ <b>' + esc(data.cutoff.replace('T', ' ')) +
+                        '</b>. Có <b>' + (data.affected || 0) + '</b> key cũ đang bị vô hiệu.';
+                } else {
+                    el.innerHTML = 'Chưa áp dụng mốc cắt. Mọi key hợp lệ đều còn hiệu lực.';
+                }
+            } catch (e) {}
+        }
+        function invalidateOldKeys() {
+            askConfirm('Vô hiệu hóa tất cả key cũ',
+                'Toàn bộ key đã cấp trước bây giờ sẽ hết hiệu lực. Các máy đang dùng sẽ bị khóa và phải đăng ký lại. Tiếp tục?',
+                async function() {
+                    try {
+                        var res = await fetch('/api/admin/invalidate-old-keys', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+                        });
+                        if (guard(res)) return;
+                        var data = await res.json();
+                        if (!data.success) throw new Error(data.error || 'Lỗi');
+                        toast(data.message || 'Đã vô hiệu hóa key cũ.', 'ok');
+                        loadKeyCutoff();
+                        loadMachines();
+                    } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+                });
+        }
+        function restoreOldKeys() {
+            askConfirm('Bỏ mốc cắt',
+                'Khôi phục hiệu lực cho các key cũ (bỏ mốc cắt hiện tại). Tiếp tục?',
+                async function() {
+                    try {
+                        var res = await fetch('/api/admin/invalidate-old-keys', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clear: true })
+                        });
+                        if (guard(res)) return;
+                        var data = await res.json();
+                        if (!data.success) throw new Error(data.error || 'Lỗi');
+                        toast(data.message || 'Đã bỏ mốc cắt.', 'ok');
+                        loadKeyCutoff();
+                    } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+                });
+        }
+
+        loadEmails();
         loadMachines();
-    }
-    // Bấm vào key: hiện + copy vào clipboard.
-    async function copyKey(el) {
-        var key = el.dataset.key || '';
-        if (!key) return;
-        el.classList.add('revealed');
-        try { await navigator.clipboard.writeText(key); }
-        catch (e) {
-            var ta = document.createElement('textarea'); ta.value = key;
-            document.body.appendChild(ta); ta.select();
-            try { document.execCommand('copy'); } catch (err) {}
-            document.body.removeChild(ta);
-        }
-        el.classList.add('copied');
-        var ico = el.querySelector('.key-ico'); var old = ico ? ico.textContent : '';
-        if (ico) ico.textContent = '✓';
-        setTimeout(function () {
-            el.classList.remove('copied', 'revealed');
-            if (ico) ico.textContent = old;
-        }, 1500);
-    }
-    window.copyKey = copyKey;
-
-    // Email nhận key: env mặc định (khóa) + phụ (thêm được).
-    async function loadEmails() {
-        try {
-            var data = await fetch('/api/admin/settings', { headers: hdr() }).then(r => r.json());
-            if (!data.success) return;
-            document.getElementById('extraEmails').value = (data.extraEmails || []).join(', ');
-            document.getElementById('emailChips').innerHTML =
-                (data.defaultEmails || []).map(function (e) { return '<span class="email-chip def">🔒 ' + esc(e) + ' (mặc định)</span>'; }).join('') +
-                (data.extraEmails || []).map(function (e) { return '<span class="email-chip extra">➕ ' + esc(e) + '</span>'; }).join('');
-        } catch (e) {}
-    }
-    async function saveEmails() {
-        try {
-            var data = await fetch('/api/admin/settings', {
-                method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr()),
-                body: JSON.stringify({ extraEmails: document.getElementById('extraEmails').value })
-            }).then(r => r.json());
-            if (!data.success) throw new Error(data.error || 'Lỗi');
-            loadEmails();
-            alert('Đã lưu email phụ nhận key.');
-        } catch (e) { alert('Lỗi: ' + e.message); }
-    }
-    window.saveEmails = saveEmails;
-
-    loadEmails();
-    loadMachines();
-    setInterval(loadMachines, 15000);
-</script>
+        loadKeyCutoff();
+        setInterval(loadMachines, 15000);
+    </script>
 </body>
 </html>

@@ -778,7 +778,7 @@
         if (payload.targetMode === 'new' && !payload.newGroupName) return 'Vui lòng nhập tên nhóm mới.';
         if (payload.targetMode === 'existing' && !payload.targetGroupId) return 'Vui lòng chọn một nhóm hiện tại.';
         if (!payload.startAt) return 'Vui lòng chọn thời gian bắt đầu.';
-        if (!payload.dailyLimit || payload.dailyLimit < 1 || payload.dailyLimit > 100) return 'Số lời mời kết bạn mỗi ngày phải từ 1 đến 100.';
+        if (!payload.dailyLimit || payload.dailyLimit < 1 || payload.dailyLimit > 30) return 'Số lời mời kết bạn mỗi ngày phải từ 1 đến 30.';
         if (!payload.campaignDurationDays || payload.campaignDurationDays < 1 || payload.campaignDurationDays > 365) return 'Thời gian chạy chiến dịch phải từ 1 đến 365 ngày.';
         if (!payload.verifyIntervalMinutes || payload.verifyIntervalMinutes < 1 || payload.verifyIntervalMinutes > 1440) return 'Chu kỳ thử add lại phải từ 1 đến 1440 phút.';
         if (!payload.consentConfirmed) return 'Vui lòng xác nhận quyền quản lý nhóm và gửi lời mời.';
