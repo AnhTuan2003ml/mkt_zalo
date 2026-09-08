@@ -111,7 +111,44 @@ def init_db():
             )
             """
         )
+        # Cấu hình động (email nhận phụ...) lưu key-value.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT DEFAULT '')"
+        )
         conn.commit()
+
+
+def get_setting(key, default=""):
+    with closing(_conn()) as conn:
+        row = conn.execute("SELECT v FROM settings WHERE k=?", (key,)).fetchone()
+    return row["v"] if row else default
+
+
+def set_setting(key, value):
+    with _db_lock, closing(_conn()) as conn:
+        conn.execute(
+            "INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+            (key, value),
+        )
+        conn.commit()
+
+
+def get_extra_emails():
+    """Danh sách gmail phụ nhận key (cấu hình qua dashboard)."""
+    raw = get_setting("extra_emails", "")
+    return [e.strip() for e in raw.split(",") if e.strip()]
+
+
+def get_all_recipients():
+    """Gộp email env mặc định + email phụ trên dashboard, khử trùng."""
+    seen, out = set(), []
+    for e in list(ADMIN_EMAILS) + get_extra_emails():
+        e = e.strip()
+        low = e.lower()
+        if e and low not in seen:
+            seen.add(low)
+            out.append(e)
+    return out
 
 
 def _now():
@@ -151,8 +188,9 @@ def _from_header():
 
 
 def send_key_email(machine, key):
-    if not SENDMAIL_USER or not SENDMAIL_PASS or not ADMIN_EMAILS:
-        print("[license_server] Thiếu cấu hình email (SENDMAIL_USER/PASS/ADMIN_EMAILS) — bỏ qua gửi mail.")
+    recipients = get_all_recipients()
+    if not SENDMAIL_USER or not SENDMAIL_PASS or not recipients:
+        print("[license_server] Thiếu cấu hình email (SENDMAIL_USER/PASS hoặc email nhận) — bỏ qua gửi mail.")
         return False
     plan_label = machine.get("plan_label") or machine.get("plan_key") or "Không rõ"
     expiry = "Vĩnh viễn" if machine.get("is_permanent") else (machine.get("expiry") or "-")
@@ -173,7 +211,7 @@ def send_key_email(machine, key):
     </body></html>
     """
     try:
-        for to in ADMIN_EMAILS:
+        for to in recipients:
             msg = MIMEMultipart("alternative")
             msg["From"] = _from_header()
             msg["To"] = to
@@ -196,10 +234,61 @@ init_db()
 
 
 def _client_ip():
+    # Qua cloudflare tunnel: IP thật nằm ở CF-Connecting-IP.
+    cf = request.headers.get("CF-Connecting-IP", "")
+    if cf:
+        return cf.strip()
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
         return xff.split(",")[0].strip()
     return request.remote_addr or ""
+
+
+# ─── Chống brute-force / lạm dụng: rate limit theo IP (in-memory) ────────────
+_rate_lock = threading.Lock()
+_rate_hits = {}          # ip -> list[timestamp]
+_blocked = {}            # ip -> unblock_ts (khoá tạm khi vượt ngưỡng verify sai)
+_fail_counts = {}        # ip -> số lần verify SAI liên tiếp
+
+import time as _time
+
+
+def _rate_ok(ip, limit, window=60, bucket=""):
+    """Cho tối đa `limit` request / `window` giây / IP cho từng loại (bucket)."""
+    now = _time.time()
+    k = f"{ip}:{bucket}"
+    with _rate_lock:
+        hits = [t for t in _rate_hits.get(k, []) if now - t < window]
+        if len(hits) >= limit:
+            _rate_hits[k] = hits
+            return False
+        hits.append(now)
+        _rate_hits[k] = hits
+        return True
+
+
+def _is_blocked(ip):
+    with _rate_lock:
+        until = _blocked.get(ip, 0)
+        if until and _time.time() < until:
+            return int(until - _time.time())
+        return 0
+
+
+def _record_verify_fail(ip):
+    """Sai key nhiều lần liên tiếp -> khoá IP tạm 5 phút (chống dò key)."""
+    with _rate_lock:
+        n = _fail_counts.get(ip, 0) + 1
+        _fail_counts[ip] = n
+        if n >= 10:
+            _blocked[ip] = _time.time() + 300
+            _fail_counts[ip] = 0
+
+
+def _record_verify_ok(ip):
+    with _rate_lock:
+        _fail_counts.pop(ip, None)
+        _blocked.pop(ip, None)
 
 
 def _require_admin():
@@ -216,6 +305,9 @@ def _require_admin():
 @app.route("/api/register", methods=["POST"])
 def api_register():
     """Client gửi thông tin máy -> server tạo key + gửi email."""
+    ip = _client_ip()
+    if not _rate_ok(ip, limit=8, window=60, bucket="register"):
+        return jsonify({"success": False, "error": "Quá nhiều yêu cầu, thử lại sau ít phút."}), 429
     data = request.get_json(silent=True) or {}
     mac = str(data.get("mac") or "").strip().upper()
     machine_name = str(data.get("machineName") or data.get("machine_name") or "").strip()
@@ -266,6 +358,12 @@ def api_register():
 @app.route("/api/verify", methods=["POST"])
 def api_verify():
     """Client xác thực key. Trả quyền tính năng nếu hợp lệ + còn hạn + active."""
+    ip = _client_ip()
+    blocked_for = _is_blocked(ip)
+    if blocked_for:
+        return jsonify({"valid": False, "error": f"Tạm khóa do thử sai quá nhiều. Thử lại sau {blocked_for}s."}), 429
+    if not _rate_ok(ip, limit=40, window=60, bucket="verify"):
+        return jsonify({"valid": False, "error": "Quá nhiều yêu cầu, thử lại sau ít phút."}), 429
     data = request.get_json(silent=True) or {}
     mac = str(data.get("mac") or "").strip().upper()
     key = str(data.get("key") or "").strip().upper()
@@ -279,6 +377,7 @@ def api_verify():
             return jsonify({"valid": False, "error": "Máy chưa đăng ký với máy chủ."}), 404
         m = _row_to_dict(row)
         if m["license_key"] != key:
+            _record_verify_fail(ip)  # sai key -> đếm để chống dò
             return jsonify({"valid": False, "error": "Key không đúng cho máy này."}), 403
         if m["status"] == "disabled":
             return jsonify({"valid": False, "error": "License đã bị hủy kích hoạt."}), 403
@@ -300,6 +399,7 @@ def api_verify():
         conn.commit()
         m = _row_to_dict(conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone())
 
+    _record_verify_ok(ip)  # xác thực đúng -> reset bộ đếm sai
     days_remaining = 99999
     if not m["is_permanent"] and m["expiry"]:
         try:
@@ -324,6 +424,29 @@ def dashboard():
     if not _require_admin():
         return Response("Cần token admin. Thêm ?token=... vào URL.", status=401)
     return render_template("dashboard.html", plans=PLAN_OPTIONS)
+
+
+@app.route("/api/admin/settings", methods=["GET", "POST"])
+def api_settings():
+    """Đọc/lưu cấu hình email nhận key. Env = mặc định (khóa), dashboard thêm phụ."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        raw = data.get("extraEmails", "")
+        if isinstance(raw, list):
+            emails = [str(e).strip() for e in raw if str(e).strip()]
+        else:
+            emails = [e.strip() for e in str(raw).replace("\n", ",").split(",") if e.strip()]
+        # Chỉ giữ email hợp lệ cơ bản.
+        emails = [e for e in emails if "@" in e and "." in e.split("@")[-1]]
+        set_setting("extra_emails", ",".join(emails))
+    return jsonify({
+        "success": True,
+        "defaultEmails": ADMIN_EMAILS,      # 2 gmail env mặc định (không sửa qua UI)
+        "extraEmails": get_extra_emails(),  # gmail phụ thêm qua dashboard
+        "allRecipients": get_all_recipients(),
+    })
 
 
 @app.route("/api/admin/machines", methods=["GET"])

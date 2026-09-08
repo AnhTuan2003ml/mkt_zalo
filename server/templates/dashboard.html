@@ -29,8 +29,26 @@
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eef2f7; font-size: 13px; white-space: nowrap; }
         th { background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
         tr:hover td { background: #f8fbff; }
-        .mac, .key { font-family: ui-monospace, monospace; font-size: 12px; }
-        .key { font-weight: 700; letter-spacing: 1px; }
+        .mac { font-family: ui-monospace, monospace; font-size: 12px; }
+        /* Key bọc border, click để copy; mặc định che (chống nhìn trộm), hover/bấm hiện. */
+        .key-chip { display: inline-flex; align-items: center; gap: 6px; font-family: ui-monospace, monospace;
+                    font-size: 12px; font-weight: 700; letter-spacing: 1px; padding: 4px 10px;
+                    border: 1.5px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #0f172a;
+                    cursor: pointer; user-select: none; transition: border-color .12s ease, background .12s ease; }
+        .key-chip:hover { border-color: #2563eb; background: #eff6ff; }
+        .key-chip.copied { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
+        .key-chip .key-text { filter: blur(4px); transition: filter .12s ease; }
+        .key-chip:hover .key-text, .key-chip.revealed .key-text { filter: none; }
+        .key-chip .key-ico { font-size: 11px; color: #64748b; }
+        .settings-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+        .settings-card h3 { margin: 0 0 6px; font-size: 15px; }
+        .settings-card .muted { color: #64748b; font-size: 12.5px; margin-bottom: 10px; }
+        .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .settings-row input { flex: 1 1 320px; height: 38px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; }
+        .chip-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .email-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+        .email-chip.def { background: #e0f2fe; color: #0369a1; }
+        .email-chip.extra { background: #dcfce7; color: #16a34a; }
         .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
         .badge.active { background: #dcfce7; color: #16a34a; } .badge.pending { background: #fef3c7; color: #d97706; }
         .badge.disabled { background: #fee2e2; color: #dc2626; } .badge.expired { background: #e2e8f0; color: #64748b; }
@@ -48,6 +66,16 @@
     <div class="sub">Quản lý key, kích hoạt / hủy kích hoạt cho từng máy. Lọc theo thời gian, IP, tên máy.</div>
 
     <div class="stats" id="stats"></div>
+
+    <div class="settings-card">
+        <h3>📧 Email nhận key</h3>
+        <div class="muted">2 Gmail mặc định lấy từ cấu hình <code>.env</code> của máy chủ (không sửa ở đây). Thêm Gmail phụ (2–3 email) để cùng nhận key.</div>
+        <div class="settings-row">
+            <input type="text" id="extraEmails" placeholder="email1@gmail.com, email2@gmail.com">
+            <button class="btn btn-primary" onclick="saveEmails()">Lưu email phụ</button>
+        </div>
+        <div class="chip-list" id="emailChips"></div>
+    </div>
 
     <div class="toolbar">
         <input type="text" id="fltQ" placeholder="Tìm tên máy / MAC / IP...">
@@ -124,7 +152,9 @@
                 '<td class="mac">' + esc(m.mac) + '</td>' +
                 '<td>' + esc(m.ip || '-') + '</td>' +
                 '<td>' + esc(m.plan_label || m.plan_key || '-') + '</td>' +
-                '<td class="key">' + esc(m.license_key || '-') + '</td>' +
+                '<td>' + (m.license_key
+                    ? '<span class="key-chip" title="Bấm để copy key" data-key="' + esc(m.license_key) + '" onclick="copyKey(this)"><span class="key-text">' + esc(m.license_key) + '</span><span class="key-ico">📋</span></span>'
+                    : '-') + '</td>' +
                 '<td><span class="badge ' + esc(m.status) + '">' + statusLabel(m.status) + '</span></td>' +
                 '<td>' + esc((m.activated_at || '-').replace('T', ' ')) + '</td>' +
                 '<td>' + (m.is_permanent ? 'Vĩnh viễn' : esc((m.expiry || '-').replace('T', ' '))) + '</td>' +
@@ -157,6 +187,54 @@
         fltQ.value = ''; fltIp.value = ''; fltStatus.value = ''; fltFrom.value = ''; fltTo.value = '';
         loadMachines();
     }
+    // Bấm vào key: hiện + copy vào clipboard.
+    async function copyKey(el) {
+        var key = el.dataset.key || '';
+        if (!key) return;
+        el.classList.add('revealed');
+        try { await navigator.clipboard.writeText(key); }
+        catch (e) {
+            var ta = document.createElement('textarea'); ta.value = key;
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            document.body.removeChild(ta);
+        }
+        el.classList.add('copied');
+        var ico = el.querySelector('.key-ico'); var old = ico ? ico.textContent : '';
+        if (ico) ico.textContent = '✓';
+        setTimeout(function () {
+            el.classList.remove('copied', 'revealed');
+            if (ico) ico.textContent = old;
+        }, 1500);
+    }
+    window.copyKey = copyKey;
+
+    // Email nhận key: env mặc định (khóa) + phụ (thêm được).
+    async function loadEmails() {
+        try {
+            var p = TOKEN ? '?token=' + TOKEN : '';
+            var data = await fetch('/api/admin/settings' + p, { headers: hdr() }).then(r => r.json());
+            if (!data.success) return;
+            document.getElementById('extraEmails').value = (data.extraEmails || []).join(', ');
+            document.getElementById('emailChips').innerHTML =
+                (data.defaultEmails || []).map(function (e) { return '<span class="email-chip def">🔒 ' + esc(e) + ' (mặc định)</span>'; }).join('') +
+                (data.extraEmails || []).map(function (e) { return '<span class="email-chip extra">➕ ' + esc(e) + '</span>'; }).join('');
+        } catch (e) {}
+    }
+    async function saveEmails() {
+        try {
+            var data = await fetch('/api/admin/settings' + (TOKEN ? '?token=' + TOKEN : ''), {
+                method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr()),
+                body: JSON.stringify({ extraEmails: document.getElementById('extraEmails').value, token: TOKEN })
+            }).then(r => r.json());
+            if (!data.success) throw new Error(data.error || 'Lỗi');
+            loadEmails();
+            alert('Đã lưu email phụ nhận key.');
+        } catch (e) { alert('Lỗi: ' + e.message); }
+    }
+    window.saveEmails = saveEmails;
+
+    loadEmails();
     loadMachines();
     setInterval(loadMachines, 15000);
 </script>
