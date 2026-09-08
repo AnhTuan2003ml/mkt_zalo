@@ -23,7 +23,7 @@ from typing import Optional
 from core.zalo.zalo_config import get_zpw_ver
 from features.accounts.account_manager import get_account
 from features.groups.add_group import create_group
-from features.groups.group_copy_manager import claim_due_job, save_job, get_job
+from features.groups.group_copy_manager import claim_due_job, save_job, get_job, recover_running_jobs
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
 from features.members.get_members import get_members_by_group_id
@@ -982,6 +982,9 @@ _WORKER: Optional[GroupCopyWorker] = None
 
 def start_group_copy_worker() -> None:
     global _WORKER
+    recovered = recover_running_jobs()
+    if recovered:
+        print(f"[group-copy-worker] Đã khôi phục {recovered} tác vụ đang chạy dở.", flush=True)
     if _WORKER is None:
         _WORKER = GroupCopyWorker()
     _WORKER.start()

@@ -661,6 +661,35 @@ def claim_due_job(now_iso: str) -> Optional[dict]:
         return job
 
 
+def recover_running_jobs(now_iso: str = "") -> int:
+    """Đưa các tác vụ đang chạy dở về hàng đợi khi ứng dụng khởi động lại."""
+    now_iso = now_iso or _now_iso()
+    recovered = 0
+    with _LOCK:
+        jobs = _read_jobs_unlocked()
+        for index, raw in enumerate(jobs):
+            job = _normalize_job(raw)
+            if job.get("status") != "running":
+                continue
+            if not job.get("pendingCount"):
+                job["status"] = "monitoring" if str(job.get("targetGroupId") or "").strip() else "done"
+                job["nextRunAt"] = job.get("nextVerifyAt") or ""
+            else:
+                job["status"] = "pending"
+                job["nextRunAt"] = now_iso
+                if job.get("pendingInviteCount"):
+                    job["nextInviteAt"] = now_iso
+                if job.get("awaitingJoinCount") and str(job.get("targetGroupId") or "").strip():
+                    job["nextVerifyAt"] = now_iso
+            job["lastError"] = "Tác vụ được tiếp tục sau khi ứng dụng khởi động lại."
+            job["updatedAt"] = _now_ms()
+            jobs[index] = job
+            recovered += 1
+        if recovered:
+            _write_jobs_unlocked(jobs)
+    return recovered
+
+
 def cancel_job(job_id: str) -> dict:
     def apply(job: dict) -> None:
         if job.get("status") == "running":

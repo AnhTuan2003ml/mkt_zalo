@@ -53,6 +53,23 @@ def _load_schedule_photo(schedule: dict):
         print(f"[schedule_worker] Không đọc được ảnh đính kèm '{abs_path}': {e}")
         return None, ""
 
+def _resume_progress(recipients, results, id_key):
+    """Giữ kết quả đã lưu; chỉ tiếp tục những người chưa được xử lý."""
+    completed = {
+        str(r[id_key]): r["status"] for r in results
+        if r.get(id_key) is not None and r.get("status") in ("success", "failed")
+    }
+    remaining = [r for r in recipients if str(r.get(id_key)) not in completed]
+    success_count = sum(completed.get(str(r.get(id_key))) == "success" for r in recipients)
+    failed_count = sum(completed.get(str(r.get(id_key))) == "failed" for r in recipients)
+    consecutive_errors = 0
+    for result in reversed(results):
+        if result.get("status") != "failed":
+            break
+        consecutive_errors += 1
+    return remaining, success_count, failed_count, consecutive_errors
+
+
 class ScheduleWorker:
     def __init__(self):
         self.running = False
@@ -91,8 +108,8 @@ class ScheduleWorker:
             status = sch.get("status")
             run_at = sch.get("runAt", "")
             
-            # Tìm lịch cần chạy: pending + time <= now
-            if status == "pending" and run_at and run_at <= now:
+            # Worker chạy tuần tự: lịch running còn lưu là lượt đã bị ngắt.
+            if status == "running" or (status == "pending" and run_at and run_at <= now):
                 print(f"[schedule_worker] Running schedule: {sch_id}")
                 self._run_schedule(sch)
                 
@@ -105,6 +122,7 @@ class ScheduleWorker:
         rate_limit = schedule.get("rateLimit", {})
         batch_config = schedule.get("batchConfig", {})
         schedule_source = schedule.get("source", "")  # 'group', 'phone', or 'personal-groups'
+        previous_results = (schedule.get("results") or []) if schedule.get("status") == "running" else []
 
         # Ảnh đính kèm (tùy chọn): đọc 1 lần cho cả lịch.
         photo_bytes, photo_name = _load_schedule_photo(schedule)
@@ -163,7 +181,8 @@ class ScheduleWorker:
         # Handle personal groups
         if schedule_source == "personal-groups":
             self._run_schedule_groups(sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result,
-                                      photo_bytes=photo_bytes, photo_name=photo_name, link_info=link_info)
+                                      photo_bytes=photo_bytes, photo_name=photo_name, link_info=link_info,
+                                      previous_results=previous_results)
             return
 
         # Handle individual users (group or phone source)
@@ -181,9 +200,10 @@ class ScheduleWorker:
         # Đổi status => running
         update_schedule(sch_id, {"status": "running"})
 
-        success_count = 0
-        failed_count = 0
-        consecutive_errors = 0
+        total_recipients = len(filtered_recipients)
+        filtered_recipients, success_count, failed_count, consecutive_errors = _resume_progress(
+            filtered_recipients, previous_results, "userId"
+        )
 
         # Xử lý theo batch
         for batch_start in range(0, len(filtered_recipients), batch_size):
@@ -279,7 +299,7 @@ class ScheduleWorker:
                 time.sleep(batch_delay_sec)
 
         # Xác định status cuối cùng
-        if success_count == len(filtered_recipients):
+        if success_count == total_recipients:
             final_status = "done"
         elif success_count > 0:
             final_status = "partial"
@@ -290,7 +310,7 @@ class ScheduleWorker:
         update_schedule(sch_id, {"status": final_status})
     
     def _run_schedule_groups(self, sch_id, account, recipients, message, rate_limit, batch_config, update_schedule, append_schedule_result,
-                             photo_bytes=None, photo_name="", link_info=None):
+                             photo_bytes=None, photo_name="", link_info=None, previous_results=None):
         """Run schedule for personal groups - xử lý theo batch."""
         cookies = account.get("cookies", "")
         zpw_enk = account.get("zpwEnk", "")
@@ -314,9 +334,10 @@ class ScheduleWorker:
         # Đổi status => running
         update_schedule(sch_id, {"status": "running"})
 
-        success_count = 0
-        failed_count = 0
-        consecutive_errors = 0
+        total_recipients = len(recipients)
+        recipients, success_count, failed_count, consecutive_errors = _resume_progress(
+            recipients, previous_results or [], "groupId"
+        )
 
         # Xử lý theo batch
         for batch_start in range(0, len(recipients), batch_size):
@@ -407,7 +428,7 @@ class ScheduleWorker:
                 time.sleep(batch_delay_sec)
 
         # Xác định status cuối cùng
-        if success_count == len(recipients):
+        if success_count == total_recipients:
             final_status = "done"
         elif success_count > 0:
             final_status = "partial"

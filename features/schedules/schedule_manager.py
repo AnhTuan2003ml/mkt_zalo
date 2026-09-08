@@ -5,6 +5,7 @@ Mỗi lịch được lưu trong file JSON riêng: data/message_schedules/sch_xy
 import json
 import os
 import sys
+import tempfile
 import time
 import uuid
 from typing import Dict, List, Optional
@@ -97,8 +98,19 @@ def save_schedule(schedule: dict):
         raise ValueError("Schedule không có scheduleId")
     
     filepath = _get_schedule_file(schedule_id)
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(schedule, f, ensure_ascii=False, indent=2)
+    # Không cắt rỗng file tiến độ nếu ứng dụng bị đóng giữa lúc ghi.
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=SCHEDULES_DIR,
+                                         suffix=".tmp", delete=False) as f:
+            temp_path = f.name
+            json.dump(schedule, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, filepath)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 def normalize_schedule(schedule: dict) -> dict:
     """Chuẩn hóa schedule."""
