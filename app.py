@@ -837,7 +837,7 @@ def _update_action_plan_batch_status(plan_type: str, plan_id: str, batch_day, pa
 
 # ─── Danh sách gói kích hoạt (xác thực thực tế qua máy chủ license) ───────────
 try:
-    from authencation.send_info_device import get_activation_duration_options
+    from authencation.activation_plans import get_activation_duration_options
     DEVICE_TRACKING_ENABLED = True
 except Exception as e:
     print(f"⚠️  Activation options unavailable: {str(e)}")
