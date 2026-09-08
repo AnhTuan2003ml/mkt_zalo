@@ -26,6 +26,10 @@
         .status-badge.ok { color: var(--green); border-color: rgba(63,185,80,.45); }
         .status-badge.warn { color: var(--yellow); border-color: rgba(210,153,34,.5); }
         .change-plan-note { margin-top: 14px; padding: 11px 14px; border-radius: 10px; background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.25); color: var(--text); font-size: 13px; line-height: 1.5; }
+        .device-mac-box { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: rgba(148,163,184,.1); border: 1px solid rgba(148,163,184,.3); font-size: 13px; cursor: pointer; transition: background .12s ease, border-color .12s ease; }
+        .device-mac-box:hover { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.35); }
+        .device-mac-box b { font-family: monospace; }
+        .device-mac-copy { margin-left: auto; color: #2563eb; font-weight: 600; font-size: 12px; }
         .activation-grid { display:grid; grid-template-columns: 320px minmax(0,1fr); gap: 18px; margin-top: 16px; }
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
         .card h3 { margin: 0 0 12px; font-size: 18px; }
@@ -89,6 +93,12 @@
                 {% else %}
                     <p>Khi khởi động phần mềm sẽ kiểm tra kích hoạt trước. Nếu chưa có license hợp lệ, bạn cần <b>chọn thời gian kích hoạt</b>, gửi mã qua email rồi nhập mã <b>12 ký tự</b> để mở khóa phần mềm.</p>
                 {% endif %}
+
+                <div class="device-mac-box" id="deviceMacBox" title="Bấm để sao chép địa chỉ MAC">
+                    <span class="device-mac-ip">🖥️ IP máy: <b id="deviceIp">...</b></span>
+                    <span class="device-mac-val">🔑 MAC: <b id="deviceMac">...</b></span>
+                    <span class="device-mac-copy" id="deviceMacCopyHint">Bấm để copy MAC</span>
+                </div>
             </section>
 
             {% if activated %}
@@ -130,7 +140,7 @@
             </div>
         </div>
     </main>
-    <script src="{{ url_for('static', filename='js/activation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/activation.js') }}?v=device-mac-server-v1"></script>
     <div class="disclaimer">Hệ thống chỉ phục vụ marketing.<br>Nhà phát triển xin miễn trừ mọi trách nhiệm.</div>
 </body>
 </html>

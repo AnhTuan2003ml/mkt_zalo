@@ -965,6 +965,31 @@ def ensure_schedule_worker_started():
 
 
 def _activation_status_payload():
+    # Chế độ máy chủ: trạng thái kích hoạt lấy từ license server.
+    if _server_license_mode():
+        try:
+            from authencation.server_license import get_server_plan
+            plan = get_server_plan()
+            activated = bool(plan.get("activated"))
+            if activated:
+                label = plan.get("planLabel") or plan.get("planKey") or ""
+                if plan.get("isPermanent"):
+                    msg = f"✅ License {label} hợp lệ".strip()
+                else:
+                    msg = f"✅ License {label} còn {plan.get('daysRemaining', 0)} ngày".strip()
+            else:
+                msg = "🔐 Chưa kích hoạt. Gửi thông tin máy lên máy chủ để nhận key qua email."
+                if plan.get("reason"):
+                    msg += f" ({plan.get('reason')})"
+            return {
+                "success": True,
+                "activated": activated,
+                "days_remaining": int(plan.get("daysRemaining") or 0),
+                "message": msg,
+            }
+        except Exception as e:
+            return {"success": True, "activated": False, "days_remaining": 0,
+                    "message": f"Lỗi kiểm tra kích hoạt qua máy chủ: {e}"}
     try:
         is_valid, days_remaining, message = validate_activation_code()
     except Exception as e:
@@ -1091,7 +1116,24 @@ def api_activation_status():
     return jsonify(_activation_status_payload())
 
 
+def _server_license_mode():
+    """True nếu đã cấu hình LICENSE_SERVER_URL (xác thực qua máy chủ)."""
+    try:
+        from authencation.server_license import is_server_mode
+        return is_server_mode()
+    except Exception:
+        return False
+
+
 def _current_plan():
+    # Ưu tiên xác thực qua máy chủ nếu đã cấu hình LICENSE_SERVER_URL.
+    if _server_license_mode():
+        try:
+            from authencation.server_license import get_server_plan
+            return get_server_plan()
+        except Exception:
+            return {"activated": False, "planKey": "", "planLabel": "", "isPermanent": False,
+                    "daysRemaining": 0, "maxAccounts": 2, "multiAccountExec": False}
     try:
         return get_license_plan()
     except Exception:
@@ -1111,10 +1153,41 @@ def api_license_plan():
     return jsonify({"success": True, **plan})
 
 
+@app.route("/api/device/mac", methods=["GET"])
+def api_device_mac():
+    """Trả MAC + tên máy + IP để hiển thị trên giao diện (click copy MAC)."""
+    try:
+        from authencation.server_license import get_machine_info
+        return jsonify({"success": True, **get_machine_info()})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/activation/save", methods=["POST"])
 def api_activation_save():
     data = request.get_json(silent=True) or request.form or {}
     code_text = (data.get("code") or data.get("activation_code") or "").strip()
+
+    # Chế độ máy chủ: xác thực key với license server.
+    if _server_license_mode():
+        try:
+            from authencation.server_license import verify_with_server
+            result = verify_with_server(code_text)
+        except Exception as e:
+            return jsonify({"success": False, "message": f"Lỗi xác thực máy chủ: {e}"}), 500
+        ok = bool(result.get("valid"))
+        message = "✅ Kích hoạt thành công!" if ok else (result.get("error") or "Key không hợp lệ.")
+        status = _activation_status_payload()
+        if ok:
+            ensure_schedule_worker_started()
+        return jsonify({
+            "success": ok,
+            "message": message,
+            "activated": bool(status.get("activated")),
+            "days_remaining": status.get("days_remaining", 0),
+            "status_message": status.get("message", ""),
+        }), 200 if ok else 400
+
     ok, message = save_user_activation_code(code_text)
     status = _activation_status_payload()
     if ok and status.get("activated"):
@@ -1135,6 +1208,25 @@ def api_activation_resend():
         duration_key = (data.get("duration_key") or data.get("plan") or "1m").strip()
         options_map = {item["key"]: item for item in get_activation_duration_options()}
         selected = options_map.get(duration_key, options_map.get("1m", {"key": duration_key, "label": duration_key}))
+
+        # Chế độ máy chủ: gửi thông tin máy lên server để nhận key qua email.
+        if _server_license_mode():
+            from authencation.server_license import register_with_server
+            result = register_with_server(duration_key)
+            sent = bool(result.get("success") and result.get("sent"))
+            status = _activation_status_payload()
+            return jsonify({
+                "success": bool(result.get("success")),
+                "sent": sent,
+                "activated": bool(status.get("activated")),
+                "selected_duration": selected,
+                "message": result.get("message") or (
+                    "Đã gửi thông tin máy lên máy chủ. Kiểm tra email để lấy key."
+                    if sent else (result.get("error") or "Không gửi được yêu cầu tới máy chủ cấp phép.")
+                ),
+                "status_message": status.get("message", ""),
+            }), (200 if result.get("success") else 400)
+
         sent = register_device_with_activation(verbose=True, duration_key=duration_key, force=True)
         status = _activation_status_payload()
         if not sent:

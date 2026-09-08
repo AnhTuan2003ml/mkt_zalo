@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus License - Quản trị</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font: 14px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #0f172a; }
+        .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .sub { color: #64748b; font-size: 13px; margin-bottom: 16px; }
+        .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        .stat { flex: 1 1 120px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; }
+        .stat b { display: block; font-size: 24px; }
+        .stat span { color: #64748b; font-size: 12px; }
+        .stat.active b { color: #16a34a; } .stat.pending b { color: #d97706; }
+        .stat.disabled b { color: #dc2626; } .stat.expired b { color: #94a3b8; }
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: #fff;
+                   border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+        .toolbar input, .toolbar select { height: 36px; padding: 0 10px; border: 1px solid #cbd5e1;
+                   border-radius: 8px; font-size: 13px; background: #fff; }
+        .toolbar input[type=text] { min-width: 200px; flex: 1 1 200px; }
+        .btn { height: 36px; padding: 0 14px; border: 0; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-ghost { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eef2f7; font-size: 13px; white-space: nowrap; }
+        th { background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+        tr:hover td { background: #f8fbff; }
+        .mac, .key { font-family: ui-monospace, monospace; font-size: 12px; }
+        .key { font-weight: 700; letter-spacing: 1px; }
+        .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+        .badge.active { background: #dcfce7; color: #16a34a; } .badge.pending { background: #fef3c7; color: #d97706; }
+        .badge.disabled { background: #fee2e2; color: #dc2626; } .badge.expired { background: #e2e8f0; color: #64748b; }
+        .act { display: flex; gap: 6px; }
+        .act button { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 7px; border: 1px solid transparent; cursor: pointer; font-weight: 600; }
+        .a-on { background: #dcfce7; color: #16a34a; } .a-off { background: #fee2e2; color: #dc2626; }
+        .a-regen { background: #e0f2fe; color: #0369a1; } .a-del { background: #f1f5f9; color: #64748b; }
+        .empty { text-align: center; color: #94a3b8; padding: 30px; }
+        #status { margin-left: auto; color: #64748b; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>🔑 Nexus License — Quản trị kích hoạt</h1>
+    <div class="sub">Quản lý key, kích hoạt / hủy kích hoạt cho từng máy. Lọc theo thời gian, IP, tên máy.</div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="toolbar">
+        <input type="text" id="fltQ" placeholder="Tìm tên máy / MAC / IP...">
+        <input type="text" id="fltIp" placeholder="Lọc IP...">
+        <select id="fltStatus">
+            <option value="">Mọi trạng thái</option>
+            <option value="active">Đang kích hoạt</option>
+            <option value="pending">Chờ nhập key</option>
+            <option value="disabled">Đã hủy</option>
+            <option value="expired">Hết hạn</option>
+        </select>
+        <label style="font-size:12px;color:#64748b">Từ <input type="date" id="fltFrom"></label>
+        <label style="font-size:12px;color:#64748b">Đến <input type="date" id="fltTo"></label>
+        <button class="btn btn-primary" onclick="loadMachines()">Lọc</button>
+        <button class="btn btn-ghost" onclick="resetFilters()">Xóa lọc</button>
+        <span id="status"></span>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>#</th><th>Tên máy</th><th>MAC</th><th>IP</th><th>Gói</th><th>Key</th>
+                <th>Trạng thái</th><th>Kích hoạt lúc</th><th>Hết hạn</th><th>Đăng ký</th><th>Thao tác</th>
+            </tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="11" class="empty">Đang tải...</td></tr></tbody>
+    </table>
+</div>
+
+<script>
+    var TOKEN = new URLSearchParams(location.search).get('token') || '';
+    function hdr() { return TOKEN ? { 'X-Admin-Token': TOKEN } : {}; }
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    async function loadMachines() {
+        var p = new URLSearchParams();
+        if (fltQ.value.trim()) p.set('q', fltQ.value.trim());
+        if (fltIp.value.trim()) p.set('ip', fltIp.value.trim());
+        if (fltStatus.value) p.set('status', fltStatus.value);
+        if (fltFrom.value) p.set('from', fltFrom.value);
+        if (fltTo.value) p.set('to', fltTo.value);
+        if (TOKEN) p.set('token', TOKEN);
+        document.getElementById('status').textContent = 'Đang tải...';
+        try {
+            var data = await fetch('/api/admin/machines?' + p.toString(), { headers: hdr() }).then(r => r.json());
+            if (!data.success) throw new Error(data.error || 'Lỗi');
+            renderStats(data.stats);
+            renderRows(data.machines);
+            document.getElementById('status').textContent = data.machines.length + ' máy';
+        } catch (e) {
+            document.getElementById('status').textContent = 'Lỗi: ' + e.message;
+        }
+    }
+    function renderStats(s) {
+        document.getElementById('stats').innerHTML =
+            '<div class="stat"><b>' + s.total + '</b><span>Tổng máy</span></div>' +
+            '<div class="stat active"><b>' + s.active + '</b><span>Đang kích hoạt</span></div>' +
+            '<div class="stat pending"><b>' + s.pending + '</b><span>Chờ nhập key</span></div>' +
+            '<div class="stat disabled"><b>' + s.disabled + '</b><span>Đã hủy</span></div>' +
+            '<div class="stat expired"><b>' + s.expired + '</b><span>Hết hạn</span></div>';
+    }
+    function renderRows(machines) {
+        var tb = document.getElementById('rows');
+        if (!machines.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Không có máy nào khớp bộ lọc.</td></tr>'; return; }
+        tb.innerHTML = machines.map(function (m) {
+            var acts = '';
+            if (m.status !== 'active') acts += '<button class="a-on" onclick="act(' + m.id + ',\'activate\')">Kích hoạt</button>';
+            if (m.status !== 'disabled') acts += '<button class="a-off" onclick="act(' + m.id + ',\'deactivate\')">Hủy</button>';
+            acts += '<button class="a-regen" onclick="act(' + m.id + ',\'regen\')">Key mới</button>';
+            acts += '<button class="a-del" onclick="delMachine(' + m.id + ')">Xóa</button>';
+            return '<tr>' +
+                '<td>' + m.id + '</td>' +
+                '<td>' + esc(m.machine_name || '-') + '</td>' +
+                '<td class="mac">' + esc(m.mac) + '</td>' +
+                '<td>' + esc(m.ip || '-') + '</td>' +
+                '<td>' + esc(m.plan_label || m.plan_key || '-') + '</td>' +
+                '<td class="key">' + esc(m.license_key || '-') + '</td>' +
+                '<td><span class="badge ' + esc(m.status) + '">' + statusLabel(m.status) + '</span></td>' +
+                '<td>' + esc((m.activated_at || '-').replace('T', ' ')) + '</td>' +
+                '<td>' + (m.is_permanent ? 'Vĩnh viễn' : esc((m.expiry || '-').replace('T', ' '))) + '</td>' +
+                '<td>' + esc((m.created_at || '-').replace('T', ' ')) + '</td>' +
+                '<td><div class="act">' + acts + '</div></td>' +
+            '</tr>';
+        }).join('');
+    }
+    function statusLabel(s){ return {active:'Đang kích hoạt',pending:'Chờ nhập key',disabled:'Đã hủy',expired:'Hết hạn'}[s]||s; }
+
+    async function act(id, action) {
+        try {
+            var data = await fetch('/api/admin/machines/' + id + '/' + action, {
+                method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr()),
+                body: JSON.stringify({ token: TOKEN })
+            }).then(r => r.json());
+            if (!data.success) throw new Error(data.error || 'Lỗi');
+            if (action === 'regen') alert('Đã tạo key mới' + (data.sent ? ' và gửi email.' : ' (gửi email thất bại).'));
+            loadMachines();
+        } catch (e) { alert('Lỗi: ' + e.message); }
+    }
+    async function delMachine(id) {
+        if (!confirm('Xóa máy này khỏi hệ thống?')) return;
+        try {
+            await fetch('/api/admin/machines/' + id + (TOKEN ? '?token=' + TOKEN : ''), { method: 'DELETE', headers: hdr() });
+            loadMachines();
+        } catch (e) { alert('Lỗi: ' + e.message); }
+    }
+    function resetFilters() {
+        fltQ.value = ''; fltIp.value = ''; fltStatus.value = ''; fltFrom.value = ''; fltTo.value = '';
+        loadMachines();
+    }
+    loadMachines();
+    setInterval(loadMachines, 15000);
+</script>
+</body>
+</html>

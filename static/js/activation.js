@@ -53,7 +53,42 @@ async function checkStatus() {
 
 window.checkStatus = checkStatus;
 
+// Hiển thị IP máy + MAC; bấm vào ô để copy MAC.
+async function loadDeviceInfo() {
+    const box = document.getElementById('deviceMacBox');
+    if (!box) return;
+    try {
+        const data = await fetch('/api/device/mac').then(r => r.json());
+        if (data && data.success) {
+            const ipEl = document.getElementById('deviceIp');
+            const macEl = document.getElementById('deviceMac');
+            if (ipEl) ipEl.textContent = data.ip || '-';
+            if (macEl) macEl.textContent = data.mac || '-';
+            box.dataset.mac = data.mac || '';
+        }
+    } catch (e) { /* ignore */ }
+    box.addEventListener('click', async () => {
+        const mac = box.dataset.mac || '';
+        if (!mac) return;
+        const hint = document.getElementById('deviceMacCopyHint');
+        try {
+            await navigator.clipboard.writeText(mac);
+        } catch (e) {
+            const ta = document.createElement('textarea');
+            ta.value = mac; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            document.body.removeChild(ta);
+        }
+        if (hint) {
+            const old = hint.textContent;
+            hint.textContent = '✓ Đã copy MAC';
+            setTimeout(() => { hint.textContent = old; }, 1800);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    loadDeviceInfo();
     const saveBtn = document.getElementById('saveActivationBtn');
     const resendBtn = document.getElementById('resendActivationBtn');
     const requestBtn = document.getElementById('requestActivationBtn');
