@@ -761,8 +761,7 @@ def api_machines():
         return jsonify({"success": False, "error": "unauthorized"}), 401
     _purge_stale_pending()  # dọn key chưa kích hoạt quá 24h mỗi lần mở dashboard
     status = (request.args.get("status") or "").strip()
-    q = (request.args.get("q") or "").strip().lower()       # lọc tên máy / mac / ip
-    ip = (request.args.get("ip") or "").strip().lower()
+    q = (request.args.get("q") or "").strip().lower()       # CHỈ lọc theo MAC
     date_from = (request.args.get("from") or "").strip()    # lọc theo created_at
     date_to = (request.args.get("to") or "").strip()
 
@@ -773,11 +772,7 @@ def api_machines():
         m = _row_to_dict(r)
         if status and m["status"] != status:
             continue
-        if q and q not in (str(m.get("machine_name", "")).lower()
-                            + str(m.get("mac", "")).lower()
-                            + str(m.get("ip", "")).lower()):
-            continue
-        if ip and ip not in str(m.get("ip", "")).lower():
+        if q and q not in str(m.get("mac", "")).lower():   # lọc theo MAC
             continue
         created = str(m.get("created_at") or "")[:10]
         if date_from and created and created < date_from:
@@ -786,12 +781,36 @@ def api_machines():
             continue
         items.append(m)
 
+    # Thống kê theo THÁNG HIỆN TẠI (YYYY-MM).
+    month = datetime.now().strftime("%Y-%m")
+
+    def _mon(v):
+        return str(v or "")[:7]
+
+    rowd = [_row_to_dict(r) for r in rows]
+    new_this_month = sum(1 for m in rowd if _mon(m.get("created_at")) == month)
+    # Tái mua / tái kích hoạt: máy ĐÃ đăng ký từ trước, tháng này được cấp key mới.
+    reactivated_this_month = sum(
+        1 for m in rowd
+        if _mon(m.get("key_issued_at")) == month and _mon(m.get("created_at")) < month
+    )
+    activated_this_month = sum(1 for m in rowd if _mon(m.get("activated_at")) == month)
+    expiring_this_month = sum(
+        1 for m in rowd
+        if not m.get("is_permanent") and _mon(m.get("expiry")) == month
+    )
+
     stats = {
         "total": len(rows),
         "active": sum(1 for r in rows if r["status"] == "active"),
         "pending": sum(1 for r in rows if r["status"] == "pending"),
         "disabled": sum(1 for r in rows if r["status"] == "disabled"),
         "expired": sum(1 for r in rows if r["status"] == "expired"),
+        "month": month,
+        "newThisMonth": new_this_month,
+        "reactivatedThisMonth": reactivated_this_month,
+        "activatedThisMonth": activated_this_month,
+        "expiringThisMonth": expiring_this_month,
     }
     return jsonify({"success": True, "machines": items, "stats": stats})
 
