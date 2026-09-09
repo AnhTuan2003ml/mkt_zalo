@@ -589,8 +589,49 @@ def create_job(
     return job
 
 
+def _prune_dead_subjobs_unlocked() -> bool:
+    """Xóa các job PHỤ đã 'failed' và HẾT người chờ (việc đã gộp về nick chủ) khỏi các
+    chiến dịch nhiều tài khoản, để 'Xem chi tiết' chỉ còn tài khoản thực sự chạy.
+
+    Chỉ xóa khi trong chiến dịch còn ÍT NHẤT 1 job chưa chết (giữ lại nguyên trạng nếu
+    cả cụm đã chết để người dùng còn thấy). KHÔNG bao giờ xóa nick chủ. Trả về True nếu
+    có thay đổi (đã ghi lại store).
+    """
+    jobs = _read_jobs_unlocked()
+    by_campaign = {}
+    for j in jobs:
+        cid = str((j or {}).get("campaignId") or "").strip()
+        if cid:
+            by_campaign.setdefault(cid, []).append(j)
+    remove_ids = set()
+    for cid, group in by_campaign.items():
+        if len(group) < 2:
+            continue  # không phải cụm nhiều tài khoản
+        has_alive = any(str((g or {}).get("status") or "") not in ("failed", "cancelled") for g in group)
+        if not has_alive:
+            continue  # cả cụm đã chết -> giữ nguyên
+        for g in group:
+            owner_id = str(g.get("targetOwnerAccountId") or "").strip()
+            acc_id = str(g.get("accountId") or "").strip()
+            is_owner = not owner_id or owner_id == acc_id
+            if is_owner or str(g.get("status") or "") != "failed":
+                continue
+            pending = sum(
+                1 for m in (g.get("members") or [])
+                if str((m or {}).get("status") or "pending") == "pending"
+            )
+            if pending == 0:
+                remove_ids.add(str(g.get("jobId") or ""))
+    if not remove_ids:
+        return False
+    kept = [j for j in jobs if str((j or {}).get("jobId") or "") not in remove_ids]
+    _write_jobs_unlocked(kept)
+    return True
+
+
 def list_jobs(include_members: bool = False) -> list[dict]:
     with _LOCK:
+        _prune_dead_subjobs_unlocked()   # dọn job phụ đã chết trước khi trả danh sách
         jobs = [_normalize_job(item) for item in _read_jobs_unlocked() if isinstance(item, dict)]
     jobs.sort(key=lambda item: int(item.get("createdAt") or 0), reverse=True)
     if include_members:
@@ -807,12 +848,12 @@ def redistribute_campaign_members(failed_job_id: str, reason: str = "") -> dict:
             rj["updatedAt"] = _now_ms()
             jobs[ri] = rj
 
-        _finalize_failed(
-            f"Không vào được nhóm nguồn sau nhiều lần thử; đã chia lại {distributed} người "
-            f"cho {len(recipient_indices)} nick đang hoạt động."
-        )
+        # Đã gộp việc về (các) tài khoản chạy được -> XÓA HẲN job phụ lỗi khỏi chiến
+        # dịch để "Xem chi tiết" chỉ còn tài khoản thực sự chạy (không hiển thị nick
+        # lỗi như 1 luồng riêng). Phải pop SAU khi đã ghi xong các nick nhận ở trên.
+        jobs.pop(failed_idx)
         _write_jobs_unlocked(jobs)
-        return {"redistributed": distributed, "recipients": len(recipient_indices)}
+        return {"redistributed": distributed, "recipients": len(recipient_indices), "deleted": True}
 
 
 def claim_due_job(now_iso: str) -> Optional[dict]:
