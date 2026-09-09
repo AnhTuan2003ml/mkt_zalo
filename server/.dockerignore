@@ -1,0 +1,6 @@
+# KHÔNG đưa DB dev local và secrets vào image.
+__pycache__/
+*.pyc
+data/
+.env
+# LƯU Ý: KHÔNG bỏ qua seed/ — cần server/seed/licenses.db để seed dữ liệu lần đầu.

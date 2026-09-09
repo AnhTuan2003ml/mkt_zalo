@@ -33,9 +33,22 @@ from email.header import Header
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 
+import shutil
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "data", "licenses.db")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# DB có thể đặt trên volume bền của host (LICENSE_DB_PATH). Mặc định: data/licenses.db.
+DB_PATH = (os.getenv("LICENSE_DB_PATH", "") or "").strip() or os.path.join(BASE_DIR, "data", "licenses.db")
+os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+
+# Seed DB lần đầu: nếu volume chưa có DB nhưng có bản snapshot kèm theo (server/seed/
+# licenses.db) thì nạp vào để "đưa DB hiện tại lên" mà không mất dữ liệu key.
+_SEED_DB = os.path.join(BASE_DIR, "seed", "licenses.db")
+if not os.path.exists(DB_PATH) and os.path.exists(_SEED_DB):
+    try:
+        shutil.copyfile(_SEED_DB, DB_PATH)
+        print(f"[license_server] Đã seed DB từ snapshot -> {DB_PATH}")
+    except Exception as exc:
+        print(f"[license_server] Seed DB thất bại: {exc}")
 
 
 # ─── Cấu hình (.env đơn giản) ────────────────────────────────────────────────
