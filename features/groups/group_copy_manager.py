@@ -345,6 +345,8 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("groupLinkEnabled", 0)
     job.setdefault("groupLinkUpdatedAt", "")
     job["removeFriendAfterJoin"] = bool(job.get("removeFriendAfterJoin"))
+    job["leaveGroupAfterDone"] = bool(job.get("leaveGroupAfterDone"))
+    job.setdefault("sourceLeftAt", "")
     job["scheduleMode"] = "daily"
     job["dailyRunTime"] = str(job.get("dailyRunTime") or _extract_daily_time(job.get("startAt"))).strip()
 
@@ -513,6 +515,7 @@ def create_job(
         "accountName": str(account_name or payload.get("accountName") or "").strip(),
         "accountAvatar": str(account_avatar or payload.get("accountAvatar") or "").strip(),
         "sourceInput": str(payload.get("sourceInput") or "").strip(),
+        "sourceGroupId": str(payload.get("sourceGroupId") or (source_group or {}).get("groupId") or (source_group or {}).get("id") or "").strip(),
         "sourceGroup": source_group or {},
         "targetMode": target_mode,
         "targetGroupId": target_group_id,
@@ -533,6 +536,8 @@ def create_job(
         "campaignEndAt": campaign_end_at,
         "campaignExpiredAt": "",
         "removeFriendAfterJoin": bool(payload.get("removeFriendAfterJoin")),
+        "leaveGroupAfterDone": bool(payload.get("leaveGroupAfterDone")),
+        "sourceLeftAt": "",
         "startAt": start_at,
         "nextInviteAt": start_at,
         "nextVerifyAt": start_at if target_mode == "existing" and target_group_id else "",

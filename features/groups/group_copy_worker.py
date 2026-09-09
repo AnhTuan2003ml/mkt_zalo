@@ -27,7 +27,7 @@ from features.groups.add_group import create_group
 from features.groups.group_copy_manager import claim_due_job, save_job, get_job, recover_running_jobs
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
-from features.groups.group_join_leave import join_group_by_link
+from features.groups.group_join_leave import join_group_by_link, leave_group
 from features.members.get_members import get_members_by_group_id
 from features.messaging.add_friend import send_friend_request
 from features.messaging.remove_friend import remove_friend
@@ -257,21 +257,23 @@ def _ensure_group_link(
     if not group_id:
         raise ValueError("Tác vụ chưa có Group ID để lấy link tham gia.")
 
+    # Lấy/tạo link nhóm phải do TÀI KHOẢN CHỦ (A) — người trong nhóm — thực hiện.
+    o_enk, o_ck, o_imei = _target_owner_creds(job, zpw_enk, cookies, imei)
     if newly_created:
         result = create_group_link(
             group_id,
-            imei,
-            zpw_enk,
-            cookies,
+            o_imei,
+            o_enk,
+            o_ck,
             zpw_ver=get_zpw_ver(),
         )
         job["groupLinkSource"] = "new"
     else:
         result = get_group_link_detail(
             group_id,
-            imei,
-            zpw_enk,
-            cookies,
+            o_imei,
+            o_enk,
+            o_ck,
             zpw_ver=get_zpw_ver(),
         )
         job["groupLinkSource"] = "detail"
@@ -424,6 +426,61 @@ def _ensure_joined_target_group(job: dict, zpw_enk: str, cookies: str, imei: str
     return False
 
 
+def _target_owner_creds(job: dict, zpw_enk: str, cookies: str, imei: str) -> tuple:
+    """Credentials của TÀI KHOẢN CHỦ (A) — người sở hữu/nằm trong nhóm đích.
+
+    Việc ĐỌC nhóm đích (getmg) và LẤY LINK nhóm phải do A làm, vì chỉ A chắc chắn
+    là thành viên. Tài khoản phụ (B, C) không ở trong nhóm sẽ bị "Tham số không hợp lệ".
+    Không lấy được A -> fallback về credentials truyền vào.
+    """
+    fallback = (zpw_enk, cookies, imei)
+    owner_id = str(job.get("targetOwnerAccountId") or "").strip()
+    current = str(job.get("accountId") or "").strip()
+    if not owner_id or owner_id == current:
+        return fallback
+    owner = get_account(owner_id)
+    if not owner:
+        return fallback
+    o_cookies = str(owner.get("cookies") or "").strip()
+    o_enk = str(owner.get("zpwEnk") or "").strip()
+    o_imei = str(owner.get("imei") or "").strip()
+    if not all([o_cookies, o_enk, o_imei]):
+        return fallback
+    return (o_enk, o_cookies, o_imei)
+
+
+def _maybe_leave_source_group(job: dict) -> None:
+    """Rời nhóm NGUỒN khi chiến dịch kết thúc — CHỈ khi người dùng bật tùy chọn.
+
+    Mặc định KHÔNG rời (leaveGroupAfterDone=False). Chỉ tài khoản CHỦ (A) rời, làm
+    một lần (đánh dấu sourceLeftAt). Lỗi không ảnh hưởng chiến dịch.
+    """
+    if not job.get("leaveGroupAfterDone"):
+        return
+    if str(job.get("sourceLeftAt") or "").strip():
+        return
+    owner_id = str(job.get("targetOwnerAccountId") or job.get("accountId") or "").strip()
+    current = str(job.get("accountId") or "").strip()
+    if owner_id and current and owner_id != current:
+        return  # chỉ tài khoản chủ (A) rời, tránh các job phụ cùng rời
+    src = job.get("sourceGroup") or {}
+    gid = str(src.get("groupId") or src.get("id") or job.get("sourceGroupId") or "").strip()
+    if not gid:
+        return
+    acc = get_account(owner_id) or {}
+    ck = str(acc.get("cookies") or "").strip()
+    enk = str(acc.get("zpwEnk") or "").strip()
+    im = str(acc.get("imei") or "").strip()
+    if not all([ck, enk, im]):
+        return
+    try:
+        leave_group([gid], im, enk, ck, silent=1, zpw_ver=get_zpw_ver())
+        job["sourceLeftAt"] = datetime.now().isoformat(timespec="seconds")
+        print(f"[group_copy_worker] Tài khoản chủ đã rời nhóm nguồn {gid} sau khi hoàn thành.", flush=True)
+    except Exception as exc:
+        print(f"[group_copy_worker] Rời nhóm nguồn thất bại: {exc}", flush=True)
+
+
 def _verify_target_members(
     job: dict,
     zpw_enk: str,
@@ -441,20 +498,27 @@ def _verify_target_members(
     if not force and not _is_due(str(job.get("nextVerifyAt") or ""), now):
         return {"checked": False, "newlyJoined": 0, "leftCount": 0, "targetCount": int(job.get("targetMemberCount") or 0)}
 
-    # Mỗi tài khoản đọc nhóm đích bằng chính credentials của nó (đã tự vào nhóm).
+    # Đọc nhóm đích bằng TÀI KHOẢN CHỦ (A) — người nằm trong nhóm — tránh lỗi
+    # "Tham số không hợp lệ" khi tài khoản phụ chưa/không ở trong nhóm.
+    o_enk, o_ck, o_imei = _target_owner_creds(job, zpw_enk, cookies, imei)
     try:
         result = get_members_by_group_id(
             group_id=group_id,
-            cookie_dict=_cookie_dict(cookies),
-            zpw_enk=zpw_enk,
-            imei=imei,
+            cookie_dict=_cookie_dict(o_ck),
+            zpw_enk=o_enk,
+            imei=o_imei,
             zpw_ver=get_zpw_ver(),
             mcount=500,
             timeout=30,
             max_pages=200,
         ) or {}
         if not result.get("ok"):
-            raise RuntimeError(result.get("message") or "Không đọc được danh sách thành viên nhóm đích.")
+            # Không đọc được -> trả lỗi mềm, KHÔNG raise (không làm hỏng cả cycle).
+            job["lastVerificationError"] = str(result.get("message") or "Không đọc được thành viên nhóm đích.")
+            job["nextVerifyAt"] = _next_verify_run(job, now)
+            return {"checked": False, "newlyJoined": 0, "leftCount": 0,
+                    "targetCount": int(job.get("targetMemberCount") or 0),
+                    "error": job["lastVerificationError"]}
 
         target_uids = {
             str(uid or "").strip()
@@ -711,6 +775,7 @@ class GroupCopyWorker:
                 run_record["status"] = "done"
                 job["lastNotice"] = "Chiến dịch đã hết thời gian chạy; hệ thống dừng gửi kết bạn và kiểm tra lại nhóm."
                 _sync_job_schedule(job, started_at)
+                _maybe_leave_source_group(job)  # chỉ rời nếu bật tùy chọn
                 run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
                 save_job(job)
                 return
@@ -764,6 +829,8 @@ class GroupCopyWorker:
                 job["lastNotice"] = self._progress_notice(job, prefix=prefix)
 
             _sync_job_schedule(job, datetime.now())
+            if str(job.get("status") or "") in ("done", "expired"):
+                _maybe_leave_source_group(job)  # chỉ rời nếu bật tùy chọn
             run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
             # save_job sẽ tính lại joinedCount/conversionRate từ danh sách thành viên.
             saved = save_job(job)

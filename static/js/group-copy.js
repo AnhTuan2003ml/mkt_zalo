@@ -752,6 +752,7 @@
             campaignDurationDays: campaignDays,
             verifyIntervalMinutes: verifyMinutes,
             removeFriendAfterJoin: !!(($('groupCopyRemoveFriend') || {}).checked),
+            leaveGroupAfterDone: !!(($('groupCopyLeaveAfterDone') || {}).checked),
             skipLeaders: !!(($('groupCopySkipLeaders') || {}).checked),
             accountIds: [accountId].concat(Array.from(state.extraAccountIds || [])).filter(function (v, i, arr) { return v && arr.indexOf(v) === i; }),
             consentConfirmed: !!(($('groupCopyConsent') || {}).checked)

@@ -3057,7 +3057,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         callback=lambda msg, typ="info": task.log(msg, typ),
         require_imei=False,
         auto_join_when_not_member=True,
-        leave_after_auto_join=True,
+        leave_after_auto_join=False,   # A vào lấy thành viên xong Ở LẠI nhóm, không rời
     )
     uid_list = member_payload.get("uidList") or []
     member_map = member_payload.get("memberMap") or {}
@@ -3405,6 +3405,7 @@ def api_group_copy_start():
         "verifyIntervalMinutes": verify_minutes,
         "campaignDurationDays": campaign_days,
         "removeFriendAfterJoin": bool(data.get("removeFriendAfterJoin")),
+        "leaveGroupAfterDone": bool(data.get("leaveGroupAfterDone")),
         "skipLeaders": bool(data.get("skipLeaders")),
         "startAt": start_at,
         "consentConfirmed": True,
