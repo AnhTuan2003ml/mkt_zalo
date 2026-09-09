@@ -931,6 +931,19 @@ def _remove_joined_campaign_friends(
 
 MAX_CONCURRENT_COPY_JOBS = 16   # số tài khoản/tác vụ chạy SONG SONG tối đa
 MAX_SOURCE_JOIN_ATTEMPTS = 3    # số lần thử tự vào/đọc nhóm nguồn trước khi chia lại việc
+MAX_MEMBER_READ_ERRORS = 3      # số lần lỗi đọc thành viên ("Tham số không hợp lệ") trước khi DỪNG tài khoản
+
+
+def _is_member_read_error(msg: str) -> bool:
+    """Lỗi cho thấy tài khoản KHÔNG đọc/không truy cập được nhóm để lấy thành viên
+    (thường do không ở trong nhóm hoặc groupId không hợp lệ với phiên của nó)."""
+    low = str(msg or "").lower()
+    return (
+        "tham số không hợp lệ" in low
+        or "tham so khong hop le" in low
+        or "[114]" in low
+        or "invalid" in low
+    )
 
 
 class GroupCopyWorker:
@@ -1144,6 +1157,7 @@ class GroupCopyWorker:
             _sync_job_schedule(job, datetime.now())
             if str(job.get("status") or "") in ("done", "expired"):
                 _maybe_leave_source_group(job, zpw_enk, cookies, imei)  # chỉ rời nếu bật tùy chọn
+            job["memberReadErrors"] = 0   # chu kỳ chạy trót lọt -> reset bộ đếm lỗi đọc thành viên
             run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
             # save_job sẽ tính lại joinedCount/conversionRate từ danh sách thành viên.
             saved = save_job(job)
@@ -1169,16 +1183,41 @@ class GroupCopyWorker:
                 job["status"] = "expired"
                 job["nextRunAt"] = ""
                 job["lastNotice"] = f"Chiến dịch đã hết thời gian. Lỗi lần cuối: {exc}"
-            else:
-                retry_at = datetime.now() + timedelta(minutes=10)
-                job["status"] = "pending"
-                job["nextRunAt"] = retry_at.isoformat(timespec="seconds")
-                # Đợt mời/kiểm tra vẫn giữ lịch cũ nếu có, nếu không thì bám theo retry.
-                if not str(job.get("nextInviteAt") or "").strip() and _pending_members(job):
-                    job["nextInviteAt"] = job["nextRunAt"]
-                job["lastNotice"] = (
-                    f"Gặp lỗi tạm thời ({exc}). Bỏ qua, sẽ tự thử lại sau 10 phút và tiếp tục chiến dịch."
-                )
+                save_job(job)
+                print(f"[group_copy_worker] {job_id} het han, dung: {exc}", flush=True)
+                return
+
+            # Đếm lỗi ĐỌC THÀNH VIÊN liên tiếp. Nếu tài khoản này liên tục không đọc
+            # được thành viên ("Tham số không hợp lệ") -> DỪNG HẲN tài khoản đó (không
+            # lặp mãi), và chia phần việc còn lại cho các tài khoản đọc được. Đúng yêu
+            # cầu: "chỉ dùng tài khoản lấy được thành viên".
+            if _is_member_read_error(str(exc)):
+                errs = int(job.get("memberReadErrors") or 0) + 1
+                job["memberReadErrors"] = errs
+                if errs >= MAX_MEMBER_READ_ERRORS:
+                    result = redistribute_campaign_members(
+                        job_id,
+                        reason=f"Tài khoản không đọc được thành viên nhóm sau {errs} lần ({exc}).",
+                    )
+                    print(
+                        f"[group_copy_worker] {job_id}: DUNG tai khoan loi doc thanh vien sau {errs} lan; "
+                        f"chia lai {int(result.get('redistributed') or 0)} nguoi cho "
+                        f"{int(result.get('recipients') or 0)} nick doc duoc.",
+                        flush=True,
+                    )
+                    return  # redistribute_campaign_members đã mark job failed + lưu
+
+            retry_at = datetime.now() + timedelta(minutes=10)
+            job["status"] = "pending"
+            job["nextRunAt"] = retry_at.isoformat(timespec="seconds")
+            # Đợt mời/kiểm tra vẫn giữ lịch cũ nếu có, nếu không thì bám theo retry.
+            if not str(job.get("nextInviteAt") or "").strip() and _pending_members(job):
+                job["nextInviteAt"] = job["nextRunAt"]
+            _remain = max(0, MAX_MEMBER_READ_ERRORS - int(job.get("memberReadErrors") or 0))
+            job["lastNotice"] = (
+                f"Gặp lỗi tạm thời ({exc}). Sẽ thử lại sau 10 phút"
+                + (f"; nếu vẫn không đọc được thành viên sau {_remain} lần nữa sẽ dừng tài khoản này và chia việc cho tài khoản khác." if _is_member_read_error(str(exc)) else ".")
+            )
             save_job(job)
             print(f"[group_copy_worker] {job_id} loi tam thoi, se thu lai: {exc}", flush=True)
 

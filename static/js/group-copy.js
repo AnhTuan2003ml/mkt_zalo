@@ -31,7 +31,9 @@
         pickerSearch: '',
         pickerSort: 'name',
         highlightJobId: '',
-        campaignModalId: ''
+        campaignModalId: '',
+        selectMode: false,
+        selected: {}
     };
 
     var ICON_DETAIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -925,6 +927,16 @@
         return haystack.indexOf(query) !== -1;
     }
 
+    // Checkbox chọn tác vụ (chỉ hiện khi bật chế độ chọn nhiều). `ids` là danh sách
+    // jobId mà thẻ này đại diện (thẻ đơn = 1 job; thẻ chiến dịch = nhiều job).
+    function selectCheckboxHtml(ids) {
+        if (!state.selectMode) return '';
+        var list = (ids || []).filter(Boolean);
+        var allChecked = list.length > 0 && list.every(function (id) { return state.selected[id]; });
+        return '<label class="gc-select-box" title="Chọn tác vụ" onclick="event.stopPropagation()">' +
+            '<input type="checkbox" data-select-ids="' + esc(list.join(',')) + '"' + (allChecked ? ' checked' : '') + '></label>';
+    }
+
     function buildJobCard(job) {
         var source = job.sourceGroup || {};
         var sourceName = source.name || job.sourceInput || '-';
@@ -959,12 +971,13 @@
         }
 
         var card = document.createElement('div');
-        card.className = 'gc-job-card' + (jobId === state.highlightJobId ? ' gc-job-highlight' : '');
+        card.className = 'gc-job-card' + (jobId === state.highlightJobId ? ' gc-job-highlight' : '') + (state.selectMode ? ' gc-selecting' : '') + (state.selected[jobId] ? ' gc-selected' : '');
         card.setAttribute('data-job-card', jobId);
         var jobTitle = String(job.title || ('Sao chép vào ' + targetName));
         var accountNameText = String(job.accountName || job.accountId || 'Tài khoản');
         card.innerHTML =
             '<div class="gc-job-head">' +
+                selectCheckboxHtml([jobId]) +
                 '<div class="gc-job-heading">' +
                     '<div class="gc-job-title-row"><span class="gc-job-title-icon">' + miniAvatarHtml(targetName, job.targetGroupAvatar) + '</span><div><strong class="gc-job-title" title="' + esc(jobTitle) + '">' + esc(jobTitle) + '</strong><small>Kế hoạch chuyển thành viên</small></div></div>' +
                     '<div class="gc-job-route">' +
@@ -1056,11 +1069,14 @@
         if (canResume) actions += '<button type="button" class="gc-btn-sm is-success" data-campaign-resume="' + esc(ids) + '">' + ICON_RESUME + ' Tiếp tục cả chiến dịch</button>';
         if (canDelete) actions += '<button type="button" class="gc-btn-sm is-danger" data-campaign-delete="' + esc(ids) + '">Xóa cả chiến dịch</button>';
 
+        var campJobIds = jobs.map(function (j) { return String(j.jobId || ''); }).filter(Boolean);
         var card = document.createElement('div');
-        card.className = 'gc-job-card gc-campaign-card';
+        var campSelected = campJobIds.length > 0 && campJobIds.every(function (id) { return state.selected[id]; });
+        card.className = 'gc-job-card gc-campaign-card' + (state.selectMode ? ' gc-selecting' : '') + (campSelected ? ' gc-selected' : '');
         card.setAttribute('data-campaign-card', first.campaignId || '');
         card.innerHTML =
             '<div class="gc-job-head">' +
+                selectCheckboxHtml(campJobIds) +
                 '<div class="gc-job-heading">' +
                     '<div class="gc-job-title-row"><span class="gc-job-title-icon">' + miniAvatarHtml(targetName, first.targetGroupAvatar) + '</span><div><strong class="gc-job-title" title="' + esc(title) + '">' + esc(title) + '</strong><small>Chiến dịch • ' + jobs.length + ' tài khoản</small></div></div>' +
                     '<div class="gc-job-route">' +
@@ -1121,10 +1137,88 @@
         }
     }
 
+    // ─── Chọn nhiều tác vụ + xóa hàng loạt ─────────────────────────────────
+    function allVisibleJobIds() {
+        return (state.jobs || []).filter(jobMatchesFilter)
+            .map(function (j) { return String(j.jobId || ''); }).filter(Boolean);
+    }
+    function setSelected(ids, checked) {
+        (ids || []).forEach(function (id) {
+            if (!id) return;
+            if (checked) state.selected[id] = true; else delete state.selected[id];
+        });
+    }
+    // Đếm theo TÁC VỤ (chiến dịch nhiều tài khoản = 1 tác vụ), không đếm job con.
+    function selectedTaskCount() {
+        var tasks = 0;
+        buildJobGroups(state.jobs || []).forEach(function (g) {
+            var ids = g.jobs.map(function (j) { return String(j.jobId || ''); }).filter(Boolean);
+            if (ids.length && ids.some(function (id) { return state.selected[id]; })) tasks++;
+        });
+        return tasks;
+    }
+    function updateBulkBar() {
+        var hasAny = Object.keys(state.selected).some(function (id) { return state.selected[id]; });
+        var tasks = selectedTaskCount();
+        var countEl = $('groupCopyBulkCount');
+        if (countEl) countEl.textContent = 'Đã chọn ' + tasks + ' tác vụ';
+        var delBtn = $('groupCopyBulkDelete');
+        if (delBtn) delBtn.disabled = !hasAny;
+        var allBox = $('groupCopyBulkAll');
+        if (allBox) {
+            var visible = allVisibleJobIds();
+            allBox.checked = visible.length > 0 && visible.every(function (id) { return state.selected[id]; });
+        }
+    }
+    function toggleSelectMode(on) {
+        state.selectMode = (on === undefined) ? !state.selectMode : !!on;
+        if (!state.selectMode) state.selected = {};
+        var btn = $('groupCopySelectToggle');
+        if (btn) btn.classList.toggle('is-active', state.selectMode);
+        var bar = $('groupCopyBulkBar');
+        if (bar) bar.hidden = !state.selectMode;
+        renderJobs(state.jobs);
+    }
+    function clearSelection() {
+        state.selected = {};
+        renderJobs(state.jobs);
+    }
+    function selectAllVisible(checked) {
+        setSelected(allVisibleJobIds(), checked);
+        renderJobs(state.jobs);
+    }
+    async function deleteSelected() {
+        var ids = Object.keys(state.selected).filter(function (id) { return state.selected[id]; });
+        if (!ids.length) return;
+        var runningById = {};
+        (state.jobs || []).forEach(function (j) { runningById[String(j.jobId || '')] = (j.status === 'running'); });
+        var deletable = ids.filter(function (id) { return !runningById[id]; });
+        var skipped = ids.length - deletable.length;
+        if (!deletable.length) { showToast('Các tác vụ đang chạy không thể xóa. Hãy tạm dừng trước.', 'error'); return; }
+        var taskN = selectedTaskCount();
+        var msg = 'Xóa ' + taskN + ' tác vụ đã chọn và toàn bộ lịch sử?' + (skipped ? ' (' + skipped + ' tài khoản đang chạy sẽ được bỏ qua)' : '');
+        if (!(await nexusConfirm(msg, { title: 'Xóa tác vụ đã chọn', confirmText: 'Xóa', danger: true }))) return;
+        var okCount = 0;
+        for (var i = 0; i < deletable.length; i++) {
+            try {
+                var r = await fetch('/api/group-copy/jobs/' + encodeURIComponent(deletable[i]), { method: 'DELETE' });
+                var d = await r.json();
+                if (r.ok && d.success) okCount++;
+            } catch (e) { /* tiếp tục các tác vụ còn lại */ }
+        }
+        state.selected = {};
+        showToast('Đã xóa ' + okCount + '/' + deletable.length + ' tác vụ.', okCount ? 'success' : 'error');
+        await loadJobs();
+    }
+
     function renderJobs(jobs) {
         var container = $('groupCopyJobs');
         state.jobs = Array.isArray(jobs) ? jobs : [];
         renderSummary(state.jobs);
+        // Bỏ khỏi vùng chọn những tác vụ đã biến mất sau khi tải lại.
+        var existing = {};
+        state.jobs.forEach(function (j) { existing[String(j.jobId || '')] = true; });
+        Object.keys(state.selected).forEach(function (id) { if (!existing[id]) delete state.selected[id]; });
 
         var filtered = state.jobs.filter(jobMatchesFilter);
         var nGroupsFiltered = buildJobGroups(filtered).length;
@@ -1138,6 +1232,7 @@
             container.innerHTML = '<div class="group-copy-empty">Chưa có tác vụ sao chép nhóm.<br>Bấm "Thêm tác vụ" để tạo kế hoạch đầu tiên.</div>';
             closeDetailOverlay();
             resetDetailPane();
+            updateBulkBar();
             return;
         }
         if (!filtered.length) {
@@ -1166,6 +1261,7 @@
             if (stillThere) openCampaignModal(state.campaignModalId);
             else closeCampaignModal();
         }
+        updateBulkBar();
     }
 
     async function jobAction(jobId, action) {
@@ -1536,6 +1632,21 @@
 
         if ($('groupCopyCampaignClose')) $('groupCopyCampaignClose').addEventListener('click', closeCampaignModal);
         if ($('groupCopyCampaignOverlay')) $('groupCopyCampaignOverlay').addEventListener('click', function (event) { if (event.target === $('groupCopyCampaignOverlay')) closeCampaignModal(); });
+
+        // Chọn nhiều tác vụ + xóa hàng loạt.
+        if ($('groupCopySelectToggle')) $('groupCopySelectToggle').addEventListener('click', function () { toggleSelectMode(); });
+        if ($('groupCopyBulkClear')) $('groupCopyBulkClear').addEventListener('click', clearSelection);
+        if ($('groupCopyBulkDelete')) $('groupCopyBulkDelete').addEventListener('click', deleteSelected);
+        if ($('groupCopyBulkAll')) $('groupCopyBulkAll').addEventListener('change', function () { selectAllVisible(this.checked); });
+        if ($('groupCopyJobs')) $('groupCopyJobs').addEventListener('change', function (event) {
+            var cb = event.target;
+            if (!cb || !cb.getAttribute || cb.getAttribute('data-select-ids') === null) return;
+            var ids = String(cb.getAttribute('data-select-ids') || '').split(',').filter(Boolean);
+            setSelected(ids, cb.checked);
+            var card = cb.closest ? cb.closest('.gc-job-card') : null;
+            if (card) card.classList.toggle('gc-selected', cb.checked);
+            updateBulkBar();
+        });
 
         $('groupCopyStartBtn').addEventListener('click', startJob);
         $('groupCopyRefreshJobsBtn').addEventListener('click', async function () {

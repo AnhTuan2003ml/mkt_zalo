@@ -1237,3 +1237,53 @@ html[data-theme="light"] .gc-job-route-copy strong { color: #182b3f; }
 }
 /* Thẻ job bên trong popup: giữ nguyên style thẻ, chỉ nới cho vừa modal. */
 .gc-campaign-overlay-body .gc-job-card { margin: 0; }
+
+/* ─── Chọn nhiều tác vụ + xóa hàng loạt ───────────────────────────────────── */
+#groupCopySelectToggle.is-active {
+    color: var(--accent, #2f7fd1);
+    border-color: var(--accent, #2f7fd1);
+    background: rgba(88, 166, 255, .10);
+}
+.gc-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(88, 166, 255, .35);
+    border-radius: 12px;
+    background: rgba(88, 166, 255, .07);
+}
+.gc-bulk-all { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); cursor: pointer; }
+.gc-bulk-all input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #2f7fd1); }
+.gc-bulk-count { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.gc-bulk-actions { display: flex; gap: 8px; margin-left: auto; }
+.gc-bulk-actions .btn-danger { background: var(--red, #e5484d); color: #fff; border: 1px solid var(--red, #e5484d); }
+.gc-bulk-actions .btn-danger:hover:not(:disabled) { filter: brightness(.95); }
+.gc-bulk-actions .btn-danger:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Checkbox chọn trên từng thẻ tác vụ — đặt absolute góc trái để KHÔNG phá vỡ
+   grid của .gc-job-head; khi bật chế độ chọn thẻ chừa lề trái cho checkbox. */
+.gc-select-box {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    cursor: pointer;
+}
+.gc-select-box input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent, #2f7fd1);
+}
+.gc-job-card.gc-selecting { position: relative; padding-left: 46px; }
+.gc-job-card.gc-selected {
+    border-color: var(--accent, #2f7fd1);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, .25);
+}

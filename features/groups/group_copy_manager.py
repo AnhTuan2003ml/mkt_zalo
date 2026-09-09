@@ -357,6 +357,7 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("accountJoinedSource", False)   # tài khoản phụ đã vào nhóm nguồn chưa
     job.setdefault("sourceUidsResolved", False)    # đã phân giải uid nhóm nguồn cho tài khoản này chưa
     job.setdefault("sourceJoinAttempts", 0)        # số lần đã thử vào/đọc nhóm nguồn
+    job.setdefault("memberReadErrors", 0)          # số lần lỗi đọc thành viên liên tiếp
     job["removeFriendAfterJoin"] = bool(job.get("removeFriendAfterJoin"))
     job["leaveGroupAfterDone"] = bool(job.get("leaveGroupAfterDone"))
     job.setdefault("sourceLeftAt", "")
