@@ -247,6 +247,32 @@ def get_account(account_id: str):
     return _find_account(load_accounts(), account_id)
 
 
+def find_account_by_ref(ref: str):
+    """Tìm tài khoản theo THAM CHIẾU linh hoạt, ưu tiên profileId (uid Zalo — ổn
+    định sau đăng nhập), sau đó mới tới accountId nội bộ.
+
+    Dùng cho API tích hợp ngoài (webhook): chỉ cần truyền profileId của tài khoản,
+    Nexus tự tra ra bản ghi để lấy cookies/zpwEnk/imei — không cần truyền phiên.
+    """
+    ref = str(ref or "").strip()
+    if not ref:
+        return None
+    accounts = load_accounts()
+    for acc in accounts:  # 1) khớp profileId (uid) trước
+        if str(acc.get("uid") or "").strip() == ref:
+            return acc
+    for acc in accounts:  # 2) fallback accountId nội bộ (tương thích ngược)
+        if str(acc.get("accountId") or "").strip() == ref:
+            return acc
+    return None
+
+
+def resolve_account_id(ref: str) -> str:
+    """Trả accountId nội bộ từ profileId/accountId; rỗng nếu không tìm thấy."""
+    acc = find_account_by_ref(ref)
+    return str(acc.get("accountId") or "").strip() if acc else ""
+
+
 @_locked
 def update_account(account_id: str, **fields):
     """Cập nhật một phần thông tin tài khoản."""

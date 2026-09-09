@@ -623,18 +623,30 @@ def get_group_latest_messages(group_id: str, account_id: Optional[str] = None) -
     if not group_id:
         raise ValueError("Thiếu groupId")
 
-    account_id = str(account_id or "").strip()
-    account = None
-    for acc in load_accounts():
+    # ref có thể là profileId (uid Zalo) HOẶC accountId nội bộ.
+    ref = str(account_id or "").strip()
+    accounts = load_accounts()
+    matched = None            # khớp đúng tài khoản được chỉ định (dù còn phiên hay không)
+    account = None            # tài khoản khớp VÀ còn đủ phiên
+    for acc in accounts:
         aid = str(acc.get("accountId") or "").strip()
-        if account_id and aid != account_id:
+        uid = str(acc.get("uid") or "").strip()
+        if ref and ref != aid and ref != uid:
             continue
+        matched = matched or acc
         if not all([acc.get("cookies"), acc.get("zpwEnk"), acc.get("imei")]):
             continue
         account = acc
         break
     if not account:
-        raise ValueError("Không có tài khoản đủ phiên đăng nhập (cookies/zpwEnk/imei).")
+        if ref and matched is None:
+            raise ValueError(
+                f"Không tìm thấy tài khoản theo profileId/accountId '{ref}'. "
+                "Hãy kiểm tra lại profileId của tài khoản đã chọn.")
+        who = str((matched or {}).get("name") or ref or "").strip()
+        raise ValueError(
+            f"Tài khoản '{who}' chưa đăng nhập hoặc phiên đã hết hạn "
+            "(thiếu cookies/zpwEnk/imei) — hãy mở Nexus và đăng nhập lại tài khoản này.")
 
     result = fetch_last_messages(
         {f"{group_id}_1": "0"},

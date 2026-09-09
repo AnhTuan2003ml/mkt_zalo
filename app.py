@@ -274,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.2.6"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -1529,8 +1529,10 @@ def api_messages_group_latest():
         else:
             data = request.args
         group_id = (data.get("groupId") or data.get("group_id") or "").strip()
-        account_id = (data.get("account_id") or data.get("accountId") or "").strip()
-        payload = get_group_latest_messages(group_id, account_id or None)
+        # Ưu tiên profileId (uid Zalo — ổn định); vẫn nhận accountId để tương thích.
+        account_ref = (data.get("profileId") or data.get("profile_id")
+                       or data.get("account_id") or data.get("accountId") or "").strip()
+        payload = get_group_latest_messages(group_id, account_ref or None)
         return jsonify({"success": True, **payload})
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -2718,7 +2720,16 @@ def api_send_group_message():
     photo (file, tùy chọn). Có ảnh -> photo_original/upload + send (nhóm),
     không ảnh -> /api/group/sendmsg như cũ.
     """
-    account_id = str(request.form.get("accountId", request.form.get("account_id", "")) or "").strip()
+    # Ưu tiên profileId (uid Zalo — ổn định); Nexus tự tra accountId + phiên.
+    account_ref = str(
+        request.form.get("profileId")
+        or request.form.get("profile_id")
+        or request.form.get("accountId")
+        or request.form.get("account_id")
+        or ""
+    ).strip()
+    from features.accounts.account_manager import resolve_account_id
+    account_id = resolve_account_id(account_ref) or account_ref
     group_id = str(
         request.form.get("group_id")
         or request.form.get("groupId")
@@ -4120,15 +4131,19 @@ def _chrome_debug_port_alive(port) -> bool:
 @app.route("/api/groups/personal", methods=["GET"])
 def api_get_account_groups():
     """API: Lay danh sach personalGroups da luu trong data/accounts.json theo account dang chon."""
-    account_id = (
-        request.args.get("accountId")
+    # Ưu tiên profileId (uid Zalo — ổn định); vẫn nhận accountId để tương thích.
+    account_ref = (
+        request.args.get("profileId")
+        or request.args.get("profile_id")
+        or request.args.get("accountId")
         or request.args.get("account_id")
         or request.args.get("id")
         or ""
     ).strip()
+    account_id = account_ref
 
-    if not account_id:
-        return jsonify({"success": False, "error": "Thieu accountId", "groups": []}), 400
+    if not account_ref:
+        return jsonify({"success": False, "error": "Thieu profileId/accountId", "groups": []}), 400
 
     try:
         accounts = load_accounts()
@@ -4136,8 +4151,10 @@ def api_get_account_groups():
         account = None
         for acc in accounts:
             aid = str(acc.get("accountId") or acc.get("id") or acc.get("account_id") or "").strip()
-            if aid == account_id:
+            uid = str(acc.get("uid") or "").strip()
+            if account_ref in (aid, uid) and aid:
                 account = acc
+                account_id = aid
                 break
 
         if not account:

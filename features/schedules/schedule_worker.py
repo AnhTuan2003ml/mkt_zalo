@@ -18,6 +18,12 @@ from features.messaging.send_photo import send_photo
 from features.messaging.send_link import extract_zalo_group_link, resolve_group_link_info, send_message_smart
 from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result, get_schedule
 
+# ─── SÀN nhịp gửi (ổn định, tránh Zalo chặn vì nhắn quá nhanh) ───────────────
+# Áp làm giá trị tối thiểu kể cả khi cấu hình lịch đặt thấp hơn.
+_MIN_MSG_DELAY_SEC = 8       # tối thiểu giây giữa 2 tin nhắn
+_MAX_MSG_DELAY_SEC = 18      # trần mặc định (random min..max mỗi tin)
+_MIN_BATCH_DELAY_SEC = 60    # tối thiểu giây nghỉ giữa các batch
+
 
 def _license_active() -> bool:
     """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
@@ -219,11 +225,12 @@ class ScheduleWorker:
 
         # Batch config
         batch_size = batch_config.get("batchSize", 10)
-        batch_delay_sec = batch_config.get("batchDelaySec", 30)
+        # Nghỉ giữa batch: áp SÀN tối thiểu để ổn định.
+        batch_delay_sec = max(_MIN_BATCH_DELAY_SEC, int(batch_config.get("batchDelaySec", _MIN_BATCH_DELAY_SEC) or _MIN_BATCH_DELAY_SEC))
 
-        # Rate limit config
-        min_delay = rate_limit.get("minDelaySec", 3)
-        max_delay = rate_limit.get("maxDelaySec", 5)
+        # Rate limit: áp SÀN để KHÔNG nhắn quá nhanh (dù cấu hình đặt thấp hơn).
+        min_delay = max(_MIN_MSG_DELAY_SEC, int(rate_limit.get("minDelaySec", _MIN_MSG_DELAY_SEC) or _MIN_MSG_DELAY_SEC))
+        max_delay = max(min_delay + 4, int(rate_limit.get("maxDelaySec", _MAX_MSG_DELAY_SEC) or _MAX_MSG_DELAY_SEC))
         max_errors = rate_limit.get("maxConsecutiveErrors", 5)
 
         # Nội dung chứa link nhóm Zalo -> resolve info nhóm 1 lần cho cả lịch.
@@ -375,11 +382,12 @@ class ScheduleWorker:
 
         # Batch config
         batch_size = batch_config.get("batchSize", 10)
-        batch_delay_sec = batch_config.get("batchDelaySec", 30)
+        # Nghỉ giữa batch: áp SÀN tối thiểu để ổn định.
+        batch_delay_sec = max(_MIN_BATCH_DELAY_SEC, int(batch_config.get("batchDelaySec", _MIN_BATCH_DELAY_SEC) or _MIN_BATCH_DELAY_SEC))
 
-        # Rate limit config
-        min_delay = rate_limit.get("minDelaySec", 3)
-        max_delay = rate_limit.get("maxDelaySec", 5)
+        # Rate limit: áp SÀN để KHÔNG nhắn quá nhanh (dù cấu hình đặt thấp hơn).
+        min_delay = max(_MIN_MSG_DELAY_SEC, int(rate_limit.get("minDelaySec", _MIN_MSG_DELAY_SEC) or _MIN_MSG_DELAY_SEC))
+        max_delay = max(min_delay + 4, int(rate_limit.get("maxDelaySec", _MAX_MSG_DELAY_SEC) or _MAX_MSG_DELAY_SEC))
         max_errors = rate_limit.get("maxConsecutiveErrors", 5)
 
         # Đổi status => running

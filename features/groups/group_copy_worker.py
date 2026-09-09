@@ -1383,14 +1383,27 @@ class GroupCopyWorker:
         quota_deferred = 0
         friend_text = _friend_request_text(job, group_link)
 
-        # Giãn nhịp chống spam: chỉ khi run này CHƯA mời trực tiếp ai mới gửi 1 lời
-        # mời kết bạn kèm link nhóm cho MỘT người chưa vào nhóm. Người còn lại chờ
-        # run kế tiếp (mỗi tài khoản cách nhau ngẫu nhiên 5–20 phút).
-        if run_record["directInviteCount"] == 0 and remaining_quota > 0:
+        # Mỗi run gửi 1 lời mời kết bạn KÈM tin nhắn mời (link nhóm) cho MỘT người
+        # CHƯA là bạn — độc lập với việc mời trực tiếp bạn bè ở trên (không loại trừ
+        # nhau nữa). Giãn nhịp chống spam: 1 người/run, mỗi run cách 5–20 phút.
+        if remaining_quota > 0:
+            direct_set = {str(x or "").strip() for x in direct_ids}
+            # Ưu tiên người CHƯA là bạn (cần gửi kết bạn + tin mời).
             target = next(
-                (m for m in _pending_members(job) if str(m.get("userId") or "").strip()),
+                (m for m in _pending_members(job)
+                 if str(m.get("userId") or "").strip()
+                 and str(m.get("userId")).strip() not in direct_set
+                 and m.get("isFriend") is not True),
                 None,
             )
+            if target is None:
+                # Hết người lạ -> gửi cho bất kỳ ai còn pending (chưa mời trực tiếp run này).
+                target = next(
+                    (m for m in _pending_members(job)
+                     if str(m.get("userId") or "").strip()
+                     and str(m.get("userId")).strip() not in direct_set),
+                    None,
+                )
             if target is not None:
                 uid = str(target.get("userId") or "").strip()
                 _consume_friend_request_slot(job, started_at)
