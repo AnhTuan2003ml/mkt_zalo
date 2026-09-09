@@ -113,11 +113,6 @@ ADMIN_CREDENTIALS = _load_admin_credentials()
 
 # Gói: key -> (số ngày, nhãn, is_permanent)
 PLAN_OPTIONS = {
-    "3d": (3, "3 Ngày", False),
-    "7d": (7, "1 Tuần", False),
-    "10d": (10, "10 Ngày", False),
-    "1m": (30, "1 Tháng", False),
-    "2m": (60, "2 Tháng", False),
     "3m": (90, "3 Tháng", False),
     "6m": (180, "6 Tháng", False),
     "lifetime": (0, "Vĩnh viễn", True),
@@ -490,11 +485,11 @@ def api_register():
     data = request.get_json(silent=True) or {}
     mac = str(data.get("mac") or "").strip().upper()
     machine_name = str(data.get("machineName") or data.get("machine_name") or "").strip()
-    plan_key = str(data.get("plan") or data.get("planKey") or "1m").strip().lower()
+    plan_key = str(data.get("plan") or data.get("planKey") or "3m").strip().lower()
     if not mac:
         return jsonify({"success": False, "error": "Thiếu địa chỉ MAC."}), 400
     if plan_key not in PLAN_OPTIONS:
-        plan_key = "1m"
+        plan_key = "3m"
     days, plan_label, is_permanent = PLAN_OPTIONS[plan_key]
     key = _gen_key(12)
     expiry = "" if is_permanent else (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")

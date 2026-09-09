@@ -113,8 +113,8 @@
                     <ul class="plan-list" id="activationPlanList">
                         {% for item in activation_options %}
                         <li>
-                            <label class="plan-item {{ 'active' if item.key == '1m' else '' }}" data-plan-key="{{ item.key }}">
-                                <input type="radio" name="activationPlan" value="{{ item.key }}" {{ 'checked' if item.key == '1m' else '' }}>
+                            <label class="plan-item {{ 'active' if item.key == '3m' else '' }}" data-plan-key="{{ item.key }}">
+                                <input type="radio" name="activationPlan" value="{{ item.key }}" {{ 'checked' if item.key == '3m' else '' }}>
                                 <span class="plan-icon">{{ item.icon }}</span>
                                 <span class="plan-label">{{ item.label }}</span>
                             </label>
@@ -125,7 +125,7 @@
 
                 <section class="card">
                     <h3>Nhập mã kích hoạt</h3>
-                    <p class="muted" style="margin-bottom: 12px;">Gói đang chọn: <span id="selectedPlanLabel">1 Tháng</span>. Mã kích hoạt sẽ được hệ thống cấp và gửi về email quản trị.</p>
+                    <p class="muted" style="margin-bottom: 12px;">Gói đang chọn: <span id="selectedPlanLabel">3 Tháng</span>. Mã kích hoạt sẽ được hệ thống cấp và gửi về email quản trị.</p>
                     <div class="actions" style="margin-top:0; margin-bottom:12px;">
                         <button id="requestActivationBtn" class="btn-primary">Gửi mã theo thời gian đã chọn</button>
                         <button id="resendActivationBtn" class="btn-secondary">Gửi lại mã</button>

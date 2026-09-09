@@ -845,11 +845,6 @@ except Exception as e:
 
     def get_activation_duration_options():
         return [
-            {"key": "3d", "label": "3 Ngày", "icon": "📅"},
-            {"key": "7d", "label": "1 Tuần", "icon": "📈"},
-            {"key": "10d", "label": "10 Ngày", "icon": "📈"},
-            {"key": "1m", "label": "1 Tháng", "icon": "📊"},
-            {"key": "2m", "label": "2 Tháng", "icon": "📊"},
             {"key": "3m", "label": "3 Tháng", "icon": "📊"},
             {"key": "6m", "label": "6 Tháng", "icon": "📊"},
             {"key": "lifetime", "label": "Vĩnh viễn", "icon": "💎"},
@@ -1144,9 +1139,9 @@ def api_activation_save():
 def api_activation_resend():
     try:
         data = request.get_json(silent=True) or request.form or {}
-        duration_key = (data.get("duration_key") or data.get("plan") or "1m").strip()
+        duration_key = (data.get("duration_key") or data.get("plan") or "3m").strip()
         options_map = {item["key"]: item for item in get_activation_duration_options()}
-        selected = options_map.get(duration_key, options_map.get("1m", {"key": duration_key, "label": duration_key}))
+        selected = options_map.get(duration_key, options_map.get("3m", {"key": duration_key, "label": duration_key}))
 
         # Gửi thông tin máy lên MÁY CHỦ để server sinh key + gửi email admin.
         from authencation.server_license import register_with_server
