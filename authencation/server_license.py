@@ -59,12 +59,14 @@ GRACE_SECONDS = 3 * 24 * 3600     # cho phép dùng cache tối đa 3 ngày khi 
 
 
 def _reverify_seconds():
-    """Giãn nhịp verify online (giây). Mặc định 1 giờ để không vượt hạn mức của
-    tunnel free (vd ngrok 20k request/tháng). Có thể chỉnh qua LICENSE_REVERIFY_SECONDS."""
+    """Giãn nhịp verify online (giây). Mặc định 5 phút để khi HỦY KÍCH HOẠT trên
+    máy chủ thì client khóa trong ~5 phút. Chỉnh qua LICENSE_REVERIFY_SECONDS:
+    - Đặt nhỏ (vd 60) = khóa nhanh hơn nhưng nhiều request tới tunnel.
+    - Đặt lớn (vd 3600) = ít request (hợp ngrok free 20k/tháng khi nhiều máy)."""
     try:
-        v = int(os.getenv("LICENSE_REVERIFY_SECONDS", "3600") or 3600)
+        v = int(os.getenv("LICENSE_REVERIFY_SECONDS", "300") or 300)
     except (TypeError, ValueError):
-        v = 3600
+        v = 300
     return max(60, v)
 
 
