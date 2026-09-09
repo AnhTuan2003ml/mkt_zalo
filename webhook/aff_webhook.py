@@ -50,6 +50,13 @@ _lock = threading.RLock()
 
 _MAX_LOGS = 200
 DEFAULT_SHOPEE_AFF_ID = "17340820046"
+# subId CỐ ĐỊNH gắn vào link Shopee (&sub_id=) và Lazada (subId1=) để biết
+# click/đơn nào đến qua hệ thống này khi đối soát ở webhook affiliate.
+DEFAULT_SUB_ID = "nexus"
+# Lazada Affiliate Open API (LiteApp) — thay cho cookie.
+DEFAULT_LAZADA_APP_KEY = "105827"
+DEFAULT_LAZADA_APP_SECRET = "r8ZMKhPxu1JZUCwTUBVMJiJnZKjhWeQF"
+DEFAULT_LAZADA_USER_TOKEN = "d29e97bd88054544b021d23b430fe751"
 
 # Nhãn loại tin Nexus thêm vào đầu nội dung ("[Hình ảnh] ...") — bỏ khi
 # chuyển tiếp để giữ nguyên nội dung gốc.
@@ -69,6 +76,12 @@ def _default_settings() -> dict:
         "routes": [],
         "interval_minutes": 1,
         "shopee_aff_id": DEFAULT_SHOPEE_AFF_ID,
+        # subId cố định (đối soát click/đơn qua hệ thống) — dùng cho cả Shopee & Lazada.
+        "sub_id": DEFAULT_SUB_ID,
+        # Lazada Open API (LiteApp) — ưu tiên; cookie chỉ là fallback.
+        "lazada_app_key": DEFAULT_LAZADA_APP_KEY,
+        "lazada_app_secret": DEFAULT_LAZADA_APP_SECRET,
+        "lazada_user_token": DEFAULT_LAZADA_USER_TOKEN,
         "lazada_cookie": "",
     }
 
@@ -322,8 +335,7 @@ def run_forward_once(triggered_by: str = "worker") -> dict:
         new_text = raw_text
         ok_count = 0
         for item in links:
-            conv = convert_product_link(item["url"], item["platform"],
-                                        settings["shopee_aff_id"], settings["lazada_cookie"])
+            conv = convert_product_link(item["url"], item["platform"], settings)
             conversions.append(conv)
             if conv.get("ok"):
                 ok_count += 1
@@ -461,6 +473,14 @@ def api_config():
                 settings["interval_minutes"] = 1
         if "shopee_aff_id" in patch:
             settings["shopee_aff_id"] = str(patch["shopee_aff_id"] or "").strip() or DEFAULT_SHOPEE_AFF_ID
+        if "sub_id" in patch:
+            settings["sub_id"] = str(patch["sub_id"] or "").strip()
+        if "lazada_app_key" in patch:
+            settings["lazada_app_key"] = str(patch["lazada_app_key"] or "").strip()
+        if "lazada_app_secret" in patch:
+            settings["lazada_app_secret"] = str(patch["lazada_app_secret"] or "").strip()
+        if "lazada_user_token" in patch:
+            settings["lazada_user_token"] = str(patch["lazada_user_token"] or "").strip()
         if "lazada_cookie" in patch:
             # Chấp nhận cả chuỗi header lẫn bảng cookies copy từ DevTools.
             settings["lazada_cookie"] = normalize_lazada_cookie(patch["lazada_cookie"])
@@ -502,8 +522,7 @@ def api_test_convert():
         return jsonify({"success": False, "error": "URL không phải link Shopee/Lazada."}), 400
     with _lock:
         settings = _load_db()["settings"]
-    result = convert_product_link(links[0]["url"], links[0]["platform"],
-                                  settings["shopee_aff_id"], settings["lazada_cookie"])
+    result = convert_product_link(links[0]["url"], links[0]["platform"], settings)
     status = 200 if result.get("ok") else 400
     return jsonify({"success": bool(result.get("ok")), **result}), status
 

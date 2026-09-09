@@ -230,7 +230,30 @@
                 </div>
             </div>
 
-            <label class="fl">Cookie Lazada</label>
+            <div class="row2">
+                <div>
+                    <label class="fl">SubID cố định (đối soát)</label>
+                    <input type="text" id="subId" placeholder="nexus">
+                </div>
+                <div>
+                    <label class="fl">Lazada User Token</label>
+                    <input type="text" id="lazadaUserToken" placeholder="User Token">
+                </div>
+            </div>
+            <p class="small" style="margin:2px 0 8px;color:#64748b">SubID gắn vào link Shopee (<code>&amp;sub_id=</code>) và Lazada (<code>subId1=</code>) để biết click/đơn nào qua hệ thống.</p>
+
+            <label class="fl">Lazada Open API (LiteApp)</label>
+            <div class="row2">
+                <div>
+                    <input type="text" id="lazadaAppKey" placeholder="App Key (VD: 105827)">
+                </div>
+                <div>
+                    <input type="text" id="lazadaAppSecret" placeholder="App Secret">
+                </div>
+            </div>
+            <p class="small" style="margin:2px 0 8px;color:#64748b">Ưu tiên dùng Open API để lấy link Lazada (ổn định, không hết hạn). Cookie bên dưới chỉ dùng dự phòng khi API lỗi.</p>
+
+            <label class="fl">Cookie Lazada <span style="font-weight:400;color:#94a3b8">(dự phòng)</span></label>
             <div class="cookie-line">
                 <span class="ck-state" id="cookieState">Chưa có cookie</span>
                 <button class="btn mini" id="btnCookieEdit">Dán cookie</button>
@@ -321,6 +344,10 @@ function fillForm() {
     const st = S.settings;
     qs('intervalSelect').value = String(st.interval_minutes || 1);
     qs('shopeeAffId').value = st.shopee_aff_id || '';
+    qs('subId').value = st.sub_id || '';
+    qs('lazadaAppKey').value = st.lazada_app_key || '';
+    qs('lazadaAppSecret').value = st.lazada_app_secret || '';
+    qs('lazadaUserToken').value = st.lazada_user_token || '';
     qs('lazadaCookie').value = st.lazada_cookie || '';
     qs('enabledToggle').checked = !!st.enabled;
     S.routes = (st.routes || []).map(r => ({
@@ -356,6 +383,10 @@ function collectForm() {
         account_id: qs('accountSelect').value,
         interval_minutes: Number(qs('intervalSelect').value || 1),
         shopee_aff_id: qs('shopeeAffId').value.trim(),
+        sub_id: qs('subId').value.trim(),
+        lazada_app_key: qs('lazadaAppKey').value.trim(),
+        lazada_app_secret: qs('lazadaAppSecret').value.trim(),
+        lazada_user_token: qs('lazadaUserToken').value.trim(),
         lazada_cookie: qs('lazadaCookie').value.trim(),
         routes: S.routes.map(r => ({
             id: r.id,

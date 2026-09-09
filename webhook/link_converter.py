@@ -7,8 +7,11 @@
   trả về link rút gọn https://s.lazada.vn/...
 """
 
+import hashlib
+import hmac
 import json
 import re
+import time
 from urllib.parse import quote, urlparse
 
 import requests
@@ -27,6 +30,99 @@ _LAZADA_HOST_RE = re.compile(r"(?:^|\.)(?:lazada\.vn|lazada\.com\.vn)$", re.IGNO
 _SHORT_HOSTS = {"s.shopee.vn", "shope.ee", "vn.shp.ee", "shp.ee", "s.lazada.vn", "s.lazada.com.vn"}
 
 LAZADA_CONVERT_URL = "https://adsense.lazada.vn/newOffer/link-convert-v2.json"
+
+# ─── Lazada Affiliate Open API (LiteApp) ─────────────────────────────────────
+# Ký HMAC-SHA256 theo chuẩn Lazada Open Platform (lazop). Dùng App Key/Secret +
+# User Token thay cho cookie -> ổn định, không hết hạn phiên.
+LAZADA_API_BASE = "https://api.lazada.vn/rest"
+LAZADA_GETLINK_PATH = "/marketing/getlink"
+
+
+def _lazop_sign(secret: str, api_path: str, params: dict) -> str:
+    """Chữ ký lazop: HMAC-SHA256(secret, apiPath + concat(sort(key+value))) -> HEX hoa."""
+    base = api_path + "".join("{}{}".format(k, params[k]) for k in sorted(params))
+    return hmac.new(secret.encode("utf-8"), base.encode("utf-8"), hashlib.sha256).hexdigest().upper()
+
+
+def _deep_find(obj, key):
+    """Tìm giá trị không rỗng đầu tiên của `key` trong dict/list lồng nhau."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == key and v not in (None, "", "null"):
+                return v
+            found = _deep_find(v, key)
+            if found not in (None, "", "null"):
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _deep_find(item, key)
+            if found not in (None, "", "null"):
+                return found
+    return None
+
+
+def lazada_aff_link_api(url: str, app_key: str, app_secret: str, user_token: str,
+                        sub_id: str = "", timeout: int = 20) -> dict:
+    """Chuyển URL sản phẩm Lazada sang link aff bằng Open API (LiteApp).
+
+    Gọi /marketing/getlink với inputType=url; gắn subId1 để đối soát click/đơn.
+    """
+    app_key = str(app_key or "").strip()
+    app_secret = str(app_secret or "").strip()
+    user_token = str(user_token or "").strip()
+    if not (app_key and app_secret and user_token):
+        return {"ok": False, "message": "Chưa cấu hình Lazada App Key / Secret / User Token."}
+
+    product_url = resolve_short_link(url)
+    if classify_product_link(product_url) != "lazada":
+        return {"ok": False, "message": f"Không phải link Lazada: {product_url[:120]}"}
+
+    params = {
+        "app_key": app_key,
+        "timestamp": str(int(time.time() * 1000)),
+        "sign_method": "sha256",
+        "userToken": user_token,
+        "inputType": "url",
+        "inputValue": product_url,
+    }
+    if sub_id:
+        params["subId1"] = str(sub_id)
+    params["sign"] = _lazop_sign(app_secret, LAZADA_GETLINK_PATH, params)
+
+    try:
+        response = requests.get(
+            LAZADA_API_BASE + LAZADA_GETLINK_PATH,
+            params=params, timeout=timeout, proxies=NO_PROXY,
+            headers={"User-Agent": BROWSER_UA, "Accept": "application/json"},
+        )
+        payload = response.json()
+    except Exception as exc:
+        return {"ok": False, "message": f"Không gọi được Lazada Open API: {exc}"}
+
+    # data đôi khi là chuỗi JSON -> parse lại để dò link.
+    if isinstance(payload, dict) and isinstance(payload.get("data"), str):
+        try:
+            payload["data"] = json.loads(payload["data"])
+        except Exception:
+            pass
+
+    code = str((payload or {}).get("code") or "0")
+    if code not in ("0", ""):
+        msg = str(payload.get("message") or payload.get("type") or payload.get("request_id") or "")
+        return {"ok": False, "message": f"Lazada Open API lỗi (code={code}) {msg}".strip()}
+
+    link = (_deep_find(payload, "regularPromotionLink")
+            or _deep_find(payload, "mmPromotionLink")
+            or _deep_find(payload, "dmPromotionLink"))
+    if not link:
+        err = _deep_find(payload, "errorMsg") or _deep_find(payload, "error_msg")
+        return {"ok": False, "message": f"Lazada không trả về link: {err or json.dumps(payload)[:160]}"}
+
+    link = str(link).strip()
+    # Bảo đảm subId1 có trong link để đối soát (nếu API chưa gắn sẵn).
+    if sub_id and "subId1=" not in link:
+        link += ("&" if "?" in link else "?") + "subId1=" + quote(str(sub_id), safe="")
+    return {"ok": True, "link": link, "productUrl": product_url}
 
 
 def _clean_url(url: str) -> str:
@@ -212,12 +308,30 @@ def lazada_aff_link(url: str, cookie: str, timeout: int = 20) -> dict:
     return {"ok": True, "link": short_link, "productUrl": product_url}
 
 
-def convert_product_link(url: str, platform: str, shopee_aff_id: str, lazada_cookie: str) -> dict:
-    """Chuyển 1 link theo sàn tương ứng. Trả {ok, link|message, platform, original}."""
+def convert_product_link(url: str, platform: str, settings: dict) -> dict:
+    """Chuyển 1 link theo sàn tương ứng, dùng cấu hình trong ``settings``.
+
+    - Shopee: gắn ``sub_id`` CỐ ĐỊNH để đối soát click/đơn qua hệ thống.
+    - Lazada: ƯU TIÊN Open API (LiteApp: App Key/Secret/User Token) + subId1;
+      nếu thiếu cấu hình API hoặc API lỗi mà còn cookie thì dùng cookie làm fallback.
+    """
+    settings = settings or {}
+    sub_id = str(settings.get("sub_id") or "").strip()
     if platform == "shopee":
-        result = shopee_aff_link(url, shopee_aff_id)
+        result = shopee_aff_link(url, settings.get("shopee_aff_id", ""), sub_id)
     elif platform == "lazada":
-        result = lazada_aff_link(url, lazada_cookie)
+        app_key = str(settings.get("lazada_app_key") or "").strip()
+        app_secret = str(settings.get("lazada_app_secret") or "").strip()
+        user_token = str(settings.get("lazada_user_token") or "").strip()
+        cookie = str(settings.get("lazada_cookie") or "").strip()
+        if app_key and app_secret and user_token:
+            result = lazada_aff_link_api(url, app_key, app_secret, user_token, sub_id)
+            if not result.get("ok") and cookie:
+                fallback = lazada_aff_link(url, cookie)  # dự phòng khi API lỗi
+                if fallback.get("ok"):
+                    result = fallback
+        else:
+            result = lazada_aff_link(url, cookie)
     else:
         result = {"ok": False, "message": "Sàn không được hỗ trợ."}
     result["platform"] = platform
