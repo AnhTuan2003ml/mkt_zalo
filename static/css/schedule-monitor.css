@@ -1532,3 +1532,26 @@ html[data-theme="light"] .schedmon-overlay-head h2 {
 .schedule-table-row.schedmon-campaign-member { background: #f8fafc; }
 .schedule-table-row.schedmon-campaign-member .schedule-table-title { padding-left: 14px; border-left: 2px solid #bfdbfe; }
 .schedule-table-row.schedmon-campaign-member[hidden] { display: none !important; }
+
+/* ─── Popup chi tiết chiến dịch (danh sách từng tài khoản) ────────────────── */
+.schedmon-campaign-modal-list { display: flex; flex-direction: column; gap: 8px; }
+.schedmon-campaign-modal-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2, rgba(255,255,255,.02));
+}
+.schedmon-campaign-modal-item .scmi-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.schedmon-campaign-modal-item .scmi-main strong { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedmon-campaign-modal-item .scmi-main small { font-size: 11px; color: var(--text-muted); }
+.schedmon-campaign-modal-item .scmi-result { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.schedmon-campaign-modal-item .scmi-result strong { font-size: 13px; color: var(--text); }
+.schedmon-campaign-modal-item .scmi-result small { font-size: 11px; color: var(--text-muted); }
+@media (max-width: 620px) {
+    .schedmon-campaign-modal-item { grid-template-columns: 1fr auto; row-gap: 8px; }
+    .schedmon-campaign-modal-item .scmi-result { align-items: flex-start; }
+}

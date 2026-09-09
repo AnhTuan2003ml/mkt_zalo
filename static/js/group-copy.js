@@ -30,7 +30,8 @@
         pickerOpen: false,
         pickerSearch: '',
         pickerSort: 'name',
-        highlightJobId: ''
+        highlightJobId: '',
+        campaignModalId: ''
     };
 
     var ICON_DETAIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -1087,12 +1088,30 @@
             '<div class="gc-job-foot">' +
                 '<div class="gc-job-timing"><span>Gộp tiến độ của ' + jobs.length + ' tài khoản</span></div>' +
                 '<div class="gc-job-actions">' + actions + '</div>' +
-            '</div>' +
-            '<div class="gc-campaign-members" hidden></div>';
-
-        var membersWrap = card.querySelector('.gc-campaign-members');
-        jobs.forEach(function (j) { membersWrap.appendChild(buildJobCard(j)); });
+            '</div>';
+        // Chi tiết từng tài khoản hiển thị trong POPUP (không bung inline gây nhảy layout).
         return card;
+    }
+
+    // Popup chi tiết chiến dịch: liệt kê từng tài khoản (thẻ job) trong 1 modal.
+    function openCampaignModal(campaignId) {
+        var cid = String(campaignId || '');
+        var jobs = (state.jobs || []).filter(function (j) { return String((j && j.campaignId) || '') === cid; });
+        if (!jobs.length) { closeCampaignModal(); return; }
+        jobs.sort(function (a, b) { return Number(a.multiAccountIndex || 0) - Number(b.multiAccountIndex || 0); });
+        var body = $('groupCopyCampaignBody');
+        body.innerHTML = '';
+        jobs.forEach(function (j) { body.appendChild(buildJobCard(j)); });
+        var first = jobs[0] || {};
+        $('groupCopyCampaignTitle').textContent = campaignTitleOf(first);
+        $('groupCopyCampaignSub').textContent = jobs.length + ' tài khoản trong chiến dịch';
+        $('groupCopyCampaignOverlay').classList.add('show');
+        state.campaignModalId = cid;
+    }
+    function closeCampaignModal() {
+        var ov = $('groupCopyCampaignOverlay');
+        if (ov) ov.classList.remove('show');
+        state.campaignModalId = '';
     }
 
     async function campaignAction(idsCsv, action) {
@@ -1141,6 +1160,12 @@
         }
 
         if (state.selectedJobId && state.detailOverlayOpen) showDetail(state.selectedJobId, true);
+        // Popup chi tiết chiến dịch đang mở -> cập nhật lại theo dữ liệu mới (hoặc đóng nếu hết).
+        if (state.campaignModalId) {
+            var stillThere = (state.jobs || []).some(function (j) { return String((j && j.campaignId) || '') === state.campaignModalId; });
+            if (stillThere) openCampaignModal(state.campaignModalId);
+            else closeCampaignModal();
+        }
     }
 
     async function jobAction(jobId, action) {
@@ -1498,6 +1523,7 @@
         document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
                 setAccountMenu(false);
+                closeCampaignModal();
                 closeDetail();
                 closeGroupPicker();
                 closeCreateOverlay();
@@ -1507,6 +1533,9 @@
         $('groupCopyAddBtn').addEventListener('click', openCreateOverlay);
         $('groupCopyCreateClose').addEventListener('click', closeCreateOverlay);
         $('groupCopyCreateOverlay').addEventListener('click', function (event) { if (event.target === $('groupCopyCreateOverlay')) closeCreateOverlay(); });
+
+        if ($('groupCopyCampaignClose')) $('groupCopyCampaignClose').addEventListener('click', closeCampaignModal);
+        if ($('groupCopyCampaignOverlay')) $('groupCopyCampaignOverlay').addEventListener('click', function (event) { if (event.target === $('groupCopyCampaignOverlay')) closeCampaignModal(); });
 
         $('groupCopyStartBtn').addEventListener('click', startJob);
         $('groupCopyRefreshJobsBtn').addEventListener('click', async function () {
@@ -1552,11 +1581,8 @@
             var campToggle = event.target.closest('[data-campaign-toggle]');
             if (campToggle) {
                 var cardEl = campToggle.closest('.gc-campaign-card');
-                var members = cardEl && cardEl.querySelector('.gc-campaign-members');
-                if (members) {
-                    members.hidden = !members.hidden;
-                    cardEl.classList.toggle('is-expanded', !members.hidden);
-                }
+                var cid = cardEl && cardEl.getAttribute('data-campaign-card');
+                openCampaignModal(cid);
                 return;
             }
             var campCancel = event.target.closest('[data-campaign-cancel]');

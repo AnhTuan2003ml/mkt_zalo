@@ -690,15 +690,9 @@
         var topCount = 0;
         buildScheduleGroups(items).forEach(function (g) {
             if (g.cid && g.items.length > 1) {
-                // 1 dòng tổng cho chiến dịch; các thành viên ẩn cho tới khi bấm "Xem chi tiết".
+                // 1 dòng tổng cho chiến dịch; chi tiết từng tài khoản mở bằng POPUP
+                // (không chèn dòng inline gây nhảy layout).
                 root.appendChild(buildScheduleCampaignRow(g.items));
-                g.items.forEach(function (sch) {
-                    var r = buildScheduleCard(sch);
-                    r.classList.add('schedmon-campaign-member');
-                    r.setAttribute('data-campaign-member', g.cid);
-                    r.hidden = true;
-                    root.appendChild(r);
-                });
             } else {
                 root.appendChild(g.items[0]._itemType === 'action_plan' ? buildActionPlanCard(g.items[0]) : buildScheduleCard(g.items[0]));
             }
@@ -977,13 +971,35 @@
     }
 
     // ─── Thao tác cấp CHIẾN DỊCH (nhiều tài khoản) ─────────────────────────
-    function toggleCampaign(cid, btn) {
-        var rows = document.querySelectorAll('[data-campaign-member="' + cid + '"]');
-        if (!rows.length) return;
-        var show = rows[0].hidden; // đang ẩn -> hiện
-        rows.forEach(function (r) { r.hidden = !show; });
-        var rowEl = btn && btn.closest ? btn.closest('.schedmon-campaign-row') : null;
-        if (rowEl) rowEl.classList.toggle('is-expanded', show);
+    // Xem chi tiết từng tài khoản của chiến dịch bằng POPUP (không bung inline).
+    function toggleCampaign(cid) {
+        var list = _campaignSchedules(cid);
+        if (!list.length) { showNotif('Chi tiết', 'Chưa có dữ liệu tài khoản cho chiến dịch này.', 'info'); return; }
+        var first = list[0] || {};
+        var kind = kindInfo(first);
+        var title = String(first.title || '').replace(/\s*\(TK\s*\d+\s*\/\s*\d+[^)]*\)\s*$/, '').trim() || 'Chiến dịch';
+        var html = '<div class="detail-grid">';
+        html += '<div class="detail-cell"><div class="detail-label">Loại chiến dịch</div><div class="detail-value">' + escHtml(kind.label) + '</div></div>';
+        html += '<div class="detail-cell"><div class="detail-label">Số tài khoản</div><div class="detail-value">' + list.length + ' tài khoản</div></div>';
+        html += '</div>';
+        html += '<div style="font-weight:700;margin:4px 0 8px;">Từng tài khoản trong chiến dịch</div>';
+        html += '<div class="schedmon-campaign-modal-list">';
+        list.forEach(function (s) {
+            var recips = (s.recipients || []).length;
+            var res = s.results || [];
+            var ok = res.filter(function (r) { return r.status === 'success'; }).length;
+            var fail = res.filter(function (r) { return r.status === 'failed'; }).length;
+            var pend = Math.max(recips - ok - fail, 0);
+            var st = s.status || 'pending';
+            html += '<div class="schedmon-campaign-modal-item">' +
+                '<div class="scmi-main"><strong>' + escHtml(accountName(s)) + '</strong><small>' + escHtml(formatDateTime(s.runAt)) + '</small></div>' +
+                '<span class="schedule-status-badge ' + badgeClass(st) + '">' + escHtml(statusLabel(st)) + '</span>' +
+                '<div class="scmi-result"><strong>' + ok + '/' + recips + '</strong><small>' + pend + ' chờ · ' + fail + ' lỗi</small></div>' +
+                '<button class="btn btn-ghost btn-sm" onclick="SchedMon.showDetail(\'' + s.scheduleId + '\')">Chi tiết</button>' +
+                '</div>';
+        });
+        html += '</div>';
+        setModal('Chi tiết chiến dịch · ' + title, html);
     }
 
     async function campaignRunAgain(cid) {

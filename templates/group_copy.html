@@ -11,7 +11,7 @@
 </head>
 <body>
 {% include '_nav.html' %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-campaign-v1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-campaign-v2">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <div class="page group-copy-page">
@@ -94,6 +94,18 @@
             </button>
         </div>
         <div class="gc-create-body">
+            <div class="gc-notice gc-notice-info" role="note">
+                <span class="gc-notice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                </span>
+                <div class="gc-notice-copy">
+                    <strong>Nhóm nguồn ĐÓNG hay MỞ link tham gia?</strong>
+                    <span>
+                        • Nhóm <b>ĐÓNG</b> link tham gia → chỉ tài khoản <b>đã ở trong nhóm</b> mới thực hiện được tác vụ.<br>
+                        • Nhóm <b>MỞ</b> cho tham gia bằng link → có thể chọn <b>nhiều tài khoản chạy song song</b> (các tài khoản phụ tự vào nhóm nguồn bằng link để lấy danh sách hợp lệ). Vì vậy hãy nhập nhóm nguồn bằng <b>LINK</b>, không nên nhập bằng Group ID khi chạy nhiều tài khoản.
+                    </span>
+                </div>
+            </div>
             <div class="gc-config-grid">
                 <div class="gc-field gc-col-3">
                     <label>Tài khoản chủ <span style="font-weight:400;color:var(--text-muted)">(sở hữu nhóm đích)</span></label>
@@ -303,8 +315,26 @@
     </div>
 </div>
 
+<!-- Popup chi tiết chiến dịch nhiều tài khoản (thay cho bung inline) -->
+<div id="groupCopyCampaignOverlay" class="overlay-backdrop gc-campaign-overlay">
+    <div class="overlay-card gc-campaign-overlay-card">
+        <div class="gc-create-head">
+            <div>
+                <strong id="groupCopyCampaignTitle">Chi tiết chiến dịch</strong>
+                <small id="groupCopyCampaignSub">Các tài khoản trong chiến dịch</small>
+            </div>
+            <button id="groupCopyCampaignClose" type="button" class="overlay-close" title="Đóng" aria-label="Đóng">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div id="groupCopyCampaignBody" class="gc-campaign-overlay-body"></div>
+    </div>
+</div>
+
 <div class="member-toast-stack" id="groupCopyToastStack" aria-live="polite" aria-atomic="true"></div>
 
-<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-campaign-v1"></script>
+<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-campaign-v2"></script>
 </body>
 </html>

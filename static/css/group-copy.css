@@ -1189,3 +1189,51 @@ html[data-theme="light"] .gc-job-route-copy strong { color: #182b3f; }
 .gc-campaign-members .gc-job-card { background: var(--gc-surface-alt, #f8fafc); }
 .gc-btn-sm.is-danger { background: #fee2e2; color: #dc2626; }
 .gc-btn-sm.is-danger:hover { filter: brightness(.97); }
+
+/* ─── Banner cảnh báo nhóm đóng/mở link (form tạo tác vụ) ─────────────────── */
+.gc-notice {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 13px 16px;
+    margin-bottom: 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(88, 166, 255, .07);
+}
+.gc-notice-info { border-color: rgba(88, 166, 255, .35); }
+.gc-notice-icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    color: var(--accent, #2f7fd1);
+    background: rgba(88, 166, 255, .14);
+}
+.gc-notice-icon svg { width: 17px; height: 17px; }
+.gc-notice-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.gc-notice-copy strong { font-size: 13px; color: var(--text); }
+.gc-notice-copy span { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.gc-notice-copy b { color: var(--text); font-weight: 600; }
+
+/* ─── Popup chi tiết chiến dịch nhiều tài khoản (thay bung inline) ────────── */
+.gc-campaign-overlay .overlay-card.gc-campaign-overlay-card {
+    max-width: 1120px;
+    width: 94%;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+.gc-campaign-overlay-body {
+    padding: 18px 22px 22px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+/* Thẻ job bên trong popup: giữ nguyên style thẻ, chỉ nới cho vừa modal. */
+.gc-campaign-overlay-body .gc-job-card { margin: 0; }
