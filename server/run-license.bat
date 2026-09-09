@@ -8,7 +8,7 @@ REM  Sua NGROK_DOMAIN ben duoi thanh domain tinh ban da dat trong
 REM  ngrok Dashboard (vd: nexus-abcd.ngrok-free.app).
 REM ==============================================================
 
-set "NGROK_DOMAIN=YOUR-DOMAIN.ngrok-free.app"
+set "NGROK_DOMAIN=thrasonically-wheaten-maya.ngrok-free.dev"
 
 cd /d "%~dp0"
 
