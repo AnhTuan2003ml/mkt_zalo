@@ -3196,6 +3196,8 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         target_mode = "existing"
 
     jobs_created = []
+    # Cùng một chiến dịch (nhiều tài khoản) chung 1 campaignId để giao diện gom nhóm.
+    campaign_id = "camp_" + uuid.uuid4().hex[:12]
     for idx, aid in enumerate(account_ids):
         block = blocks[idx]
         if not block:
@@ -3207,6 +3209,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         sub = dict(payload)
         sub["accountId"] = aid
         sub.pop("accountIds", None)
+        sub["campaignId"] = campaign_id
         # Tài khoản CHÍNH (đầu danh sách) sở hữu nhóm đích: đọc/mời nhóm đích luôn
         # dùng tài khoản này, kể cả khi job đang chạy bằng tài khoản phụ.
         sub["targetOwnerAccountId"] = account_ids[0]

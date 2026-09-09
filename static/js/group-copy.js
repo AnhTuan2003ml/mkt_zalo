@@ -998,15 +998,121 @@
         return card;
     }
 
+    // ─── Gom job cùng 1 chiến dịch (nhiều tài khoản) thành 1 nhóm ───────────────
+    function buildJobGroups(jobs) {
+        var groups = [], byId = {};
+        (jobs || []).forEach(function (job) {
+            var cid = String((job && job.campaignId) || '').trim();
+            if (!cid) { groups.push({ campaignId: '', jobs: [job] }); return; }
+            if (byId[cid]) byId[cid].jobs.push(job);
+            else { var g = { campaignId: cid, jobs: [job] }; byId[cid] = g; groups.push(g); }
+        });
+        return groups;
+    }
+
+    function campaignTitleOf(job) {
+        var t = String((job && job.title) || '');
+        // Bỏ hậu tố "(TK 1/5 - Tên)" để lấy tên chiến dịch chung.
+        return t.replace(/\s*\(TK\s*\d+\s*\/\s*\d+[^)]*\)\s*$/, '').trim() ||
+            ('Sao chép vào ' + String((job && job.targetGroupName) || 'nhóm đích'));
+    }
+
+    function campaignStatus(jobs) {
+        var s = jobs.map(function (j) { return String((j && j.status) || 'pending'); });
+        if (s.indexOf('running') >= 0) return 'running';
+        if (s.some(function (x) { return x === 'pending' || x === 'monitoring'; })) return 'pending';
+        if (s.some(function (x) { return x === 'failed'; })) return 'failed';
+        if (s.length && s.every(function (x) { return x === 'done'; })) return 'done';
+        return s[0] || 'pending';
+    }
+
+    // Thẻ TỔNG cho chiến dịch nhiều tài khoản: xem chi tiết mới bung từng thành viên.
+    function buildCampaignCard(jobs) {
+        var first = jobs[0] || {};
+        var source = first.sourceGroup || {};
+        var sourceName = source.name || first.sourceInput || '-';
+        var targetName = first.targetGroupName || (first.targetMode === 'new' ? first.newGroupName : '') || 'Chưa xác định';
+        var title = campaignTitleOf(first);
+        var status = campaignStatus(jobs);
+        var sum = function (key, alt) {
+            return jobs.reduce(function (a, j) { return a + Number((j && (j[key] || (alt ? j[alt] : 0))) || 0); }, 0);
+        };
+        var total = sum('totalMembers');
+        var joined = sum('joinedCount', 'successCount');
+        var directAdded = sum('preExistingCount');
+        var invited = sum('invitedCount');
+        var pending = sum('pendingCount', 'remainingCount');
+        var failed = sum('failedCount');
+        var percent = total ? Math.max(0, Math.min(100, Math.round(joined * 100 / total))) : 0;
+        var ids = jobs.map(function (j) { return String(j.jobId || ''); }).filter(Boolean).join(',');
+
+        var canPause = jobs.some(function (j) { return j.status === 'pending' || j.status === 'monitoring'; });
+        var canResume = jobs.some(function (j) { return (j.status === 'failed' || j.status === 'cancelled') && Number(j.pendingCount || 0) > 0; });
+        var canDelete = jobs.every(function (j) { return j.status !== 'running'; });
+
+        var actions = '<button type="button" class="gc-btn-sm is-primary" data-campaign-toggle="1">' + ICON_DETAIL + ' Xem chi tiết (' + jobs.length + ' tài khoản)</button>';
+        if (canPause) actions += '<button type="button" class="gc-btn-sm is-warning" data-campaign-cancel="' + esc(ids) + '">' + ICON_PAUSE + ' Tạm dừng cả chiến dịch</button>';
+        if (canResume) actions += '<button type="button" class="gc-btn-sm is-success" data-campaign-resume="' + esc(ids) + '">' + ICON_RESUME + ' Tiếp tục cả chiến dịch</button>';
+        if (canDelete) actions += '<button type="button" class="gc-btn-sm is-danger" data-campaign-delete="' + esc(ids) + '">Xóa cả chiến dịch</button>';
+
+        var card = document.createElement('div');
+        card.className = 'gc-job-card gc-campaign-card';
+        card.setAttribute('data-campaign-card', first.campaignId || '');
+        card.innerHTML =
+            '<div class="gc-job-head">' +
+                '<div class="gc-job-heading">' +
+                    '<div class="gc-job-title-row"><span class="gc-job-title-icon">' + miniAvatarHtml(targetName, first.targetGroupAvatar) + '</span><div><strong class="gc-job-title" title="' + esc(title) + '">' + esc(title) + '</strong><small>Chiến dịch • ' + jobs.length + ' tài khoản</small></div></div>' +
+                    '<div class="gc-job-route">' +
+                        '<span class="gc-job-route-node">' + miniAvatarHtml(sourceName, source.avt || source.avatar) +
+                            '<span class="gc-job-route-copy"><small>Nhóm nguồn</small><strong title="' + esc(sourceName) + '">' + esc(sourceName) + '</strong></span></span>' +
+                        '<span class="gc-job-route-arrow">→</span>' +
+                        '<span class="gc-job-route-node">' + miniAvatarHtml(targetName, first.targetGroupAvatar) +
+                            '<span class="gc-job-route-copy"><small>Nhóm đích</small><strong title="' + esc(targetName) + '">' + esc(targetName) + '</strong></span></span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="gc-job-owner"><span>Tài khoản tham gia</span><strong>' + jobs.length + ' tài khoản</strong></div>' +
+                '<div class="gc-job-head-meta">' +
+                    '<span class="group-copy-job-badge ' + esc(status) + '">' + esc(statusLabel(status)) + '</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="gc-job-progress-row"><div class="group-copy-progress"><span style="width:' + percent + '%"></span></div><span class="gc-job-progress-pct">' + percent + '%</span></div>' +
+            '<div class="gc-job-stats">' +
+                '<div class="gc-job-stat"><span>Tổng nguồn</span><strong>' + total + '</strong></div>' +
+                '<div class="gc-job-stat is-success"><span>Thêm trực tiếp</span><strong>' + directAdded + '</strong></div>' +
+                '<div class="gc-job-stat"><span>Đã mời kết bạn</span><strong>' + invited + '</strong></div>' +
+                '<div class="gc-job-stat is-success"><span>Đã vào nhóm</span><strong>' + joined + '</strong></div>' +
+                '<div class="gc-job-stat"><span>Đang chờ</span><strong>' + pending + '</strong></div>' +
+                '<div class="gc-job-stat' + (failed ? ' is-danger' : '') + '"><span>Lỗi</span><strong>' + failed + '</strong></div>' +
+            '</div>' +
+            '<div class="gc-job-foot">' +
+                '<div class="gc-job-timing"><span>Gộp tiến độ của ' + jobs.length + ' tài khoản</span></div>' +
+                '<div class="gc-job-actions">' + actions + '</div>' +
+            '</div>' +
+            '<div class="gc-campaign-members" hidden></div>';
+
+        var membersWrap = card.querySelector('.gc-campaign-members');
+        jobs.forEach(function (j) { membersWrap.appendChild(buildJobCard(j)); });
+        return card;
+    }
+
+    async function campaignAction(idsCsv, action) {
+        var ids = String(idsCsv || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        for (var i = 0; i < ids.length; i++) {
+            try { await jobAction(ids[i], action); } catch (e) { /* tiếp tục các job còn lại */ }
+        }
+    }
+
     function renderJobs(jobs) {
         var container = $('groupCopyJobs');
         state.jobs = Array.isArray(jobs) ? jobs : [];
         renderSummary(state.jobs);
 
         var filtered = state.jobs.filter(jobMatchesFilter);
+        var nGroupsFiltered = buildJobGroups(filtered).length;
+        var nGroupsTotal = buildJobGroups(state.jobs).length;
         $('groupCopyJobsCount').textContent = (state.jobFilter !== 'all' || state.jobSearch)
-            ? filtered.length + '/' + state.jobs.length + ' tác vụ'
-            : state.jobs.length + ' tác vụ';
+            ? nGroupsFiltered + '/' + nGroupsTotal + ' tác vụ'
+            : nGroupsTotal + ' tác vụ';
 
         if (!state.jobs.length) {
             state.selectedJobId = '';
@@ -1019,7 +1125,10 @@
             container.innerHTML = '<div class="group-copy-empty">Không có tác vụ phù hợp với bộ lọc hoặc từ khóa tìm kiếm hiện tại.</div>';
         } else {
             container.innerHTML = '';
-            filtered.forEach(function (job) { container.appendChild(buildJobCard(job)); });
+            buildJobGroups(filtered).forEach(function (g) {
+                if (g.jobs.length > 1) container.appendChild(buildCampaignCard(g.jobs));
+                else container.appendChild(buildJobCard(g.jobs[0]));
+            });
         }
 
         if (state.highlightJobId) {
@@ -1439,6 +1548,24 @@
                 if (menu) menu.hidden = isOpen;
                 return;
             }
+            // ─ Thao tác cấp CHIẾN DỊCH (nhiều tài khoản) ─
+            var campToggle = event.target.closest('[data-campaign-toggle]');
+            if (campToggle) {
+                var cardEl = campToggle.closest('.gc-campaign-card');
+                var members = cardEl && cardEl.querySelector('.gc-campaign-members');
+                if (members) {
+                    members.hidden = !members.hidden;
+                    cardEl.classList.toggle('is-expanded', !members.hidden);
+                }
+                return;
+            }
+            var campCancel = event.target.closest('[data-campaign-cancel]');
+            var campResume = event.target.closest('[data-campaign-resume]');
+            var campDelete = event.target.closest('[data-campaign-delete]');
+            if (campCancel) { if (await nexusConfirm('Tạm dừng TẤT CẢ tài khoản trong chiến dịch này?', { title: 'Tạm dừng chiến dịch' })) campaignAction(campCancel.getAttribute('data-campaign-cancel'), 'cancel'); return; }
+            if (campResume) { campaignAction(campResume.getAttribute('data-campaign-resume'), 'resume'); return; }
+            if (campDelete) { if (await nexusConfirm('Xóa CẢ chiến dịch (mọi tài khoản) và toàn bộ lịch sử?', { title: 'Xóa chiến dịch', confirmText: 'Xóa', danger: true })) campaignAction(campDelete.getAttribute('data-campaign-delete'), 'delete'); return; }
+
             var detail = event.target.closest('[data-job-detail]');
             var verify = event.target.closest('[data-job-verify]');
             var cancel = event.target.closest('[data-job-cancel]');

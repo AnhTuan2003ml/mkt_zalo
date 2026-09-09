@@ -344,6 +344,7 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("groupLinkExpirationDate", 0)
     job.setdefault("groupLinkEnabled", 0)
     job.setdefault("groupLinkUpdatedAt", "")
+    job.setdefault("campaignId", "")
     job["removeFriendAfterJoin"] = bool(job.get("removeFriendAfterJoin"))
     job["leaveGroupAfterDone"] = bool(job.get("leaveGroupAfterDone"))
     job.setdefault("sourceLeftAt", "")
@@ -512,6 +513,7 @@ def create_job(
         "jobId": "gcopy_" + uuid.uuid4().hex[:12],
         "title": str(payload.get("title") or "Sao chép thành viên nhóm").strip(),
         "accountId": str(payload.get("accountId") or "").strip(),
+        "campaignId": str(payload.get("campaignId") or "").strip(),
         "accountName": str(account_name or payload.get("accountName") or "").strip(),
         "accountAvatar": str(account_avatar or payload.get("accountAvatar") or "").strip(),
         "sourceInput": str(payload.get("sourceInput") or "").strip(),

@@ -1181,3 +1181,11 @@ html[data-theme="light"] .gc-job-route-copy strong { color: #182b3f; }
 .group-copy-member-status.waiting_friend { background: rgba(107,114,128,.16); color: #6b7280 !important; }
 .group-copy-member-status.failed { background: rgba(220,38,38,.14); color: #dc2626 !important; }
 .group-copy-member-status.skipped { background: rgba(107,114,128,.12); color: #9ca3af !important; }
+
+/* ─── Thẻ tổng chiến dịch (gom nhiều tài khoản) ─── */
+.gc-campaign-card.is-expanded { box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+.gc-campaign-members { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--gc-line, #e2e8f0); display: flex; flex-direction: column; gap: 12px; }
+.gc-campaign-members[hidden] { display: none; }
+.gc-campaign-members .gc-job-card { background: var(--gc-surface-alt, #f8fafc); }
+.gc-btn-sm.is-danger { background: #fee2e2; color: #dc2626; }
+.gc-btn-sm.is-danger:hover { filter: brightness(.97); }
