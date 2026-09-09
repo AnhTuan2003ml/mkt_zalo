@@ -401,6 +401,69 @@
     }
 
 
+    // ─── Gom lịch cùng 1 chiến dịch (nhiều tài khoản) ───────────────────────
+    function scheduleCampaignId(item) {
+        return (item && item._itemType === 'schedule') ? String(item.campaignId || '').trim() : '';
+    }
+
+    function buildScheduleGroups(items) {
+        var groups = [], byId = {};
+        (items || []).forEach(function (it) {
+            var cid = scheduleCampaignId(it);
+            if (!cid) { groups.push({ cid: '', items: [it] }); return; }
+            if (byId[cid]) byId[cid].items.push(it);
+            else { var g = { cid: cid, items: [it] }; byId[cid] = g; groups.push(g); }
+        });
+        return groups;
+    }
+
+    function _campaignSchedules(cid) {
+        return state.all.filter(function (x) { return x._itemType === 'schedule' && String(x.campaignId || '') === String(cid); });
+    }
+
+    function buildScheduleCampaignRow(schedules) {
+        var first = schedules[0] || {};
+        var cid = String(first.campaignId || '');
+        var kind = kindInfo(first);
+        var title = String(first.title || '').replace(/\s*\(TK\s*\d+\s*\/\s*\d+[^)]*\)\s*$/, '').trim() || 'Chiến dịch';
+        var total = 0, ok = 0, fail = 0, earliest = 0;
+        schedules.forEach(function (s) {
+            total += (s.recipients || []).length;
+            ok += (s.results || []).filter(function (r) { return r.status === 'success'; }).length;
+            fail += (s.results || []).filter(function (r) { return r.status === 'failed'; }).length;
+            var t = Date.parse(s.runAt || '') || 0;
+            if (t && (!earliest || t < earliest)) earliest = t;
+        });
+        var pend = Math.max(total - ok - fail, 0);
+        var percent = total ? Math.round(((ok + fail) / total) * 100) : 0;
+        var sts = schedules.map(function (s) { return s.status || 'pending'; });
+        var st = sts.indexOf('running') >= 0 ? 'running'
+            : (sts.some(function (x) { return x === 'pending'; }) ? 'pending'
+                : (sts.every(function (x) { return x === 'done' || x === 'completed'; }) ? 'done'
+                    : (sts.indexOf('failed') >= 0 ? 'failed' : sts[0] || 'pending')));
+        var hasActive = sts.some(function (x) { return x === 'running' || x === 'pending'; });
+
+        var actions =
+            '<button class="schedule-icon-btn" title="Xem chi tiết từng tài khoản" onclick="SchedMon.toggleCampaign(\'' + cid + '\',this)">' + iconSvg('eye') + '</button>' +
+            (st !== 'running' ? '<button class="schedule-icon-btn" title="Chạy lại cả chiến dịch" onclick="SchedMon.campaignRunAgain(\'' + cid + '\')">' + iconSvg('refresh') + '</button>' : '') +
+            (hasActive ? '<button class="schedule-icon-btn is-danger" title="Hủy cả chiến dịch" onclick="SchedMon.campaignCancel(\'' + cid + '\')">' + iconSvg('stop') + '</button>' : '') +
+            '<button class="schedule-icon-btn is-danger" title="Xóa cả chiến dịch" onclick="SchedMon.campaignDelete(\'' + cid + '\')">' + iconSvg('trash') + '</button>';
+
+        var row = document.createElement('div');
+        row.className = 'schedule-table-row schedmon-campaign-row';
+        row.innerHTML =
+            '<div class="schedule-table-cell">' +
+                '<div class="schedule-table-title" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
+                '<div class="schedule-table-sub">Chiến dịch • ' + schedules.length + ' tài khoản</div>' +
+            '</div>' +
+            '<div class="schedule-table-cell schedule-table-source"><span class="schedule-table-source-icon">∑</span><div><div class="schedule-table-value">' + escHtml(kind.label) + '</div><div class="schedule-table-sub">' + schedules.length + ' tài khoản</div></div></div>' +
+            '<div class="schedule-table-cell"><div class="schedule-table-value">' + escHtml(earliest ? formatDateTime(earliest) : '-') + '</div></div>' +
+            '<div class="schedule-table-cell"><span class="schedule-status-badge ' + badgeClass(st) + '">' + escHtml(statusLabel(st)) + '</span></div>' +
+            '<div class="schedule-table-cell schedule-table-result"><strong>' + ok + '/' + total + ' (' + percent + '%)</strong><span>' + pend + ' chờ · ' + fail + ' lỗi</span></div>' +
+            '<div class="schedule-table-cell schedule-table-actions">' + actions + '</div>';
+        return row;
+    }
+
     function buildActionPlanCard(plan) {
         var st = actionPlanStatus(plan);
         var pg = plan.progress || {};
@@ -624,10 +687,24 @@
             return;
         }
         root.innerHTML = '';
-        items.forEach(function (item) {
-            root.appendChild(item._itemType === 'action_plan' ? buildActionPlanCard(item) : buildScheduleCard(item));
+        var topCount = 0;
+        buildScheduleGroups(items).forEach(function (g) {
+            if (g.cid && g.items.length > 1) {
+                // 1 dòng tổng cho chiến dịch; các thành viên ẩn cho tới khi bấm "Xem chi tiết".
+                root.appendChild(buildScheduleCampaignRow(g.items));
+                g.items.forEach(function (sch) {
+                    var r = buildScheduleCard(sch);
+                    r.classList.add('schedmon-campaign-member');
+                    r.setAttribute('data-campaign-member', g.cid);
+                    r.hidden = true;
+                    root.appendChild(r);
+                });
+            } else {
+                root.appendChild(g.items[0]._itemType === 'action_plan' ? buildActionPlanCard(g.items[0]) : buildScheduleCard(g.items[0]));
+            }
+            topCount += 1;
         });
-        setText('schedListCount', items.length + ' lịch');
+        setText('schedListCount', topCount + ' lịch');
     }
 
     function filterAll() {
@@ -899,6 +976,50 @@
         });
     }
 
+    // ─── Thao tác cấp CHIẾN DỊCH (nhiều tài khoản) ─────────────────────────
+    function toggleCampaign(cid, btn) {
+        var rows = document.querySelectorAll('[data-campaign-member="' + cid + '"]');
+        if (!rows.length) return;
+        var show = rows[0].hidden; // đang ẩn -> hiện
+        rows.forEach(function (r) { r.hidden = !show; });
+        var rowEl = btn && btn.closest ? btn.closest('.schedmon-campaign-row') : null;
+        if (rowEl) rowEl.classList.toggle('is-expanded', show);
+    }
+
+    async function campaignRunAgain(cid) {
+        var mode = await chooseRerunMode();
+        if (!mode) return;
+        var list = _campaignSchedules(cid);
+        for (var i = 0; i < list.length; i++) {
+            try {
+                await fetch('/api/schedules/' + encodeURIComponent(list[i].scheduleId) + '/rerun',
+                    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode }) });
+            } catch (e) { /* tiếp tục các tài khoản còn lại */ }
+        }
+        showNotif('OK', 'Đã chạy lại cả chiến dịch (' + list.length + ' tài khoản).', 'success');
+        reload();
+    }
+
+    async function campaignCancel(cid) {
+        if (!(await nexusConfirm('Hủy TẤT CẢ lịch trong chiến dịch này?', { title: 'Hủy chiến dịch' }))) return;
+        var list = _campaignSchedules(cid);
+        for (var i = 0; i < list.length; i++) {
+            try { await fetch('/api/schedules/' + encodeURIComponent(list[i].scheduleId) + '/cancel', { method: 'POST' }); } catch (e) {}
+        }
+        showNotif('OK', 'Đã hủy cả chiến dịch.', 'success');
+        reload();
+    }
+
+    async function campaignDelete(cid) {
+        if (!(await nexusConfirm('Xóa TẤT CẢ lịch trong chiến dịch này (mọi tài khoản)?', { title: 'Xóa chiến dịch', confirmText: 'Xóa', danger: true }))) return;
+        var list = _campaignSchedules(cid);
+        for (var i = 0; i < list.length; i++) {
+            try { await fetch('/api/schedules/' + encodeURIComponent(list[i].scheduleId), { method: 'DELETE' }); } catch (e) {}
+        }
+        showNotif('OK', 'Đã xóa cả chiến dịch.', 'success');
+        reload();
+    }
+
     // ─── Overlay dữ liệu phụ ─────────────────────────────────────────────
     function getDataOverlay(name) {
         if (!name) return null;
@@ -1062,6 +1183,10 @@
         runAgain: runAgain,
         cancelSchedule: cancelSchedule,
         deleteSchedule: deleteSchedule,
+        toggleCampaign: toggleCampaign,
+        campaignRunAgain: campaignRunAgain,
+        campaignCancel: campaignCancel,
+        campaignDelete: campaignDelete,
         closeDetailModal: closeDetailModal,
         hideNotif: hideNotif,
         openOverlay: openDataOverlay,

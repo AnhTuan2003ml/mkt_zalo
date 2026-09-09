@@ -1526,3 +1526,9 @@ html[data-theme="light"] .schedmon-overlay-head h2 {
 .schedmon-recip-badge.is-success { background: rgba(22,163,74,.16); color: #16a34a; }
 .schedmon-recip-badge.is-pending { background: rgba(107,114,128,.16); color: #6b7280; }
 .schedmon-recip-badge.is-failed { background: rgba(220,38,38,.14); color: #dc2626; }
+
+/* ─── Chiến dịch nhiều tài khoản: dòng tổng + thành viên thụt vào ─── */
+.schedmon-campaign-row.is-expanded { background: rgba(37,99,235,.05); }
+.schedule-table-row.schedmon-campaign-member { background: #f8fafc; }
+.schedule-table-row.schedmon-campaign-member .schedule-table-title { padding-left: 14px; border-left: 2px solid #bfdbfe; }
+.schedule-table-row.schedmon-campaign-member[hidden] { display: none !important; }

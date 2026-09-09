@@ -3595,6 +3595,7 @@ def api_create_schedule_api():
         k, m = divmod(len(recipients), n)
         blocks = [recipients[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
         base_title = str(data.get("title") or "Chiến dịch").strip()
+        campaign_id = "sched_camp_" + uuid.uuid4().hex[:12]  # gom nhóm nhiều tài khoản
         created = []
         for idx, aid in enumerate(account_ids):
             block = blocks[idx]
@@ -3603,6 +3604,7 @@ def api_create_schedule_api():
             sub = dict(data)
             sub.pop("accountIds", None)
             sub["accountId"] = aid
+            sub["campaignId"] = campaign_id
             nm = name_by_id.get(aid, aid[:8])
             sub["accountName"] = nm
             sub["senderName"] = nm
