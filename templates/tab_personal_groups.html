@@ -86,8 +86,12 @@
             </div>
 
             <div class="form-group">
-                <label>Nội dung *</label>
-                <textarea id="schedPersonalGroupMessage" placeholder="Nhập nội dung..."></textarea>
+                <label>Nội dung * <span style="font-weight:400;color:var(--text-muted);font-size:11px">(mỗi dòng = 1 mẫu tin, gửi ngẫu nhiên — không lặp liên tiếp)</span></label>
+                <textarea id="schedPersonalGroupMessage" placeholder="Mỗi DÒNG là 1 mẫu tin nhắn. Hệ thống chọn ngẫu nhiên mỗi nhóm một mẫu để tránh trùng."></textarea>
+                <div style="margin-top:6px">
+                    <input type="file" id="schedPersonalGroupMsgFile" accept=".txt" style="display:none" onchange="schedLoadMsgFile(this,'schedPersonalGroupMessage')">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('schedPersonalGroupMsgFile').click()">📎 Tải file .txt (mỗi dòng 1 tin)</button>
+                </div>
             </div>
 
             <div class="form-group">

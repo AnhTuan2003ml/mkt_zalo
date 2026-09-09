@@ -1510,6 +1510,27 @@ function schedShowPersonalGroupDetail(groupId) {
 }
 
 // ─── NOTIFICATION ──────────────────────────────────────────────────────
+// Nạp file .txt nội dung (mỗi dòng 1 mẫu tin) vào ô nội dung tương ứng.
+function schedLoadMsgFile(input, textareaId) {
+    var f = input && input.files && input.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        var text = String((e.target && e.target.result) || '').replace(/\r\n/g, '\n').trim();
+        var ta = document.getElementById(textareaId);
+        if (ta) {
+            var cur = (ta.value || '').trim();
+            ta.value = (cur ? cur + '\n' : '') + text;
+        }
+        input.value = '';  // cho phép chọn lại cùng 1 file
+        var n = text.split('\n').filter(function (x) { return x.trim(); }).length;
+        if (typeof schedShowNotif === 'function') {
+            schedShowNotif('Đã nạp file', 'Đã thêm ' + n + ' mẫu tin vào ô nội dung.', 'success');
+        }
+    };
+    reader.readAsText(f, 'utf-8');
+}
+
 function schedShowNotif(title, message, type) {
     type = type || 'info';
     var card = document.getElementById('notificationOverlay');

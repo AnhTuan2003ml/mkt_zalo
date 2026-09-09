@@ -25,6 +25,39 @@ _MAX_MSG_DELAY_SEC = 18      # trần mặc định (random min..max mỗi tin)
 _MIN_BATCH_DELAY_SEC = 60    # tối thiểu giây nghỉ giữa các batch
 
 
+def _build_message_pool(message: str) -> list:
+    """Tách nội dung thành POOL: mỗi DÒNG không rỗng = 1 mẫu tin nhắn.
+
+    Cho phép truyền nhiều mẫu (từ ô dán hoặc file .txt, mỗi dòng 1 tin) để gửi
+    ngẫu nhiên, tránh mọi người nhận cùng một nội dung (giảm nguy cơ bị chặn).
+    """
+    lines = [ln.strip() for ln in str(message or "").replace("\r\n", "\n").split("\n")]
+    return [ln for ln in lines if ln]
+
+
+class _MessageSpinner:
+    """Chọn ngẫu nhiên 1 mẫu tin, TRÁNH lặp lại các mẫu vừa gửi gần nhất."""
+
+    def __init__(self, pool: list):
+        self.pool = list(pool or [])
+        self.recent: list = []
+
+    def next(self) -> str:
+        if not self.pool:
+            return ""
+        if len(self.pool) == 1:
+            return self.pool[0]
+        # Tránh tối đa (n-1) mẫu gần nhất để tin liền nhau không trùng.
+        avoid_n = min(len(self.recent), len(self.pool) - 1)
+        avoid = set(self.recent[-avoid_n:]) if avoid_n else set()
+        choices = [m for m in self.pool if m not in avoid] or self.pool
+        pick = random.choice(choices)
+        self.recent.append(pick)
+        if len(self.recent) > len(self.pool):
+            self.recent = self.recent[-len(self.pool):]
+        return pick
+
+
 def _license_active() -> bool:
     """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
     try:
@@ -263,6 +296,11 @@ class ScheduleWorker:
             filtered_recipients, previous_results, "userId"
         )
 
+        # Nội dung random: mỗi dòng = 1 mẫu tin, chọn ngẫu nhiên không lặp gần nhất.
+        msg_pool = _build_message_pool(message)
+        spinner = _MessageSpinner(msg_pool)
+        single_msg = len(msg_pool) <= 1  # >1 mẫu -> không dùng link_info dựng sẵn
+
         # Xử lý theo batch
         for batch_start in range(0, len(filtered_recipients), batch_size):
             batch = filtered_recipients[batch_start:batch_start + batch_size]
@@ -279,6 +317,8 @@ class ScheduleWorker:
                 uid = recipient.get("userId")
                 zalo_name = recipient.get("zaloName", "")
                 avatar = recipient.get("avatar", "")
+                msg = spinner.next()                    # mẫu tin random cho người này
+                li = link_info if single_msg else None   # nhiều mẫu -> để hàm tự xử lý link
 
                 try:
                     if photo_bytes is not None:
@@ -291,10 +331,10 @@ class ScheduleWorker:
                         )
                         sent_ok = bool(photo_result.get("ok"))
                         send_error = photo_result.get("message", "Gửi ảnh thất bại")
-                        if sent_ok and message:
+                        if sent_ok and msg:
                             text_result = send_message_smart(
-                                uid, message, zpw_enk, cookies, imei,
-                                is_group=False, zpw_ver=zpw_ver, link_info=link_info,
+                                uid, msg, zpw_enk, cookies, imei,
+                                is_group=False, zpw_ver=zpw_ver, link_info=li,
                             )
                             if not text_result.get("ok"):
                                 sent_ok = False
@@ -302,8 +342,8 @@ class ScheduleWorker:
                     else:
                         print(f"[schedule_worker] Sending to {uid} ({zalo_name})...")
                         text_result = send_message_smart(
-                            uid, message, zpw_enk, cookies, imei,
-                            is_group=False, zpw_ver=zpw_ver, link_info=link_info,
+                            uid, msg, zpw_enk, cookies, imei,
+                            is_group=False, zpw_ver=zpw_ver, link_info=li,
                         )
                         sent_ok = bool(text_result.get("ok"))
                         send_error = text_result.get("error", "")
@@ -398,6 +438,11 @@ class ScheduleWorker:
             recipients, previous_results or [], "groupId"
         )
 
+        # Nội dung random: mỗi dòng = 1 mẫu tin, chọn ngẫu nhiên không lặp gần nhất.
+        msg_pool = _build_message_pool(message)
+        spinner = _MessageSpinner(msg_pool)
+        single_msg = len(msg_pool) <= 1
+
         # Xử lý theo batch
         for batch_start in range(0, len(recipients), batch_size):
             batch = recipients[batch_start:batch_start + batch_size]
@@ -415,6 +460,8 @@ class ScheduleWorker:
                 if not group_id:
                     print(f"[schedule_worker] Schedule {sch_id}: Missing groupId in recipient")
                     continue
+                msg = spinner.next()                    # mẫu tin random cho nhóm này
+                li = link_info if single_msg else None
 
                 try:
                     if photo_bytes is not None:
@@ -428,10 +475,10 @@ class ScheduleWorker:
                         error_code = 0 if photo_result.get("ok") else -1
                         if error_code != 0:
                             print(f"[schedule_worker] Photo to group {group_id} failed: {photo_result.get('message')}")
-                        elif message:
+                        elif msg:
                             text_result = send_message_smart(
-                                group_id, message, zpw_enk, cookies, imei,
-                                is_group=True, zpw_ver=zpw_ver, link_info=link_info,
+                                group_id, msg, zpw_enk, cookies, imei,
+                                is_group=True, zpw_ver=zpw_ver, link_info=li,
                             )
                             error_code = 0 if text_result.get("ok") else -1
                             if error_code != 0:
@@ -439,8 +486,8 @@ class ScheduleWorker:
                     else:
                         print(f"[schedule_worker] Sending to group {group_id}...")
                         text_result = send_message_smart(
-                            group_id, message, zpw_enk, cookies, imei,
-                            is_group=True, zpw_ver=zpw_ver, link_info=link_info,
+                            group_id, msg, zpw_enk, cookies, imei,
+                            is_group=True, zpw_ver=zpw_ver, link_info=li,
                         )
                         error_code = 0 if text_result.get("ok") else -1
 
