@@ -719,8 +719,11 @@ def redistribute_campaign_members(failed_job_id: str, reason: str = "") -> dict:
             _write_jobs_unlocked(jobs)
             return {"redistributed": 0, "recipients": 0, "reason": "no_campaign"}
 
-        # Nick nhận: cùng chiến dịch, khác job lỗi, chưa kết thúc, và ĐANG hoạt động
-        # (đã vào được nhóm nguồn, hoặc là nick chủ luôn đọc được nhóm nguồn).
+        # Nick nhận: CHỈ những tài khoản ĐÃ CHỨNG MINH đọc được thành viên — tức là
+        # nick CHỦ (luôn đọc được nhóm), hoặc nick phụ đã phân giải nguồn thành công
+        # (sourceUidsResolved=True) và không đang lỗi đọc. TUYỆT ĐỐI không chia cho các
+        # nick phụ chỉ mới "join" nhưng không đọc được (tránh chia lan truyền qua lại
+        # giữa các nick lỗi). Nhờ vậy việc sẽ GỘP VỀ tài khoản chính chạy được.
         recipient_indices = []
         for index, item in enumerate(jobs):
             if index == failed_idx:
@@ -732,7 +735,11 @@ def redistribute_campaign_members(failed_job_id: str, reason: str = "") -> dict:
             owner_id = str(item.get("targetOwnerAccountId") or "").strip()
             acc_id = str(item.get("accountId") or "").strip()
             is_owner = not owner_id or owner_id == acc_id
-            if is_owner or item.get("accountJoinedSource") is True:
+            proven_reader = is_owner or (
+                item.get("sourceUidsResolved") is True
+                and int(item.get("memberReadErrors") or 0) == 0
+            )
+            if proven_reader:
                 recipient_indices.append(index)
 
         if not movable or not recipient_indices:
