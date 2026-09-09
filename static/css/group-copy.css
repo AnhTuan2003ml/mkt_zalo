@@ -1287,3 +1287,50 @@ html[data-theme="light"] .gc-job-route-copy strong { color: #182b3f; }
     border-color: var(--accent, #2f7fd1);
     box-shadow: 0 0 0 2px rgba(88, 166, 255, .25);
 }
+
+/* ─── Form "Thêm tác vụ" bố cục theo BƯỚC + footer cố định ─────────────────── */
+.gc-create-body { display: flex; flex-direction: column; gap: 16px; }
+.gc-sec { border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px 16px; background: rgba(255,255,255,.015); }
+.gc-sec-head { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; }
+.gc-sec-no {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #fff;
+    background: var(--accent, #2f7fd1);
+}
+.gc-sec-copy strong { display: block; font-size: 14px; color: var(--text); }
+.gc-sec-copy small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--text-muted); }
+.gc-sec-grid { display: grid; gap: 14px; }
+.gc-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gc-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.gc-lb-note { font-weight: 400; color: var(--text-muted); font-size: 11px; }
+.gc-target-slot { margin-top: 10px; }
+.gc-target-slot .gc-target-field { display: flex; flex-direction: column; gap: 6px; }
+
+/* Nút chọn tài khoản thực hiện: chiếm hết chiều ngang cho cân đối */
+#groupCopyExecTrigger { width: 100%; min-width: 0; }
+
+/* Hàng checkbox "Bỏ qua trưởng/phó" — gọn, không còn label rỗng phía trên */
+.gc-check-row {
+    display: inline-flex; align-items: center; gap: 9px; margin-top: 13px;
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255,255,255,.02); cursor: pointer; font-size: 13px; color: var(--text);
+}
+.gc-check-row:hover { border-color: rgba(72,184,255,.4); }
+.gc-check-row input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #2f7fd1); }
+
+/* Footer cố định dưới cùng: xác nhận + nút chạy */
+.gc-create-foot {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 22px; border-top: 1px solid var(--border);
+    background: rgba(127, 127, 127, .05);
+}
+.gc-create-foot .gc-consent-check { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.gc-create-foot .gc-run-btn { flex: 0 0 auto; width: auto; white-space: nowrap; padding: 11px 22px; font-size: 14px; }
+
+@media (max-width: 760px) {
+    .gc-grid-2, .gc-grid-3 { grid-template-columns: 1fr; }
+    .gc-create-foot { flex-direction: column; align-items: stretch; gap: 10px; }
+    .gc-create-foot .gc-run-btn { width: 100%; justify-content: center; }
+}

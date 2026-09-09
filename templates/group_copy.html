@@ -11,7 +11,7 @@
 </head>
 <body>
 {% include '_nav.html' %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-campaign-v5">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-campaign-v7">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <div class="page group-copy-page">
@@ -112,140 +112,148 @@
                     <strong>Nhóm nguồn ĐÓNG hay MỞ link tham gia?</strong>
                     <span>
                         • Nhóm <b>ĐÓNG</b> link tham gia → chỉ tài khoản <b>đã ở trong nhóm</b> mới thực hiện được tác vụ.<br>
-                        • Nhóm <b>MỞ</b> cho tham gia bằng link → có thể chọn <b>nhiều tài khoản chạy song song</b> (các tài khoản phụ tự vào nhóm nguồn bằng link để lấy danh sách hợp lệ). Vì vậy hãy nhập nhóm nguồn bằng <b>LINK</b>, không nên nhập bằng Group ID khi chạy nhiều tài khoản.
+                        • Nhóm <b>MỞ</b> cho tham gia bằng link → có thể chọn <b>nhiều tài khoản chạy song song</b>. Vì vậy hãy nhập nhóm nguồn bằng <b>LINK</b>, không nên nhập bằng Group ID khi chạy nhiều tài khoản.
                     </span>
                 </div>
             </div>
-            <div class="gc-config-grid">
-                <div class="gc-field gc-col-3">
-                    <label>Tài khoản chủ <span style="font-weight:400;color:var(--text-muted)">(sở hữu nhóm đích)</span></label>
-                    <div id="groupCopyAccountPicker" class="group-copy-account-picker">
-                        <input id="groupCopyAccount" type="hidden" value="">
-                        <button id="groupCopyAccountTrigger" class="group-copy-account-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-                            <span id="groupCopyAccountAvatar" class="group-copy-account-avatar">?</span>
-                            <span class="group-copy-account-selected">
-                                <strong id="groupCopyAccountName">Đang tải...</strong>
-                                <small id="groupCopyAccountState">Vui lòng chờ</small>
-                            </span>
-                            <span class="group-copy-account-chevron nexus-lucide nexus-lucide-chevron" aria-hidden="true"></span>
-                        </button>
-                        <div id="groupCopyAccountMenu" class="group-copy-account-menu" role="listbox" hidden></div>
-                    </div>
-                </div>
 
-                <div class="gc-field gc-col-3">
-                    <label>Tài khoản thực hiện <span style="font-weight:400;color:var(--text-muted)">(chọn nhiều, chia việc không trùng)</span></label>
-                    <button type="button" id="groupCopyExecTrigger" class="sched-exec-pick-btn" style="width:100%;min-width:0" onclick="groupCopyOpenExecPicker()">
-                        <span id="groupCopyExecLabel">Chọn tài khoản thực hiện</span>
-                        <span class="sched-exec-pick-add">＋ Thêm</span>
-                    </button>
-                    <small class="gc-hint">💡 Muốn nhiều tài khoản dùng CHUNG một nhóm? Chọn tất cả tài khoản tại đây trong <b>một</b> tác vụ — tài khoản chính tạo 1 nhóm rồi các tài khoản khác mời vào nhóm đó. Đừng tạo nhiều tác vụ riêng lẻ (sẽ ra nhiều nhóm).</small>
-                </div>
-
-                <div class="gc-field gc-col-4">
-                    <label for="groupCopySource">Nhóm nguồn (link hoặc Group ID)</label>
-                    <input id="groupCopySource" type="text" placeholder="Dán link Zalo hoặc Group ID" autocomplete="off">
-                    <div id="groupCopySourcePreview" class="gc-group-preview" hidden></div>
-                </div>
-
-                <div class="gc-field gc-col-2">
-                    <label>Nhóm đích</label>
-                    <div class="gc-segmented" role="group" aria-label="Chọn cách thiết lập nhóm đích">
-                        <button type="button" class="active" data-target-mode="new">Tạo mới</button>
-                        <button type="button" data-target-mode="existing">Hiện có</button>
-                    </div>
-                </div>
-
-                <div class="gc-field gc-col-3 gc-target-field" id="groupCopyNewTargetWrap">
-                    <label for="groupCopyNewGroupName">Tên nhóm mới</label>
-                    <input id="groupCopyNewGroupName" type="text" maxlength="120" placeholder="VD: Cộng đồng khách hàng 2026" autocomplete="off">
-                    <small class="gc-hint">Nhóm sẽ được tạo khi tác vụ bắt đầu.</small>
-                </div>
-
-                <div class="gc-field gc-col-3 gc-target-field" id="groupCopyExistingTargetWrap" hidden>
-                    <label>Nhóm hiện tại</label>
-                    <button type="button" id="groupCopyPickGroupBtn" class="gc-group-picker-trigger">
-                        <span id="groupCopyTargetPreview" class="gc-target-preview-empty">+ Chọn nhóm hiện tại</span>
-                    </button>
-                    <input id="groupCopyExistingGroup" type="hidden" value="">
-                </div>
-
-                <div class="gc-field gc-col-3">
-                    <label for="groupCopyStartAt">Thời gian bắt đầu</label>
-                    <input id="groupCopyStartAt" type="datetime-local">
-                </div>
-
-                <div class="gc-field gc-col-3">
-                    <label for="groupCopyDailyLimit">Số lời mời kết bạn tối đa/ngày (tối đa 30)</label>
-                    <input id="groupCopyDailyLimit" type="number" min="1" max="30" value="20">
-                </div>
-
-                <div class="gc-field gc-col-3">
-                    <label for="groupCopyVerifyMinutes">Chu kỳ kiểm tra tiến độ</label>
-                    <div class="group-copy-input-suffix">
-                        <input id="groupCopyVerifyMinutes" type="number" min="1" max="1440" step="1" value="30">
-                        <span>phút</span>
-                    </div>
-                </div>
-
-                <div class="gc-field gc-col-3">
-                    <label aria-hidden="true">&nbsp;</label>
-                    <label class="gc-skip-leaders" for="groupCopySkipLeaders" title="Trưởng nhóm và phó nhóm của nhóm nguồn sẽ không được thêm hay gửi lời mời">
-                        <input id="groupCopySkipLeaders" type="checkbox">
-                        <span>Bỏ qua trưởng / phó nhóm nguồn</span>
-                    </label>
-                </div>
-
-                <div class="gc-field gc-col-3 gc-run-cell">
-                    <label class="gc-consent-check" for="groupCopyConsent">
-                        <input id="groupCopyConsent" type="checkbox">
-                        <span>Tôi xác nhận có quyền quản lý nhóm nguồn, nhóm đích và được phép gửi lời mời đến các thành viên này.</span>
-                    </label>
-                    <button id="groupCopyStartBtn" class="btn btn-primary gc-run-btn" type="button" disabled>
-                        <span>▶</span> Tạo nhóm và bắt đầu sao chép
-                    </button>
-                </div>
-            </div>
-
-            <details class="gc-advanced">
-                <summary>Thiết lập nâng cao</summary>
-                <div class="gc-advanced-grid">
+            <!-- Bước 1: Tài khoản -->
+            <section class="gc-sec">
+                <div class="gc-sec-head"><span class="gc-sec-no">1</span><div class="gc-sec-copy"><strong>Tài khoản</strong><small>Chọn tài khoản chủ (sở hữu nhóm đích) và các tài khoản cùng thực hiện</small></div></div>
+                <div class="gc-sec-grid gc-grid-2">
                     <div class="gc-field">
-                        <label for="groupCopyCampaignDays">Thời gian chạy chiến dịch</label>
-                        <div class="group-copy-input-suffix">
-                            <input id="groupCopyCampaignDays" type="number" min="1" max="365" value="30">
-                            <span>ngày</span>
+                        <label>Tài khoản chủ <span class="gc-lb-note">(sở hữu nhóm đích)</span></label>
+                        <div id="groupCopyAccountPicker" class="group-copy-account-picker">
+                            <input id="groupCopyAccount" type="hidden" value="">
+                            <button id="groupCopyAccountTrigger" class="group-copy-account-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                                <span id="groupCopyAccountAvatar" class="group-copy-account-avatar">?</span>
+                                <span class="group-copy-account-selected">
+                                    <strong id="groupCopyAccountName">Đang tải...</strong>
+                                    <small id="groupCopyAccountState">Vui lòng chờ</small>
+                                </span>
+                                <span class="group-copy-account-chevron nexus-lucide nexus-lucide-chevron" aria-hidden="true"></span>
+                            </button>
+                            <div id="groupCopyAccountMenu" class="group-copy-account-menu" role="listbox" hidden></div>
                         </div>
                     </div>
-                    <label class="group-copy-toggle-card" for="groupCopyRemoveFriend">
-                        <span class="group-copy-toggle-copy">
-                            <strong>Xóa kết bạn sau khi vào nhóm</strong>
-                            <small>Chỉ xóa người được chính chiến dịch này gửi kết bạn</small>
-                        </span>
-                        <span class="group-copy-switch">
-                            <input id="groupCopyRemoveFriend" type="checkbox">
-                            <span></span>
-                        </span>
-                    </label>
-                    <label class="group-copy-toggle-card" for="groupCopyLeaveAfterDone">
-                        <span class="group-copy-toggle-copy">
-                            <strong>Rời nhóm nguồn sau khi hoàn thành chiến dịch</strong>
-                            <small>Tài khoản chủ rời nhóm cần sao chép khi chiến dịch kết thúc (đủ thành viên hoặc hết hạn). Tắt = ở lại nhóm.</small>
-                        </span>
-                        <span class="group-copy-switch">
-                            <input id="groupCopyLeaveAfterDone" type="checkbox">
-                            <span></span>
-                        </span>
-                    </label>
+                    <div class="gc-field">
+                        <label>Tài khoản thực hiện <span class="gc-lb-note">(có thể chọn nhiều)</span></label>
+                        <button type="button" id="groupCopyExecTrigger" class="sched-exec-pick-btn" onclick="groupCopyOpenExecPicker()">
+                            <span id="groupCopyExecLabel">Chọn tài khoản thực hiện</span>
+                            <span class="sched-exec-pick-add">＋ Thêm</span>
+                        </button>
+                        <small class="gc-hint">💡 Chọn nhiều tài khoản trong <b>cùng một</b> tác vụ để dùng chung 1 nhóm đích. Đừng tạo nhiều tác vụ riêng lẻ.</small>
+                    </div>
                 </div>
-            </details>
+            </section>
 
-            <p class="gc-limit-explain">
-                <b>Thành viên đã là bạn bè</b> được thêm trực tiếp vào nhóm — <b>không tính vào hạn mức</b>.
-                Thành viên <b>chưa là bạn bè</b> hoặc thêm trực tiếp thất bại sẽ được <b>gửi lời mời kết bạn kèm link nhóm</b> — chỉ nhóm này mới tính vào hạn mức "Số lời mời kết bạn tối đa/ngày".
-            </p>
+            <!-- Bước 2: Nhóm nguồn & nhóm đích -->
+            <section class="gc-sec">
+                <div class="gc-sec-head"><span class="gc-sec-no">2</span><div class="gc-sec-copy"><strong>Nhóm nguồn & nhóm đích</strong><small>Nguồn để lấy thành viên, và nhóm sẽ mời họ vào</small></div></div>
+                <div class="gc-sec-grid gc-grid-2">
+                    <div class="gc-field">
+                        <label for="groupCopySource">Nhóm nguồn <span class="gc-lb-note">(nên dán LINK)</span></label>
+                        <input id="groupCopySource" type="text" placeholder="Dán link Zalo hoặc Group ID" autocomplete="off">
+                        <div id="groupCopySourcePreview" class="gc-group-preview" hidden></div>
+                    </div>
+                    <div class="gc-field">
+                        <label>Nhóm đích</label>
+                        <div class="gc-segmented" role="group" aria-label="Chọn cách thiết lập nhóm đích">
+                            <button type="button" class="active" data-target-mode="new">Tạo mới</button>
+                            <button type="button" data-target-mode="existing">Hiện có</button>
+                        </div>
+                        <div class="gc-target-slot">
+                            <div class="gc-target-field" id="groupCopyNewTargetWrap">
+                                <input id="groupCopyNewGroupName" type="text" maxlength="120" placeholder="Tên nhóm mới, VD: Cộng đồng khách hàng 2026" autocomplete="off">
+                                <small class="gc-hint">Nhóm sẽ được tạo khi tác vụ bắt đầu.</small>
+                            </div>
+                            <div class="gc-target-field" id="groupCopyExistingTargetWrap" hidden>
+                                <button type="button" id="groupCopyPickGroupBtn" class="gc-group-picker-trigger">
+                                    <span id="groupCopyTargetPreview" class="gc-target-preview-empty">+ Chọn nhóm hiện tại</span>
+                                </button>
+                                <input id="groupCopyExistingGroup" type="hidden" value="">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Bước 3: Cấu hình gửi -->
+            <section class="gc-sec">
+                <div class="gc-sec-head"><span class="gc-sec-no">3</span><div class="gc-sec-copy"><strong>Cấu hình gửi</strong><small>Thời gian, hạn mức và tùy chọn</small></div></div>
+                <div class="gc-sec-grid gc-grid-3">
+                    <div class="gc-field">
+                        <label for="groupCopyStartAt">Thời gian bắt đầu</label>
+                        <input id="groupCopyStartAt" type="datetime-local">
+                    </div>
+                    <div class="gc-field">
+                        <label for="groupCopyDailyLimit">Lời mời kết bạn tối đa/ngày</label>
+                        <input id="groupCopyDailyLimit" type="number" min="1" max="30" value="20">
+                    </div>
+                    <div class="gc-field">
+                        <label for="groupCopyVerifyMinutes">Chu kỳ kiểm tra tiến độ</label>
+                        <div class="group-copy-input-suffix">
+                            <input id="groupCopyVerifyMinutes" type="number" min="1" max="1440" step="1" value="30">
+                            <span>phút</span>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="gc-check-row" for="groupCopySkipLeaders" title="Trưởng nhóm và phó nhóm của nhóm nguồn sẽ không được thêm hay gửi lời mời">
+                    <input id="groupCopySkipLeaders" type="checkbox">
+                    <span>Bỏ qua trưởng / phó nhóm nguồn</span>
+                </label>
+
+                <details class="gc-advanced">
+                    <summary>Thiết lập nâng cao</summary>
+                    <div class="gc-advanced-grid">
+                        <div class="gc-field">
+                            <label for="groupCopyCampaignDays">Thời gian chạy chiến dịch</label>
+                            <div class="group-copy-input-suffix">
+                                <input id="groupCopyCampaignDays" type="number" min="1" max="365" value="30">
+                                <span>ngày</span>
+                            </div>
+                        </div>
+                        <label class="group-copy-toggle-card" for="groupCopyRemoveFriend">
+                            <span class="group-copy-toggle-copy">
+                                <strong>Xóa kết bạn sau khi vào nhóm</strong>
+                                <small>Chỉ xóa người được chính chiến dịch này gửi kết bạn</small>
+                            </span>
+                            <span class="group-copy-switch">
+                                <input id="groupCopyRemoveFriend" type="checkbox">
+                                <span></span>
+                            </span>
+                        </label>
+                        <label class="group-copy-toggle-card" for="groupCopyLeaveAfterDone">
+                            <span class="group-copy-toggle-copy">
+                                <strong>Rời nhóm nguồn sau khi hoàn thành</strong>
+                                <small>Tài khoản chủ rời nhóm nguồn khi chiến dịch kết thúc. Tắt = ở lại nhóm.</small>
+                            </span>
+                            <span class="group-copy-switch">
+                                <input id="groupCopyLeaveAfterDone" type="checkbox">
+                                <span></span>
+                            </span>
+                        </label>
+                    </div>
+                </details>
+
+                <p class="gc-limit-explain">
+                    <b>Đã là bạn bè</b> → thêm trực tiếp, <b>không tính hạn mức</b>. <b>Chưa là bạn bè</b> → gửi lời mời kết bạn kèm link nhóm (tính vào hạn mức mỗi ngày).
+                </p>
+            </section>
 
             <div id="groupCopyStatus" class="group-copy-status" hidden></div>
+        </div>
+
+        <!-- Footer cố định: xác nhận + nút chạy -->
+        <div class="gc-create-foot">
+            <label class="gc-consent-check" for="groupCopyConsent">
+                <input id="groupCopyConsent" type="checkbox">
+                <span>Tôi xác nhận có quyền quản lý nhóm nguồn, nhóm đích và được phép gửi lời mời đến các thành viên này.</span>
+            </label>
+            <button id="groupCopyStartBtn" class="btn btn-primary gc-run-btn" type="button" disabled>
+                <span>▶</span> Tạo nhóm và bắt đầu sao chép
+            </button>
         </div>
     </div>
 </div>
@@ -345,6 +353,6 @@
 
 <div class="member-toast-stack" id="groupCopyToastStack" aria-live="polite" aria-atomic="true"></div>
 
-<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-campaign-v5"></script>
+<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-campaign-v7"></script>
 </body>
 </html>
