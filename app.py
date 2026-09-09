@@ -274,7 +274,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -3038,9 +3038,19 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str, auto_jo
 
 def _prepare_group_copy_job_worker(task, payload: dict):
     """Lấy thành viên nhóm nguồn và lưu tác vụ sao chép theo hạn mức mỗi ngày."""
+    from features.groups.group_copy_worker import _avatar_hash as _extract_avatar_hash
+
     account_id = str(payload.get("accountId") or "").strip()
     source_input = str(payload.get("sourceInput") or "").strip()
     source_input_type, normalized_source_input = normalize_group_input(source_input)
+    # Link mời nhóm NGUỒN (nếu người dùng nhập bằng link) — cần để tài khoản phụ tự
+    # vào nhóm nguồn và đọc lại thành viên nhằm lấy uid hợp lệ cho phiên của nó.
+    source_group_link = ""
+    for _cand in (payload.get("sourceGroupLink"), payload.get("sourceLink"), source_input):
+        _c = str(_cand or "").strip()
+        if _c.startswith("http") or "zalo.me" in _c:
+            source_group_link = ("https:" + _c) if _c.startswith("//") else _c
+            break
     source_group_id_hint = str(payload.get("sourceGroupId") or "").strip()
     if source_input_type == "group_id" and normalized_source_input:
         # Luôn truyền Group ID sạch vào getmg; không để nhãn ``ID:``, tiền tố g
@@ -3122,10 +3132,14 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         is_friend = True if raw_friend is True or friend_text in {"1", "true", "yes"} else (
             False if raw_friend is False or friend_text in {"0", "false", "no"} else None
         )
+        _avatar_url = member.get("avatar") or ""
         clean_members.append({
             "userId": uid,
             "zaloName": member.get("zaloName") or member.get("displayName") or uid,
-            "avatar": member.get("avatar") or "",
+            "avatar": _avatar_url,
+            # Định danh gốc ổn định (hash ảnh) — GIỐNG nhau giữa mọi tài khoản. Dùng để
+            # tài khoản phụ tự phân giải uid RIÊNG của nó khi đọc lại nhóm nguồn.
+            "avatarHash": _extract_avatar_hash(_avatar_url),
             # Quan hệ được dùng để ưu tiên thêm toàn bộ bạn bè trước.
             "isFriend": is_friend,
             "isFr": 1 if is_friend is True else (0 if is_friend is False else None),
@@ -3153,6 +3167,13 @@ def _prepare_group_copy_job_worker(task, payload: dict):
     ]
 
     is_multi = n > 1
+    if is_multi and not source_group_link:
+        task.log(
+            "⚠️ Nhóm nguồn đang nhập bằng ID nên các tài khoản phụ không thể tự đọc lại "
+            "để lấy UID hợp lệ (UID Zalo mã hóa riêng từng tài khoản). Hãy nhập nhóm nguồn "
+            "bằng LINK mời để chạy nhiều tài khoản chính xác.",
+            "warn",
+        )
     target_mode = str(payload.get("targetMode") or "existing").strip()
 
     # Nhiều tài khoản + tạo nhóm mới: TÀI KHOẢN CHÍNH tạo nhóm NGAY tại đây rồi
@@ -3211,6 +3232,9 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         sub["accountId"] = aid
         sub.pop("accountIds", None)
         sub["campaignId"] = campaign_id
+        # Link nhóm nguồn để tài khoản phụ tự đọc lại (lấy uid riêng hợp lệ).
+        if source_group_link:
+            sub["sourceGroupLink"] = source_group_link
         # Tài khoản CHÍNH (đầu danh sách) sở hữu nhóm đích: đọc/mời nhóm đích luôn
         # dùng tài khoản này, kể cả khi job đang chạy bằng tài khoản phụ.
         sub["targetOwnerAccountId"] = account_ids[0]

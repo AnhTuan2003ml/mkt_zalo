@@ -161,6 +161,12 @@ def _normalize_member(item) -> Optional[dict]:
         "userId": uid,
         "zaloName": str(item.get("zaloName") or item.get("displayName") or item.get("name") or uid).strip(),
         "avatar": str(item.get("avatar") or item.get("avatarUrl") or "").strip(),
+        # Định danh gốc ổn định của người dùng (từ URL avatar) — GIỐNG nhau giữa mọi
+        # tài khoản. Dùng để mỗi tài khoản phụ tự phân giải uid RIÊNG của nó khi đọc
+        # lại nhóm nguồn (userId Zalo mã hóa riêng từng tài khoản).
+        "avatarHash": str(item.get("avatarHash") or "").strip().lower(),
+        # Tài khoản phụ đã phân giải được uid riêng cho người này chưa.
+        "sourceUidResolved": bool(item.get("sourceUidResolved")),
         "isFriend": friend_state,
         "status": status,
         "error": str(item.get("error") or "").strip(),
@@ -347,6 +353,10 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("campaignId", "")
     job.setdefault("resolvedTargetGroupId", "")   # groupId nhóm đích RIÊNG của tài khoản này
     job.setdefault("accountJoinedTarget", False)
+    job.setdefault("sourceGroupLink", "")          # link nhóm nguồn để tài khoản phụ tự đọc
+    job.setdefault("accountJoinedSource", False)   # tài khoản phụ đã vào nhóm nguồn chưa
+    job.setdefault("sourceUidsResolved", False)    # đã phân giải uid nhóm nguồn cho tài khoản này chưa
+    job.setdefault("sourceJoinAttempts", 0)        # số lần đã thử vào/đọc nhóm nguồn
     job["removeFriendAfterJoin"] = bool(job.get("removeFriendAfterJoin"))
     job["leaveGroupAfterDone"] = bool(job.get("leaveGroupAfterDone"))
     job.setdefault("sourceLeftAt", "")
@@ -520,6 +530,11 @@ def create_job(
         "accountAvatar": str(account_avatar or payload.get("accountAvatar") or "").strip(),
         "sourceInput": str(payload.get("sourceInput") or "").strip(),
         "sourceGroupId": str(payload.get("sourceGroupId") or (source_group or {}).get("groupId") or (source_group or {}).get("id") or "").strip(),
+        # Link mời nhóm NGUỒN — để tài khoản phụ tự phân giải groupId riêng + tự
+        # tham gia + đọc lại thành viên nhằm lấy uid hợp lệ cho phiên của chính nó.
+        "sourceGroupLink": str(payload.get("sourceGroupLink") or (source_group or {}).get("link") or "").strip(),
+        "accountJoinedSource": False,
+        "sourceUidsResolved": False,
         "sourceGroup": source_group or {},
         "targetMode": target_mode,
         "targetGroupId": target_group_id,
@@ -626,6 +641,170 @@ def mutate_job(job_id: str, mutator: Callable[[dict], None]) -> dict:
             _write_jobs_unlocked(jobs)
             return job
     raise ValueError("Không tìm thấy tác vụ sao chép nhóm.")
+
+
+def _fresh_pending_member(src: dict) -> dict:
+    """Tạo bản ghi thành viên MỚI ở trạng thái pending để chuyển sang nick khác.
+
+    Chỉ giữ định danh cần thiết (userId tạm, avatarHash, tên, ảnh, quan hệ). Cờ
+    sourceUidResolved=False để nick nhận TỰ phân giải uid RIÊNG của nó theo avatarHash.
+    """
+    member = _normalize_member(src) or {}
+    member["status"] = "pending"
+    member["error"] = ""
+    member["sourceUidResolved"] = False
+    for key in (
+        "attemptedAt", "invitedAt", "joinedAt", "lastVerifiedAt", "leftDetectedAt",
+        "inviteAttempts", "friendRequestAttempts", "friendRequestAt",
+        "friendRequestCreatedByCampaign", "campaignAddRetryAttempts", "campaignAddRetryAt",
+        "joinedAfterCampaignAddRetry", "friendRemoveAttempts",
+    ):
+        if key in member:
+            member[key] = 0 if isinstance(member.get(key), int) else (False if isinstance(member.get(key), bool) else member[key])
+    member["inviteResultCode"] = -1
+    member["inviteResultMessage"] = ""
+    member["inviteDelivery"] = ""
+    member["friendRequestCode"] = -1
+    member["friendRequestMessage"] = ""
+    member["friendRequestDelivery"] = ""
+    return member
+
+
+def redistribute_campaign_members(failed_job_id: str, reason: str = "") -> dict:
+    """Chia lại phần việc của một nick KHÔNG vào được nhóm nguồn cho các nick đang hoạt động.
+
+    Khi một tài khoản (thường là phụ) không tự tham gia/đọc được nhóm nguồn để lấy uid
+    hợp lệ, các thành viên chưa xử lý của nó được PHÂN BỔ LẠI (round-robin) cho những
+    nick cùng chiến dịch đang hoạt động (đã vào được nhóm nguồn hoặc là nick chủ). Nick
+    nhận sẽ tự phân giải uid RIÊNG theo avatarHash ở lần chạy kế tiếp. Job lỗi bị đánh
+    dấu failed. Trả về số người đã chia lại và số nick nhận.
+    """
+    with _LOCK:
+        jobs = _read_jobs_unlocked()
+        failed_idx = None
+        for index, item in enumerate(jobs):
+            if str(item.get("jobId") or "") == str(failed_job_id):
+                failed_idx = index
+                break
+        if failed_idx is None:
+            return {"redistributed": 0, "recipients": 0, "reason": "not_found"}
+
+        failed_job = _normalize_job(jobs[failed_idx])
+        campaign_id = str(failed_job.get("campaignId") or "").strip()
+
+        # Thành viên có thể chuyển: chưa xử lý xong (pending/skipped).
+        movable = [
+            m for m in (failed_job.get("members") or [])
+            if str(m.get("status") or "") in ("pending", "skipped")
+        ]
+
+        def _finalize_failed(note: str) -> None:
+            for m in failed_job.get("members") or []:
+                if str(m.get("status") or "") in ("pending", "skipped"):
+                    m["status"] = "skipped"
+                    m["error"] = note
+            failed_job["status"] = "failed"
+            failed_job["nextRunAt"] = ""
+            failed_job["nextInviteAt"] = ""
+            failed_job["nextVerifyAt"] = ""
+            failed_job["lastError"] = reason or note
+            failed_job["lastNotice"] = note
+            _refresh_progress(failed_job)
+            failed_job["updatedAt"] = _now_ms()
+            jobs[failed_idx] = failed_job
+
+        if not campaign_id:
+            _finalize_failed("Không vào được nhóm nguồn; tác vụ dừng (không có chiến dịch để chia lại).")
+            _write_jobs_unlocked(jobs)
+            return {"redistributed": 0, "recipients": 0, "reason": "no_campaign"}
+
+        # Nick nhận: cùng chiến dịch, khác job lỗi, chưa kết thúc, và ĐANG hoạt động
+        # (đã vào được nhóm nguồn, hoặc là nick chủ luôn đọc được nhóm nguồn).
+        recipient_indices = []
+        for index, item in enumerate(jobs):
+            if index == failed_idx:
+                continue
+            if str(item.get("campaignId") or "").strip() != campaign_id:
+                continue
+            if str(item.get("status") or "") in ("cancelled", "failed", "expired"):
+                continue
+            owner_id = str(item.get("targetOwnerAccountId") or "").strip()
+            acc_id = str(item.get("accountId") or "").strip()
+            is_owner = not owner_id or owner_id == acc_id
+            if is_owner or item.get("accountJoinedSource") is True:
+                recipient_indices.append(index)
+
+        if not movable or not recipient_indices:
+            _finalize_failed(
+                "Không vào được nhóm nguồn; không có nick đang hoạt động để chia lại phần việc."
+                if not recipient_indices else
+                "Không vào được nhóm nguồn; không còn thành viên chưa xử lý để chia lại."
+            )
+            _write_jobs_unlocked(jobs)
+            return {"redistributed": 0, "recipients": len(recipient_indices), "reason": "nothing_to_do"}
+
+        # Chuẩn hóa danh sách nick nhận + tập avatarHash đã có (tránh trùng người).
+        recipients = [_normalize_job(jobs[i]) for i in recipient_indices]
+        recipient_hashes = []
+        for rj in recipients:
+            hs = set()
+            for m in rj.get("members") or []:
+                h = str(m.get("avatarHash") or "").strip().lower()
+                if h:
+                    hs.add(h)
+            recipient_hashes.append(hs)
+
+        assigned_global = set()   # tránh giao cùng 1 người cho nhiều nick
+        distributed = 0
+        rr = 0
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        for src in movable:
+            h = str(src.get("avatarHash") or "").strip().lower()
+            key = h or str(src.get("userId") or "").strip()
+            if key and key in assigned_global:
+                continue
+            # Tìm nick nhận chưa có người này (round-robin bắt đầu từ rr).
+            placed = False
+            for step in range(len(recipients)):
+                ri = (rr + step) % len(recipients)
+                if h and h in recipient_hashes[ri]:
+                    continue
+                recipients[ri].setdefault("members", []).append(_fresh_pending_member(src))
+                if h:
+                    recipient_hashes[ri].add(h)
+                if key:
+                    assigned_global.add(key)
+                rr = ri + 1
+                distributed += 1
+                placed = True
+                break
+            if not placed and recipients:
+                # Mọi nick đều đã có người này -> bỏ qua (đã được xử lý ở nơi khác).
+                if key:
+                    assigned_global.add(key)
+
+        # Ghi lại các nick nhận: buộc phân giải lại uid nguồn + đánh thức chạy sớm.
+        for offset, ri in enumerate(recipient_indices):
+            rj = recipients[offset]
+            rj["sourceUidsResolved"] = False   # có người mới -> đọc lại nhóm nguồn để map uid
+            if str(rj.get("status") or "") in ("done", "monitoring", "partial"):
+                rj["status"] = "pending"
+            rj["nextRunAt"] = now_iso
+            if not str(rj.get("nextInviteAt") or "").strip():
+                rj["nextInviteAt"] = now_iso
+            rj["lastNotice"] = (
+                f"Đã nhận thêm phần việc từ một nick không vào được nhóm nguồn."
+            )
+            _refresh_progress(rj)
+            rj["updatedAt"] = _now_ms()
+            jobs[ri] = rj
+
+        _finalize_failed(
+            f"Không vào được nhóm nguồn sau nhiều lần thử; đã chia lại {distributed} người "
+            f"cho {len(recipient_indices)} nick đang hoạt động."
+        )
+        _write_jobs_unlocked(jobs)
+        return {"redistributed": distributed, "recipients": len(recipient_indices)}
 
 
 def claim_due_job(now_iso: str) -> Optional[dict]:

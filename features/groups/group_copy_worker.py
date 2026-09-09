@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -24,12 +25,13 @@ from typing import Optional
 from core.zalo.zalo_config import get_zpw_ver
 from features.accounts.account_manager import get_account
 from features.groups.add_group import create_group
-from features.groups.group_copy_manager import claim_due_job, save_job, get_job, recover_running_jobs
+from features.groups.group_copy_manager import claim_due_job, save_job, get_job, recover_running_jobs, redistribute_campaign_members
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
 from features.groups.group_join_leave import join_group_by_link, leave_group
 from features.groups.get_group import resolve_group_id_from_url
 from features.members.get_members import get_members_by_group_id
+from features.profiles.profile_service import fetch_profiles_with_single_fallback
 from features.messaging.add_friend import send_friend_request
 from features.messaging.remove_friend import remove_friend
 
@@ -484,34 +486,238 @@ def _effective_target_group_id(job: dict, zpw_enk: str, cookies: str, imei: str)
     return base
 
 
-def _maybe_leave_source_group(job: dict) -> None:
+_AVATAR_HASH_RE = re.compile(r"/([0-9a-fA-F]{16,})\.(?:jpg|jpeg|png|webp)", re.IGNORECASE)
+
+
+def _avatar_hash(url: str) -> str:
+    """Trích 'định danh gốc' ổn định của người dùng từ URL avatar Zalo.
+
+    URL avatar của CÙNG một người GIỐNG hệt nhau giữa mọi tài khoản (cùng hash
+    ảnh), trong khi userId lại bị Zalo mã hóa riêng từng tài khoản. Vì vậy hash
+    ảnh là khóa để ghép người khi mỗi tài khoản tự đọc lại nhóm nguồn.
+    """
+    s = str(url or "").strip()
+    if not s:
+        return ""
+    s = s.split("?", 1)[0]
+    match = _AVATAR_HASH_RE.search(s)
+    return match.group(1).lower() if match else ""
+
+
+def _source_group_link(job: dict) -> str:
+    link = str(job.get("sourceGroupLink") or "").strip()
+    if not link:
+        cand = str(job.get("sourceInput") or "").strip()
+        if cand.startswith("http") or "zalo.me" in cand:
+            link = cand
+    if link.startswith("//"):
+        link = "https:" + link
+    elif link and not link.lower().startswith(("http://", "https://")) and "zalo.me/g/" in link.lower():
+        link = "https://" + link.lstrip("/")
+    return link
+
+
+def _resolve_own_source_uids(job: dict, zpw_enk: str, cookies: str, imei: str) -> bool:
+    """Mỗi tài khoản tự đọc lại nhóm NGUỒN bằng phiên của chính nó để lấy uid HỢP LỆ.
+
+    Trên Zalo, CÙNG một người nhưng mỗi tài khoản thấy một userId khác nhau (mã hóa
+    riêng từng tài khoản). Tài khoản CHỦ (A) đọc nhóm nguồn ban đầu nên uid trong job
+    đã đúng cho A. Tài khoản PHỤ (B, C) phải: tự tham gia nhóm nguồn (qua link) ->
+    đọc lại thành viên -> ghép theo avatar hash -> ghi đè member['userId'] = uid RIÊNG
+    của nó. Người không ghép được sẽ bị bỏ qua (skipped) để không phí hạn mức.
+    """
+    if job.get("sourceUidsResolved") is True:
+        return True
+    owner_id = str(job.get("targetOwnerAccountId") or "").strip()
+    current = str(job.get("accountId") or "").strip()
+    # Tài khoản chủ đọc nhóm nguồn ban đầu -> uid đã đúng cho chính nó.
+    if not owner_id or owner_id == current:
+        job["sourceUidsResolved"] = True
+        return True
+
+    link = _source_group_link(job)
+    if not link:
+        print(
+            "[group_copy_worker] Thiếu link nhóm nguồn -> tài khoản phụ không thể phân "
+            "giải uid; cần nhập nhóm nguồn bằng LINK để chạy nhiều tài khoản.",
+            flush=True,
+        )
+        return False
+
+    # 1) Tự tham gia nhóm nguồn (đọc thành viên đòi hỏi là thành viên) + lấy groupId RIÊNG.
+    src_gid = ""
+    if job.get("accountJoinedSource") is not True:
+        try:
+            jr = join_group_by_link(link, zpw_enk, cookies, zpw_ver=get_zpw_ver()) or {}
+            src_gid = str(jr.get("groupId") or "").strip()
+            job["accountJoinedSource"] = True
+        except Exception as exc:
+            print(f"[group_copy_worker] Tài khoản phụ vào nhóm nguồn thất bại: {exc}", flush=True)
+    if not src_gid:
+        try:
+            r = resolve_group_id_from_url(link, zpw_enk, cookies, zpw_ver=get_zpw_ver()) or {}
+            src_gid = str(r.get("group_id") or "").strip()
+        except Exception as exc:
+            print(f"[group_copy_worker] Phân giải link nhóm nguồn thất bại: {exc}", flush=True)
+    if not src_gid:
+        return False
+
+    # 2) Đọc thành viên nhóm nguồn bằng phiên riêng -> map avatarHash -> uid RIÊNG.
+    try:
+        result = get_members_by_group_id(
+            group_id=src_gid,
+            cookie_dict=_cookie_dict(cookies),
+            zpw_enk=zpw_enk,
+            imei=imei,
+            zpw_ver=get_zpw_ver(),
+            mcount=500,
+            timeout=30,
+            max_pages=200,
+        ) or {}
+    except Exception as exc:
+        print(f"[group_copy_worker] Tài khoản phụ đọc nhóm nguồn thất bại: {exc}", flush=True)
+        return False
+
+    member_map = result.get("member_map") or {}
+    own_uids = [str(u or "").strip() for u in (result.get("uids") or list(member_map.keys())) if str(u or "").strip()]
+    if not own_uids:
+        return False
+
+    # getmg chỉ trả avatar cho vài người; phải fetch profiles cho TOÀN BỘ uid RIÊNG
+    # của tài khoản phụ để có avatar (=> avatar hash) ghép với danh sách của tài khoản
+    # chủ. Fetch bằng chính uid hợp lệ của phụ nên KHÔNG bị "Tham số không hợp lệ".
+    try:
+        profiles = fetch_profiles_with_single_fallback(
+            own_uids, zpw_enk, cookies, imei=imei, zpw_ver=get_zpw_ver()
+        ) or {}
+    except Exception as exc:
+        print(f"[group_copy_worker] Tài khoản phụ fetch profiles nhóm nguồn lỗi: {exc}", flush=True)
+        profiles = {}
+
+    hash_to_uid: dict[str, str] = {}
+    ambiguous: set[str] = set()
+    name_to_uid: dict[str, str] = {}
+    name_dup: set[str] = set()
+    covered = 0
+    for own in own_uids:
+        prof = profiles.get(own) if isinstance(profiles, dict) else None
+        info = prof if isinstance(prof, dict) else (member_map.get(own) if isinstance(member_map.get(own), dict) else {})
+        avatar = info.get("avatar") or info.get("avatarUrl") or info.get("avatar_25") or ""
+        h = _avatar_hash(avatar)
+        if h:
+            covered += 1
+            if h in hash_to_uid and hash_to_uid[h] != own:
+                ambiguous.add(h)   # nhiều người dùng chung 1 ảnh (avatar mặc định)
+            else:
+                hash_to_uid[h] = own
+        nm = str(info.get("dName") or info.get("zaloName") or info.get("displayName") or "").strip().lower()
+        if nm:
+            if nm in name_to_uid and name_to_uid[nm] != own:
+                name_dup.add(nm)
+            else:
+                name_to_uid[nm] = own
+    for h in ambiguous:
+        hash_to_uid.pop(h, None)
+    for nm in name_dup:
+        name_to_uid.pop(nm, None)
+
+    # Fetch profiles hỏng/rate-limit (avatar phủ quá thấp) -> coi là lỗi tạm thời,
+    # KHÔNG đánh dấu đã phân giải để lần chạy sau thử lại (tránh bỏ qua oan cả loạt).
+    if own_uids and covered < max(1, int(len(own_uids) * 0.5)) and not hash_to_uid:
+        print(
+            f"[group_copy_worker] {job.get('jobId')}: phủ avatar quá thấp "
+            f"({covered}/{len(own_uids)}) -> hoãn phân giải nhóm nguồn, thử lại sau.",
+            flush=True,
+        )
+        return False
+
+    # 3) Ghi đè userId từng member theo avatar hash (fallback tên hiển thị).
+    resolved = 0
+    skipped = 0
+    seen_own: set[str] = set()
+    for member in job.get("members") or []:
+        if member.get("status") in ("joined", "invited"):
+            # Đã xử lý ở phiên trước — giữ nguyên uid đang dùng.
+            if str(member.get("userId") or "").strip():
+                seen_own.add(str(member.get("userId")).strip())
+            continue
+        h = str(member.get("avatarHash") or "").strip().lower() or _avatar_hash(member.get("avatar") or "")
+        own = hash_to_uid.get(h) if h else ""
+        if not own:
+            nm = str(member.get("zaloName") or "").strip().lower()
+            own = name_to_uid.get(nm) if nm else ""
+        if own and own not in seen_own:
+            member["userId"] = own
+            member["sourceUidResolved"] = True
+            seen_own.add(own)
+            resolved += 1
+        else:
+            member["sourceUidResolved"] = False
+            member["status"] = "skipped"
+            member["error"] = "Không ghép được người này trong phiên của tài khoản phụ (bỏ qua)."
+            skipped += 1
+
+    job["sourceUidsResolved"] = True
+    job["sourceUidResolveStats"] = {
+        "resolved": resolved,
+        "skipped": skipped,
+        "at": datetime.now().isoformat(timespec="seconds"),
+    }
+    print(
+        f"[group_copy_worker] {job.get('jobId')}: tài khoản phụ phân giải uid nhóm nguồn "
+        f"-> khớp {resolved}, bỏ qua {skipped}.",
+        flush=True,
+    )
+    return resolved > 0
+
+
+def _maybe_leave_source_group(job: dict, zpw_enk: str = "", cookies: str = "", imei: str = "") -> None:
     """Rời nhóm NGUỒN khi chiến dịch kết thúc — CHỈ khi người dùng bật tùy chọn.
 
-    Mặc định KHÔNG rời (leaveGroupAfterDone=False). Chỉ tài khoản CHỦ (A) rời, làm
-    một lần (đánh dấu sourceLeftAt). Lỗi không ảnh hưởng chiến dịch.
+    Mặc định KHÔNG rời (leaveGroupAfterDone=False). Mỗi tài khoản (chủ lẫn phụ) rời
+    nhóm nguồn CỦA CHÍNH NÓ bằng credentials + groupId riêng: tài khoản phụ nay cũng
+    tự vào nhóm nguồn để lấy uid hợp lệ nên khi bật tùy chọn cũng phải tự rời. Chỉ làm
+    một lần cho mỗi job (đánh dấu sourceLeftAt). Lỗi không ảnh hưởng chiến dịch.
     """
     if not job.get("leaveGroupAfterDone"):
         return
     if str(job.get("sourceLeftAt") or "").strip():
         return
-    owner_id = str(job.get("targetOwnerAccountId") or job.get("accountId") or "").strip()
     current = str(job.get("accountId") or "").strip()
-    if owner_id and current and owner_id != current:
-        return  # chỉ tài khoản chủ (A) rời, tránh các job phụ cùng rời
-    src = job.get("sourceGroup") or {}
-    gid = str(src.get("groupId") or src.get("id") or job.get("sourceGroupId") or "").strip()
-    if not gid:
-        return
-    acc = get_account(owner_id) or {}
-    ck = str(acc.get("cookies") or "").strip()
-    enk = str(acc.get("zpwEnk") or "").strip()
-    im = str(acc.get("imei") or "").strip()
+    owner_id = str(job.get("targetOwnerAccountId") or job.get("accountId") or "").strip()
+    is_owner = not owner_id or owner_id == current
+
+    # Credentials của tài khoản đang chạy (ưu tiên tham số truyền vào).
+    ck, enk, im = str(cookies or "").strip(), str(zpw_enk or "").strip(), str(imei or "").strip()
     if not all([ck, enk, im]):
+        acc = get_account(current) or {}
+        ck = str(acc.get("cookies") or "").strip()
+        enk = str(acc.get("zpwEnk") or "").strip()
+        im = str(acc.get("imei") or "").strip()
+    if not all([ck, enk, im]):
+        return
+
+    # groupId nhóm nguồn RIÊNG của tài khoản đang chạy.
+    if is_owner:
+        src = job.get("sourceGroup") or {}
+        gid = str(src.get("groupId") or src.get("id") or job.get("sourceGroupId") or "").strip()
+    else:
+        # Tài khoản phụ: phân giải link nhóm nguồn -> groupId của chính nó.
+        gid = ""
+        link = _source_group_link(job)
+        if link:
+            try:
+                r = resolve_group_id_from_url(link, enk, ck, zpw_ver=get_zpw_ver()) or {}
+                gid = str(r.get("group_id") or "").strip()
+            except Exception as exc:
+                print(f"[group_copy_worker] Phân giải link nhóm nguồn để rời thất bại: {exc}", flush=True)
+    if not gid:
         return
     try:
         leave_group([gid], im, enk, ck, silent=1, zpw_ver=get_zpw_ver())
         job["sourceLeftAt"] = datetime.now().isoformat(timespec="seconds")
-        print(f"[group_copy_worker] Tài khoản chủ đã rời nhóm nguồn {gid} sau khi hoàn thành.", flush=True)
+        who = "Tài khoản chủ" if is_owner else "Tài khoản phụ"
+        print(f"[group_copy_worker] {who} đã rời nhóm nguồn {gid} sau khi hoàn thành.", flush=True)
     except Exception as exc:
         print(f"[group_copy_worker] Rời nhóm nguồn thất bại: {exc}", flush=True)
 
@@ -724,6 +930,7 @@ def _remove_joined_campaign_friends(
 
 
 MAX_CONCURRENT_COPY_JOBS = 16   # số tài khoản/tác vụ chạy SONG SONG tối đa
+MAX_SOURCE_JOIN_ATTEMPTS = 3    # số lần thử tự vào/đọc nhóm nguồn trước khi chia lại việc
 
 
 class GroupCopyWorker:
@@ -842,7 +1049,7 @@ class GroupCopyWorker:
                 run_record["status"] = "done"
                 job["lastNotice"] = "Chiến dịch đã hết thời gian chạy; hệ thống dừng gửi kết bạn và kiểm tra lại nhóm."
                 _sync_job_schedule(job, started_at)
-                _maybe_leave_source_group(job)  # chỉ rời nếu bật tùy chọn
+                _maybe_leave_source_group(job, zpw_enk, cookies, imei)  # chỉ rời nếu bật tùy chọn
                 run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
                 save_job(job)
                 return
@@ -851,6 +1058,45 @@ class GroupCopyWorker:
             # tự add/đọc/mời bằng chính credentials của nó — logic y hệt tài khoản chính.
             if str(job.get("targetGroupId") or "").strip():
                 _ensure_joined_target_group(job, zpw_enk, cookies, imei)
+
+            # QUAN TRỌNG: userId trên Zalo được mã hóa RIÊNG từng tài khoản. Tài khoản
+            # phụ phải tự đọc lại nhóm nguồn bằng phiên của nó để lấy uid HỢP LỆ (ghép
+            # người theo avatar hash), nếu không mọi thao tác sẽ bị "Tham số không hợp
+            # lệ". Chỉ chạy 1 lần cho mỗi job (cache qua sourceUidsResolved).
+            if job.get("sourceUidsResolved") is not True:
+                if not _resolve_own_source_uids(job, zpw_enk, cookies, imei):
+                    # Chưa phân giải được (chưa vào được nhóm nguồn / đọc lỗi). Thử lại
+                    # vài lần; quá ngưỡng thì CHIA LẠI phần việc cho các nick đang hoạt
+                    # động (không làm mất người trong chiến dịch).
+                    attempts = int(job.get("sourceJoinAttempts") or 0) + 1
+                    job["sourceJoinAttempts"] = attempts
+                    if attempts >= MAX_SOURCE_JOIN_ATTEMPTS:
+                        result = redistribute_campaign_members(
+                            job_id,
+                            reason="Tài khoản không tự vào/đọc được nhóm nguồn để lấy UID hợp lệ.",
+                        )
+                        run_record["action"] = "redistribute_source_join_failed"
+                        run_record["status"] = "failed"
+                        run_record["error"] = (
+                            f"Không vào được nhóm nguồn sau {attempts} lần thử; đã chia lại "
+                            f"{int(result.get('redistributed') or 0)} người cho "
+                            f"{int(result.get('recipients') or 0)} nick đang hoạt động."
+                        )
+                        run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
+                        print(f"[group_copy_worker] {job_id}: {run_record['error']}", flush=True)
+                        return
+                    run_record["action"] = "resolve_source_uids_retry"
+                    run_record["status"] = "partial"
+                    job["status"] = "pending"
+                    job["nextRunAt"] = (started_at + timedelta(minutes=5)).isoformat(timespec="seconds")
+                    job["lastNotice"] = (
+                        f"Tài khoản đang tự vào nhóm nguồn để lấy danh sách hợp lệ "
+                        f"(lần {attempts}/{MAX_SOURCE_JOIN_ATTEMPTS}); sẽ thử lại sau ít phút."
+                    )
+                    run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
+                    save_job(job)
+                    return
+                job["sourceJoinAttempts"] = 0
 
             # Chỉ coi đợt mời là đến hạn dựa trên danh sách pending trước lúc
             # kiểm tra. Nếu lần kiểm tra phát hiện ai vừa rời nhóm, người đó được
@@ -897,7 +1143,7 @@ class GroupCopyWorker:
 
             _sync_job_schedule(job, datetime.now())
             if str(job.get("status") or "") in ("done", "expired"):
-                _maybe_leave_source_group(job)  # chỉ rời nếu bật tùy chọn
+                _maybe_leave_source_group(job, zpw_enk, cookies, imei)  # chỉ rời nếu bật tùy chọn
             run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
             # save_job sẽ tính lại joinedCount/conversionRate từ danh sách thành viên.
             saved = save_job(job)
