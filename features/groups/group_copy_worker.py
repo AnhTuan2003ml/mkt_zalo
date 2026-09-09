@@ -28,6 +28,7 @@ from features.groups.group_copy_manager import claim_due_job, save_job, get_job,
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
 from features.groups.group_join_leave import join_group_by_link, leave_group
+from features.groups.get_group import resolve_group_id_from_url
 from features.members.get_members import get_members_by_group_id
 from features.messaging.add_friend import send_friend_request
 from features.messaging.remove_friend import remove_friend
@@ -257,23 +258,23 @@ def _ensure_group_link(
     if not group_id:
         raise ValueError("Tác vụ chưa có Group ID để lấy link tham gia.")
 
-    # Lấy/tạo link nhóm phải do TÀI KHOẢN CHỦ (A) — người trong nhóm — thực hiện.
-    o_enk, o_ck, o_imei = _target_owner_creds(job, zpw_enk, cookies, imei)
+    # Mỗi tài khoản lấy/tạo link bằng CREDS RIÊNG + groupId RIÊNG của nó.
+    gid = _effective_target_group_id(job, zpw_enk, cookies, imei) or group_id
     if newly_created:
         result = create_group_link(
-            group_id,
-            o_imei,
-            o_enk,
-            o_ck,
+            gid,
+            imei,
+            zpw_enk,
+            cookies,
             zpw_ver=get_zpw_ver(),
         )
         job["groupLinkSource"] = "new"
     else:
         result = get_group_link_detail(
-            group_id,
-            o_imei,
-            o_enk,
-            o_ck,
+            gid,
+            imei,
+            zpw_enk,
+            cookies,
             zpw_ver=get_zpw_ver(),
         )
         job["groupLinkSource"] = "detail"
@@ -417,6 +418,10 @@ def _ensure_joined_target_group(job: dict, zpw_enk: str, cookies: str, imei: str
     try:
         result = join_group_by_link(link, zpw_enk, cookies, zpw_ver=get_zpw_ver()) or {}
         msg = str(result.get("message") or "").lower()
+        # join trả groupId RIÊNG của tài khoản này -> lưu để dùng cho add/verify.
+        jid = str(result.get("groupId") or "").strip()
+        if jid:
+            job["resolvedTargetGroupId"] = jid
         # Coi là thành công nếu ok, hoặc Zalo báo đã là thành viên rồi.
         if result.get("ok") or "đã" in msg or "already" in msg or "member" in msg:
             job["accountJoinedTarget"] = True
@@ -447,6 +452,36 @@ def _target_owner_creds(job: dict, zpw_enk: str, cookies: str, imei: str) -> tup
     if not all([o_cookies, o_enk, o_imei]):
         return fallback
     return (o_enk, o_cookies, o_imei)
+
+
+def _effective_target_group_id(job: dict, zpw_enk: str, cookies: str, imei: str) -> str:
+    """groupId nhóm đích RIÊNG cho tài khoản đang chạy.
+
+    Trên Zalo, CÙNG một nhóm nhưng mỗi tài khoản có groupId khác nhau. Chiến dịch
+    lưu groupId của tài khoản chủ; tài khoản phụ phải tự PHÂN GIẢI link nhóm đích
+    -> groupId của chính nó, nếu không sẽ bị "Tham số không hợp lệ". Kết quả được
+    cache vào job["resolvedTargetGroupId"].
+    """
+    base = str(job.get("targetGroupId") or "").strip()
+    owner_id = str(job.get("targetOwnerAccountId") or "").strip()
+    current = str(job.get("accountId") or "").strip()
+    # Tài khoản chủ (hoặc không có owner): targetGroupId chính là id của nó.
+    if not owner_id or owner_id == current:
+        return base
+    cached = str(job.get("resolvedTargetGroupId") or "").strip()
+    if cached:
+        return cached
+    link = str(job.get("groupLink") or job.get("targetGroupLink") or "").strip()
+    if link:
+        try:
+            r = resolve_group_id_from_url(link, zpw_enk, cookies, zpw_ver=get_zpw_ver()) or {}
+            gid = str(r.get("group_id") or "").strip()
+            if gid:
+                job["resolvedTargetGroupId"] = gid
+                return gid
+        except Exception as exc:
+            print(f"[group_copy_worker] Phân giải link nhóm đích thất bại: {exc}", flush=True)
+    return base
 
 
 def _maybe_leave_source_group(job: dict) -> None:
@@ -498,15 +533,15 @@ def _verify_target_members(
     if not force and not _is_due(str(job.get("nextVerifyAt") or ""), now):
         return {"checked": False, "newlyJoined": 0, "leftCount": 0, "targetCount": int(job.get("targetMemberCount") or 0)}
 
-    # Đọc nhóm đích bằng TÀI KHOẢN CHỦ (A) — người nằm trong nhóm — tránh lỗi
-    # "Tham số không hợp lệ" khi tài khoản phụ chưa/không ở trong nhóm.
-    o_enk, o_ck, o_imei = _target_owner_creds(job, zpw_enk, cookies, imei)
+    # Mỗi tài khoản đọc nhóm đích bằng CREDS RIÊNG + groupId RIÊNG (đã phân giải
+    # từ link nhóm đích cho đúng session của mình) -> hết "Tham số không hợp lệ".
+    group_id = _effective_target_group_id(job, zpw_enk, cookies, imei) or group_id
     try:
         result = get_members_by_group_id(
             group_id=group_id,
-            cookie_dict=_cookie_dict(o_ck),
-            zpw_enk=o_enk,
-            imei=o_imei,
+            cookie_dict=_cookie_dict(cookies),
+            zpw_enk=zpw_enk,
+            imei=imei,
             zpw_ver=get_zpw_ver(),
             mcount=500,
             timeout=30,
@@ -598,9 +633,10 @@ def _retry_awaiting_group_adds(
         return {"attempted": 0}
 
     member_ids = [str(member.get("userId") or "").strip() for member in candidates]
-    # Mỗi tài khoản tự add lại vào nhóm đích bằng credentials của chính nó.
+    # Mỗi tài khoản tự add lại vào nhóm đích bằng creds RIÊNG + groupId RIÊNG.
+    gid = _effective_target_group_id(job, zpw_enk, cookies, imei) or str(job.get("targetGroupId") or "")
     result = invite_members_to_group(
-        str(job.get("targetGroupId") or ""),
+        gid,
         member_ids,
         imei,
         zpw_enk,
@@ -1007,10 +1043,10 @@ class GroupCopyWorker:
             "failedCount": 0,
         }
         if direct_ids:
-            # Mỗi tài khoản tự mời trực tiếp vào nhóm bằng credentials của chính nó
-            # (đã tự vào nhóm đích trước đó).
+            # Mỗi tài khoản tự mời trực tiếp bằng creds RIÊNG + groupId RIÊNG.
+            gid_direct = _effective_target_group_id(job, zpw_enk, cookies, imei) or str(job.get("targetGroupId") or "")
             direct_result = invite_members_to_group(
-                str(job.get("targetGroupId") or ""),
+                gid_direct,
                 direct_ids,
                 imei,
                 zpw_enk,

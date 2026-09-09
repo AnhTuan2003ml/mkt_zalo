@@ -345,6 +345,8 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("groupLinkEnabled", 0)
     job.setdefault("groupLinkUpdatedAt", "")
     job.setdefault("campaignId", "")
+    job.setdefault("resolvedTargetGroupId", "")   # groupId nhóm đích RIÊNG của tài khoản này
+    job.setdefault("accountJoinedTarget", False)
     job["removeFriendAfterJoin"] = bool(job.get("removeFriendAfterJoin"))
     job["leaveGroupAfterDone"] = bool(job.get("leaveGroupAfterDone"))
     job.setdefault("sourceLeftAt", "")
