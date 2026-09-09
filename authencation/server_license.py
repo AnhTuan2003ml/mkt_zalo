@@ -56,7 +56,19 @@ _LOADED_ENV_PATH = _load_client_env()
 # Bỏ qua system proxy (tool bắt gói gây lỗi SSL) — gọi thẳng.
 NO_PROXY = {"http": None, "https": None}
 GRACE_SECONDS = 3 * 24 * 3600     # cho phép dùng cache tối đa 3 ngày khi mất mạng
-REVERIFY_SECONDS = 60             # chỉ verify online lại sau mỗi 60s (tránh spam server)
+
+
+def _reverify_seconds():
+    """Giãn nhịp verify online (giây). Mặc định 1 giờ để không vượt hạn mức của
+    tunnel free (vd ngrok 20k request/tháng). Có thể chỉnh qua LICENSE_REVERIFY_SECONDS."""
+    try:
+        v = int(os.getenv("LICENSE_REVERIFY_SECONDS", "3600") or 3600)
+    except (TypeError, ValueError):
+        v = 3600
+    return max(60, v)
+
+
+REVERIFY_SECONDS = _reverify_seconds()
 
 
 def get_server_url():
