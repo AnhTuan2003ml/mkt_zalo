@@ -21,6 +21,15 @@ from features.messages.message_manager import (
     log_check_attempt,
 )
 
+def _license_active() -> bool:
+    """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
+    try:
+        from authencation.license_gate import is_active
+        return is_active()
+    except Exception:
+        return True
+
+
 _store_lock = threading.RLock()
 
 # Giữ tối đa chừng này khóa đã-đọc để file không phình vô hạn.
@@ -676,6 +685,8 @@ def _worker_loop() -> None:
     while True:
         time.sleep(15)
         try:
+            if not _license_active():
+                continue  # license bị hủy/hết hạn -> tạm dừng quét (khóa cứng)
             settings = get_settings()
             if not settings.get("tracking_enabled"):
                 continue  # chế độ theo dõi đang tắt: ngừng mọi lần quét tự động

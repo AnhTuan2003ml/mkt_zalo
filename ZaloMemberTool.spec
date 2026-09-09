@@ -90,7 +90,7 @@ a = Analysis(
         'features.schedules.schedule_manager',
         'features.schedules.schedule_worker',
         'features.tasks.task_manager',
-        'authencation.activation_plans', 'authencation.server_license', 'cryptography.fernet', 'dotenv'
+        'authencation.activation_plans', 'authencation.server_license', 'authencation.license_gate', 'cryptography.fernet', 'dotenv'
     ],
     hookspath=[],
     hooksconfig={},

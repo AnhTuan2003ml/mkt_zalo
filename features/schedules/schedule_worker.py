@@ -19,6 +19,15 @@ from features.messaging.send_link import extract_zalo_group_link, resolve_group_
 from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result, get_schedule
 
 
+def _license_active() -> bool:
+    """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
+    try:
+        from authencation.license_gate import is_active
+        return is_active()
+    except Exception:
+        return True
+
+
 def _prepare_link_info(message: str, zpw_enk: str, cookies: str, zpw_ver: str, imei: str = ""):
     """Nếu nội dung chứa link nhóm Zalo: resolve thông tin nhóm MỘT lần cho cả
     lịch để mọi người nhận dùng chung, tránh gọi parselink/ginfo lặp lại."""
@@ -105,7 +114,9 @@ class ScheduleWorker:
         print("[schedule_worker] Worker loop started")
         while self.running:
             try:
-                self._dispatch()
+                if _license_active():
+                    self._dispatch()
+                # License bị hủy/hết hạn -> tạm dừng gửi lịch (khóa cứng).
             except Exception as e:
                 print(f"[schedule_worker] Error in loop: {e}")
             time.sleep(5)

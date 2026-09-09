@@ -33,6 +33,15 @@ from features.messaging.add_friend import send_friend_request
 from features.messaging.remove_friend import remove_friend
 
 
+def _license_active() -> bool:
+    """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
+    try:
+        from authencation.license_gate import is_active
+        return is_active()
+    except Exception:
+        return True
+
+
 def _decoded_dict(value) -> dict:
     if isinstance(value, dict):
         return value
@@ -633,10 +642,12 @@ class GroupCopyWorker:
     def _worker_loop(self) -> None:
         while self.running:
             try:
-                job = claim_due_job(datetime.now().isoformat(timespec="seconds"))
-                if job:
-                    self._run_cycle(job)
-                    continue
+                if _license_active():
+                    job = claim_due_job(datetime.now().isoformat(timespec="seconds"))
+                    if job:
+                        self._run_cycle(job)
+                        continue
+                # License bị hủy/hết hạn -> tạm dừng sao chép nhóm (khóa cứng).
             except Exception as exc:
                 print(f"[group_copy_worker] Loop error: {exc}", flush=True)
             time.sleep(5)

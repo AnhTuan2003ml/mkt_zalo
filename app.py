@@ -1090,6 +1090,29 @@ def _current_plan():
                 "daysRemaining": 0, "maxAccounts": 2, "multiAccountExec": False}
 
 
+def _license_watchdog():
+    """Định kỳ cập nhật license_gate để KHÓA CỨNG: khi license bị hủy/hết hạn,
+    các worker nền (gửi lịch, sao chép nhóm, quét tin) sẽ tự tạm dừng."""
+    import time as _t
+    from authencation.license_gate import set_active
+    while True:
+        try:
+            if not DEVICE_TRACKING_ENABLED or not _server_license_mode():
+                set_active(True, "")            # không cấu hình license -> không chặn
+            else:
+                plan = _current_plan()
+                set_active(bool(plan.get("activated")), str(plan.get("reason") or ""))
+        except Exception:
+            pass  # lỗi tạm thời -> giữ nguyên trạng thái trước, tránh khóa oan
+        _t.sleep(60)
+
+
+try:
+    threading.Thread(target=_license_watchdog, daemon=True, name="license-watchdog").start()
+except Exception:
+    pass
+
+
 @app.route("/api/license/plan", methods=["GET"])
 def api_license_plan():
     """Quyền tính năng theo gói license (giới hạn tài khoản, chọn nhiều TK)."""
