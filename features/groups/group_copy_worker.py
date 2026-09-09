@@ -687,10 +687,17 @@ def _remove_joined_campaign_friends(
     return {"attempted": len(candidates), "removed": removed, "failed": failed}
 
 
+MAX_CONCURRENT_COPY_JOBS = 16   # số tài khoản/tác vụ chạy SONG SONG tối đa
+
+
 class GroupCopyWorker:
     def __init__(self) -> None:
         self.running = False
         self.thread: Optional[threading.Thread] = None
+        # jobId đang được một thread xử lý — tránh chạy trùng, và cho phép
+        # các tài khoản (chính + phụ) của chiến dịch chạy SONG SONG.
+        self._active = set()
+        self._active_lock = threading.Lock()
 
     def start(self) -> None:
         if self.running:
@@ -707,14 +714,38 @@ class GroupCopyWorker:
         while self.running:
             try:
                 if _license_active():
-                    job = claim_due_job(datetime.now().isoformat(timespec="seconds"))
-                    if job:
-                        self._run_cycle(job)
+                    # Giao mỗi tác vụ đến hạn cho 1 thread riêng -> các tài khoản
+                    # (chính + phụ) của chiến dịch chạy SONG SONG, không chờ nhau.
+                    dispatched = False
+                    while self.running:
+                        with self._active_lock:
+                            if len(self._active) >= MAX_CONCURRENT_COPY_JOBS:
+                                break
+                        job = claim_due_job(datetime.now().isoformat(timespec="seconds"))
+                        if not job:
+                            break
+                        jid = str(job.get("jobId") or "")
+                        with self._active_lock:
+                            self._active.add(jid)
+                        threading.Thread(target=self._run_and_release, args=(job,), daemon=True).start()
+                        dispatched = True
+                    if dispatched:
                         continue
                 # License bị hủy/hết hạn -> tạm dừng sao chép nhóm (khóa cứng).
             except Exception as exc:
                 print(f"[group_copy_worker] Loop error: {exc}", flush=True)
             time.sleep(5)
+
+    def _run_and_release(self, job: dict) -> None:
+        """Chạy 1 tác vụ trong thread riêng rồi giải phóng khỏi danh sách active."""
+        jid = str(job.get("jobId") or "")
+        try:
+            self._run_cycle(job)
+        except Exception as exc:
+            print(f"[group_copy_worker] {jid} loi thread: {exc}", flush=True)
+        finally:
+            with self._active_lock:
+                self._active.discard(jid)
 
     def _run_cycle(self, job: dict) -> None:
         job_id = str(job.get("jobId") or "")
