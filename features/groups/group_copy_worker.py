@@ -778,14 +778,29 @@ class GroupCopyWorker:
                 flush=True,
             )
         except Exception as exc:
+            # Lỗi TẠM THỜI (vd đọc nhóm đích lỗi "Tham số không hợp lệ") KHÔNG được
+            # giết cả chiến dịch. Ghi lỗi, giữ job 'pending' và hẹn chạy lại để
+            # tiếp tục (thử người/đợt tiếp theo), thay vì dừng hẳn.
             run_record["completedAt"] = datetime.now().isoformat(timespec="seconds")
             run_record["status"] = "failed"
             run_record["error"] = str(exc)
-            job["status"] = "failed"
             job["lastError"] = str(exc)
-            job["lastNotice"] = ""
+            if _campaign_expired(job, started_at):
+                job["status"] = "expired"
+                job["nextRunAt"] = ""
+                job["lastNotice"] = f"Chiến dịch đã hết thời gian. Lỗi lần cuối: {exc}"
+            else:
+                retry_at = datetime.now() + timedelta(minutes=10)
+                job["status"] = "pending"
+                job["nextRunAt"] = retry_at.isoformat(timespec="seconds")
+                # Đợt mời/kiểm tra vẫn giữ lịch cũ nếu có, nếu không thì bám theo retry.
+                if not str(job.get("nextInviteAt") or "").strip() and _pending_members(job):
+                    job["nextInviteAt"] = job["nextRunAt"]
+                job["lastNotice"] = (
+                    f"Gặp lỗi tạm thời ({exc}). Bỏ qua, sẽ tự thử lại sau 10 phút và tiếp tục chiến dịch."
+                )
             save_job(job)
-            print(f"[group_copy_worker] {job_id} failed: {exc}", flush=True)
+            print(f"[group_copy_worker] {job_id} loi tam thoi, se thu lai: {exc}", flush=True)
 
     def _send_daily_batch(
         self,
