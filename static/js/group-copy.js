@@ -958,7 +958,7 @@
         if (job.targetGroupId && (status === 'pending' || status === 'monitoring' || status === 'failed')) kebabItems += '<button type="button" data-job-verify="' + esc(jobId) + '">Kiểm tra ngay</button>';
         if (status === 'pending' || status === 'monitoring') kebabItems += '<button type="button" data-job-cancel="' + esc(jobId) + '">Tạm dừng tác vụ</button>';
         if ((status === 'failed' || status === 'cancelled') && Number(job.pendingCount || 0) > 0) kebabItems += '<button type="button" data-job-resume="' + esc(jobId) + '">Tiếp tục</button>';
-        if (status !== 'running') kebabItems += '<button type="button" class="is-danger" data-job-delete="' + esc(jobId) + '">Xóa tác vụ</button>';
+        kebabItems += '<button type="button" class="is-danger" data-job-delete="' + esc(jobId) + '">Xóa tác vụ</button>';
 
         var quickActions = '<button type="button" class="gc-btn-sm is-primary" data-job-detail="' + esc(jobId) + '">' + ICON_DETAIL + ' Chi tiết</button>';
         if (job.targetGroupId && (status === 'pending' || status === 'monitoring' || status === 'failed')) {
@@ -1062,7 +1062,7 @@
 
         var canPause = jobs.some(function (j) { return j.status === 'pending' || j.status === 'monitoring'; });
         var canResume = jobs.some(function (j) { return (j.status === 'failed' || j.status === 'cancelled') && Number(j.pendingCount || 0) > 0; });
-        var canDelete = jobs.every(function (j) { return j.status !== 'running'; });
+        var canDelete = true;  // cho phép xóa cả chiến dịch kể cả khi có tác vụ đang chạy
 
         var actions = '<button type="button" class="gc-btn-sm is-primary" data-campaign-toggle="1">' + ICON_DETAIL + ' Xem chi tiết (' + jobs.length + ' tài khoản)</button>';
         if (canPause) actions += '<button type="button" class="gc-btn-sm is-warning" data-campaign-cancel="' + esc(ids) + '">' + ICON_PAUSE + ' Tạm dừng cả chiến dịch</button>';
@@ -1190,24 +1190,20 @@
     async function deleteSelected() {
         var ids = Object.keys(state.selected).filter(function (id) { return state.selected[id]; });
         if (!ids.length) return;
-        var runningById = {};
-        (state.jobs || []).forEach(function (j) { runningById[String(j.jobId || '')] = (j.status === 'running'); });
-        var deletable = ids.filter(function (id) { return !runningById[id]; });
-        var skipped = ids.length - deletable.length;
-        if (!deletable.length) { showToast('Các tác vụ đang chạy không thể xóa. Hãy tạm dừng trước.', 'error'); return; }
+        // Xóa MỌI tác vụ đã chọn (kể cả đang chạy) — worker sẽ tự dừng an toàn.
         var taskN = selectedTaskCount();
-        var msg = 'Xóa ' + taskN + ' tác vụ đã chọn và toàn bộ lịch sử?' + (skipped ? ' (' + skipped + ' tài khoản đang chạy sẽ được bỏ qua)' : '');
+        var msg = 'Xóa ' + taskN + ' tác vụ đã chọn (kể cả đang chạy) và toàn bộ lịch sử?';
         if (!(await nexusConfirm(msg, { title: 'Xóa tác vụ đã chọn', confirmText: 'Xóa', danger: true }))) return;
         var okCount = 0;
-        for (var i = 0; i < deletable.length; i++) {
+        for (var i = 0; i < ids.length; i++) {
             try {
-                var r = await fetch('/api/group-copy/jobs/' + encodeURIComponent(deletable[i]), { method: 'DELETE' });
+                var r = await fetch('/api/group-copy/jobs/' + encodeURIComponent(ids[i]), { method: 'DELETE' });
                 var d = await r.json();
                 if (r.ok && d.success) okCount++;
             } catch (e) { /* tiếp tục các tác vụ còn lại */ }
         }
         state.selected = {};
-        showToast('Đã xóa ' + okCount + '/' + deletable.length + ' tác vụ.', okCount ? 'success' : 'error');
+        showToast('Đã xóa ' + okCount + '/' + ids.length + ' tác vụ.', okCount ? 'success' : 'error');
         await loadJobs();
     }
 

@@ -994,13 +994,14 @@ def request_verification(job_id: str) -> dict:
 
 
 def delete_job(job_id: str) -> None:
+    # Cho phép xóa MỌI trạng thái (kể cả 'running'): job có thể bị kẹt 'running' khi
+    # ứng dụng dừng giữa chừng -> nếu chặn thì không bao giờ xóa được. Nếu worker
+    # đang chạy job này, lần save cuối sẽ không thấy job (đã xóa) và tự dừng an toàn.
     with _LOCK:
         jobs = _read_jobs_unlocked()
         for index, item in enumerate(jobs):
             if str(item.get("jobId") or "") != str(job_id):
                 continue
-            if str(item.get("status") or "") == "running":
-                raise ValueError("Không thể xóa tác vụ đang chạy.")
             jobs.pop(index)
             _write_jobs_unlocked(jobs)
             return
