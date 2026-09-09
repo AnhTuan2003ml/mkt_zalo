@@ -263,6 +263,7 @@ from features.messages.unread_manager import (
     dismiss_group_messages,
     sync_unread_messages,
     get_group_latest_messages,
+    get_group_messages_since,
     start_unread_worker,
 )
 from core.zalo.zalo_config import get_zpw_ver
@@ -1533,6 +1534,37 @@ def api_messages_group_latest():
         account_ref = (data.get("profileId") or data.get("profile_id")
                        or data.get("account_id") or data.get("accountId") or "").strip()
         payload = get_group_latest_messages(group_id, account_ref or None)
+        return jsonify({"success": True, **payload})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+
+
+@app.route("/api/messages/group-since", methods=["GET", "POST"])
+def api_messages_group_since():
+    """API tích hợp: lấy TẤT CẢ tin nhóm mới kể từ mốc (msgId) truyền vào.
+
+    GET  /api/messages/group-since?groupId=...&profileId=...&sinceMsgId=...&count=...
+    POST /api/messages/group-since  {"groupId","profileId","sinceMsgId","count"}
+    Trả về items (cũ->mới, msgId > sinceMsgId) + latestMsgId (mốc mới) để webhook
+    chuyển tiếp và lưu lại. sinceMsgId='0'/rỗng -> chỉ trả trang mới nhất.
+    """
+    try:
+        if request.method == "POST":
+            data = request.get_json(silent=True) or request.form or {}
+        else:
+            data = request.args
+        group_id = (data.get("groupId") or data.get("group_id") or "").strip()
+        account_ref = (data.get("profileId") or data.get("profile_id")
+                       or data.get("account_id") or data.get("accountId") or "").strip()
+        since_msg_id = str(data.get("sinceMsgId") or data.get("since_msg_id") or "0").strip() or "0"
+        try:
+            count = int(data.get("count") or 30)
+        except (TypeError, ValueError):
+            count = 30
+        payload = get_group_messages_since(group_id, account_ref or None,
+                                           since_msg_id=since_msg_id, count=count)
         return jsonify({"success": True, **payload})
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400

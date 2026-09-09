@@ -21,6 +21,13 @@ from features.messages.message_manager import (
     log_check_attempt,
 )
 
+# Số tin lấy mỗi trang khi quét nhóm bằng getrecentv2 (phân trang lùi tới mốc).
+GROUP_FETCH_COUNT = 30
+
+# Nhịp tự động quét (giây). Bỏ "ping định kỳ" theo check_interval_minutes cũ;
+# cố định ~2 phút/lần. Người dùng bấm "Cập nhật ngay" để quét tức thì.
+AUTO_SYNC_INTERVAL_SEC = 120
+
 def _license_active() -> bool:
     """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
     try:
@@ -287,6 +294,7 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
     """
     from features.accounts.account_manager import load_accounts
     from features.messaging.last_messages import fetch_last_messages
+    from features.messaging.group_history import fetch_group_messages_since
 
     settings = get_settings()
     if not settings.get("tracking_enabled"):
@@ -351,91 +359,38 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
         if not group_by_id and not friend_by_id:
             continue
 
-        # Gửi kèm msgId mới nhất đã biết của từng thread ("0" = chưa biết) để
-        # server trả tin mới hơn; TẤT CẢ nhóm + bạn bè kiểm tra trong MỘT request.
+        cookies = acc.get("cookies", "")
+        zpw_enk = acc.get("zpwEnk", "")
+        imei = acc.get("imei", "")
+
+        # TIN 1-1 (bạn bè + người lạ): vẫn dùng get-last-msgs — chỉ tin MỚI NHẤT
+        # mỗi thread (chưa có endpoint cloud-message cho 1-1). Tin NHÓM chuyển sang
+        # getrecentv2 ở vòng lặp riêng bên dưới để lấy TẤT CẢ tin mới kể từ mốc.
         with _store_lock:
             store = _load_store()
             thread_map = {
-                f"{gid}_1": str((store["groups"].get(gid) or {}).get("lastMsgId") or "0")
-                for gid in group_by_id
-            }
-            thread_map.update({
                 f"{fid}_0": str((store["friends"].get(fid) or {}).get("lastMsgId") or "0")
                 for fid in friend_by_id
-            })
+            }
 
         result = fetch_last_messages(
             thread_map,
-            cookies=acc.get("cookies", ""),
-            zpw_enk=acc.get("zpwEnk", ""),
-            imei=acc.get("imei", ""),
-        )
-        groups_checked += len(group_by_id)
+            cookies=cookies,
+            zpw_enk=zpw_enk,
+            imei=imei,
+        ) if friend_by_id else {"ok": True, "groupMsgs": [], "userMsgs": []}
         friends_checked += len(friend_by_id)
         now = _now_str()
 
         if not result.get("ok"):
             error_count += 1
-            print(f"[unread_worker] get-last-msgs lỗi ({acc_name}): {result.get('message')}", flush=True)
-            continue
+            print(f"[unread_worker] get-last-msgs (1-1) lỗi ({acc_name}): {result.get('message')}", flush=True)
+            # KHÔNG continue: vẫn quét tin nhóm bên dưới dù tin 1-1 lỗi.
 
         with _store_lock:
             store = _load_store()
             sender_names = store.setdefault("senderNames", {})
             existing_ids = {x.get("id") for x in store["items"]}
-            for gm in result.get("groupMsgs", []):
-                gid = gm["groupId"]
-                group = group_by_id.get(gid)
-                if not group:
-                    continue  # thread không thuộc danh sách nhóm của tài khoản
-                group_meta = store["groups"].setdefault(gid, {})
-                group_meta.update({
-                    "name": group["name"],
-                    "avatar": group.get("avatar", ""),
-                    "accountId": aid,
-                    "accountName": acc_name,
-                    "lastSyncAt": now,
-                    "lastError": "",
-                })
-                if int(gm["ts"]) >= int(group_meta.get("lastMsgTs") or 0):
-                    group_meta["lastMsgId"] = gm["msgId"]
-                    group_meta["lastMsgTs"] = gm["ts"]
-
-                key = _item_key(aid, gid, gm["msgId"])
-                if key in store["dismissed"] or key in existing_ids:
-                    continue
-                if oldest_ts_ms and int(gm["ts"] or 0) < oldest_ts_ms:
-                    continue  # tin gửi đã quá lâu, chỉ ghi nhận msgId để so lần sau
-                sender_uid = gm["senderUid"]
-                if sender_uid in ("", "0"):
-                    sender_name = acc_name  # tin do chính tài khoản gửi
-                else:
-                    sender_name = str(sender_names.get(sender_uid) or "")
-                    if not sender_name:
-                        pending_uids.add((aid, sender_uid))
-                store["items"].append({
-                    "id": key,
-                    "accountId": aid,
-                    "accountName": acc_name,
-                    "groupId": gid,
-                    "groupName": group["name"],
-                    "pinId": gm["msgId"],
-                    "emoji": "💬",
-                    "title": gm["text"],
-                    "thumb": gm["thumb"],
-                    "href": gm["href"],
-                    "senderUid": sender_uid,
-                    "senderName": sender_name,
-                    "clientMsgId": gm["cliMsgId"],
-                    "globalMsgId": gm["msgId"],
-                    "msgType": gm["msgType"],
-                    "createTime": gm["ts"],
-                    "editTime": 0,
-                    "fetchedAt": now,
-                })
-                existing_ids.add(key)
-                new_count += 1
-
             # Tin 1-1: threadId = uid người trò chuyện. Server trả cả bạn bè lẫn
             # NGƯỜI LẠ (người chưa kết bạn nhưng đã nhắn tin). Tin do chính mình
             # gửi ("0"/"") chỉ cập nhật mốc msgId, không tạo nhắc mới.
@@ -506,15 +461,96 @@ def sync_unread_messages(account_id: Optional[str] = None) -> Dict[str, Any]:
                 existing_ids.add(key)
                 new_count += 1
 
-            # Nhóm đã kiểm tra nhưng không có tin mới cũng ghi nhận lần quét.
-            for gid, group in group_by_id.items():
-                meta = store["groups"].setdefault(gid, {})
-                meta.setdefault("name", group["name"])
-                meta.setdefault("avatar", group.get("avatar", ""))
-                meta["accountId"] = aid
-                meta["accountName"] = acc_name
-                meta["lastSyncAt"] = now
             _save_store(store)
+
+        # ── TIN NHÓM: getrecentv2 — lấy TẤT CẢ tin mới kể từ mốc (lastMsgId) ──
+        # Mỗi nhóm 1 request, phân trang lùi tới mốc đã lưu; tạo 1 nhắc / mỗi tin.
+        for gid, group in group_by_id.items():
+            groups_checked += 1
+            with _store_lock:
+                store = _load_store()
+                since = str((store["groups"].get(gid) or {}).get("lastMsgId") or "0")
+            gres = fetch_group_messages_since(
+                gid, since_msg_id=since, count=GROUP_FETCH_COUNT,
+                cookies=cookies, zpw_enk=zpw_enk, imei=imei,
+            )
+            if not gres.get("ok"):
+                error_count += 1
+                print(f"[unread_worker] getrecentv2 lỗi nhóm {gid} ({acc_name}): {gres.get('message')}", flush=True)
+                with _store_lock:
+                    store = _load_store()
+                    meta = store["groups"].setdefault(gid, {})
+                    meta.update({
+                        "name": group["name"],
+                        "avatar": group.get("avatar", ""),
+                        "accountId": aid,
+                        "accountName": acc_name,
+                        "lastSyncAt": now,
+                        "lastError": gres.get("message", ""),
+                    })
+                    _save_store(store)
+                continue
+
+            with _store_lock:
+                store = _load_store()
+                sender_names = store.setdefault("senderNames", {})
+                existing_ids = {x.get("id") for x in store["items"]}
+                group_meta = store["groups"].setdefault(gid, {})
+                group_meta.update({
+                    "name": group["name"],
+                    "avatar": group.get("avatar", ""),
+                    "accountId": aid,
+                    "accountName": acc_name,
+                    "lastSyncAt": now,
+                    "lastError": "",
+                })
+                for gm in gres.get("newMsgs", []):  # cũ -> mới
+                    if int(gm["ts"] or 0) >= int(group_meta.get("lastMsgTs") or 0):
+                        group_meta["lastMsgTs"] = gm["ts"]
+                    key = _item_key(aid, gid, gm["msgId"])
+                    if key in store["dismissed"] or key in existing_ids:
+                        continue
+                    if oldest_ts_ms and int(gm["ts"] or 0) < oldest_ts_ms:
+                        continue  # tin gửi trước mốc theo dõi / quá hạn lưu trữ
+                    sender_uid = gm["senderUid"]
+                    if sender_uid in ("", "0"):
+                        sender_name = acc_name  # tin do chính tài khoản gửi
+                    else:
+                        sender_name = str(sender_names.get(sender_uid) or "")
+                        if not sender_name:
+                            pending_uids.add((aid, sender_uid))
+                    store["items"].append({
+                        "id": key,
+                        "accountId": aid,
+                        "accountName": acc_name,
+                        "groupId": gid,
+                        "groupName": group["name"],
+                        "pinId": gm["msgId"],
+                        "emoji": "💬",
+                        "title": gm["text"],
+                        "thumb": gm["thumb"],
+                        "href": gm["href"],
+                        "senderUid": sender_uid,
+                        "senderName": sender_name,
+                        "clientMsgId": gm["cliMsgId"],
+                        "globalMsgId": gm["msgId"],
+                        "msgType": gm["msgType"],
+                        "createTime": gm["ts"],
+                        "editTime": 0,
+                        "fetchedAt": now,
+                    })
+                    existing_ids.add(key)
+                    new_count += 1
+                # Cập nhật MỐC = msgId lớn nhất đã thấy (kể cả tin bị lọc theo thời
+                # gian) để lần sau chỉ lấy tin MỚI HƠN, không lặp lại.
+                latest = str(gres.get("latestMsgId") or "0")
+                try:
+                    if int(latest) > int(group_meta.get("lastMsgId") or 0):
+                        group_meta["lastMsgId"] = latest
+                except (TypeError, ValueError):
+                    if latest and latest != "0" and not group_meta.get("lastMsgId"):
+                        group_meta["lastMsgId"] = latest
+                _save_store(store)
 
     _resolve_sender_names(targets, pending_uids)
 
@@ -685,6 +721,82 @@ def get_group_latest_messages(group_id: str, account_id: Optional[str] = None) -
     }
 
 
+def get_group_messages_since(group_id: str, account_id: Optional[str] = None,
+                             since_msg_id: str = "0",
+                             count: int = GROUP_FETCH_COUNT) -> Dict[str, Any]:
+    """Lấy TẤT CẢ tin nhóm có ``msgId > since_msg_id`` (cũ->mới) qua getrecentv2.
+
+    Dùng cho webhook: truyền mốc (msgId) đã lưu -> nhận MỌI tin mới kể từ mốc,
+    không bỏ sót khi có nhiều tin giữa 2 lần quét. ``since_msg_id='0'`` -> chỉ
+    trả trang tin mới nhất (thiết lập mốc lần đầu, không kéo toàn bộ lịch sử).
+    Không đụng db tin chưa đọc. Raises ValueError/RuntimeError như group-latest.
+    """
+    from features.accounts.account_manager import load_accounts
+    from features.messaging.group_history import fetch_group_messages_since
+
+    group_id = str(group_id or "").strip()
+    if not group_id:
+        raise ValueError("Thiếu groupId")
+
+    ref = str(account_id or "").strip()
+    accounts = load_accounts()
+    matched = None
+    account = None
+    for acc in accounts:
+        aid = str(acc.get("accountId") or "").strip()
+        uid = str(acc.get("uid") or "").strip()
+        if ref and ref != aid and ref != uid:
+            continue
+        matched = matched or acc
+        if not all([acc.get("cookies"), acc.get("zpwEnk"), acc.get("imei")]):
+            continue
+        account = acc
+        break
+    if not account:
+        if ref and matched is None:
+            raise ValueError(
+                f"Không tìm thấy tài khoản theo profileId/accountId '{ref}'. "
+                "Hãy kiểm tra lại profileId của tài khoản đã chọn.")
+        who = str((matched or {}).get("name") or ref or "").strip()
+        raise ValueError(
+            f"Tài khoản '{who}' chưa đăng nhập hoặc phiên đã hết hạn "
+            "(thiếu cookies/zpwEnk/imei) — hãy mở Nexus và đăng nhập lại tài khoản này.")
+
+    res = fetch_group_messages_since(
+        group_id, since_msg_id=str(since_msg_id or "0"), count=int(count),
+        cookies=account.get("cookies", ""),
+        zpw_enk=account.get("zpwEnk", ""),
+        imei=account.get("imei", ""),
+    )
+    if not res.get("ok"):
+        raise RuntimeError(res.get("message") or "Không lấy được tin nhắn của nhóm.")
+
+    acc_name = str(account.get("name") or "").strip()
+    with _store_lock:
+        sender_names = _load_store().get("senderNames", {})
+    items = []
+    for gm in res.get("newMsgs", []):  # đã sắp cũ -> mới
+        sender_uid = gm["senderUid"]
+        items.append({
+            "msgId": gm["msgId"],
+            "senderUid": sender_uid,
+            "senderName": acc_name if sender_uid in ("", "0") else str(sender_names.get(sender_uid) or ""),
+            "msgType": gm["msgType"],
+            "title": gm["text"],
+            "thumb": gm["thumb"],
+            "href": gm["href"],
+            "createTime": gm["ts"],
+        })
+    return {
+        "groupId": group_id,
+        "accountId": str(account.get("accountId") or ""),
+        "count": len(items),
+        "items": items,               # CŨ -> MỚI (thứ tự chuyển tiếp)
+        "latestMsgId": res.get("latestMsgId"),
+        "reachedMark": res.get("reachedMark"),
+    }
+
+
 # ─── Worker tự động quét theo chu kỳ thiết lập ────────────────────────────────
 
 _worker_lock = threading.Lock()
@@ -702,10 +814,10 @@ def _worker_loop() -> None:
             settings = get_settings()
             if not settings.get("tracking_enabled"):
                 continue  # chế độ theo dõi đang tắt: ngừng mọi lần quét tự động
-            if not settings.get("auto_check_enabled"):
-                continue
-            interval_seconds = max(1, int(settings.get("check_interval_minutes") or 5)) * 60
-            if time.time() - _last_auto_sync < interval_seconds:
+            if not settings.get("auto_check_enabled", True):
+                continue  # cho tắt auto; nút "Cập nhật ngay" vẫn quét độc lập
+            # Bỏ ping định kỳ theo check_interval_minutes — auto cố định ~2 phút/lần.
+            if time.time() - _last_auto_sync < AUTO_SYNC_INTERVAL_SEC:
                 continue
             _last_auto_sync = time.time()
             result = sync_unread_messages()

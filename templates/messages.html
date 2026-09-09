@@ -18,11 +18,11 @@
         <div>
             <div class="eyebrow">Hộp thư Zalo</div>
             <h2>Tin nhắn nhóm <span class="beta-badge" title="Tính năng đang trong giai đoạn phát triển">Beta</span></h2>
-            <p>Lưu tin nhắn mới nhất của các nhóm để đọc và xem nhanh. Tin đã lưu tự xóa sau thời gian lưu trữ đã chọn.</p>
+            <p>Cập nhật TẤT CẢ tin nhắn mới của các nhóm kể từ mốc lần trước (không bỏ sót). Tin đã lưu tự xóa sau thời gian lưu trữ đã chọn.</p>
         </div>
         <div class="hero-actions">
             <button class="btn btn-secondary" id="btnReloadMessages">Làm mới</button>
-            <button class="btn btn-primary" id="btnCheckMessages">Quét ngay</button>
+            <button class="btn btn-primary" id="btnCheckMessages">Cập nhật ngay</button>
         </div>
     </div>
 
@@ -51,16 +51,9 @@
             </div>
             <div class="form-group toolbar-field">
                 <label>Tự động cập nhật</label>
-                <select id="autoUpdateSelect">
+                <select id="autoUpdateSelect" title="Tự động lấy tin mới mỗi ~2 phút. Bấm 'Cập nhật ngay' để lấy tức thì bất cứ lúc nào.">
                     <option value="0">Tắt</option>
-                    <option value="1">Mỗi 1 phút</option>
-                    <option value="2">Mỗi 2 phút</option>
-                    <option value="3">Mỗi 3 phút</option>
-                    <option value="5">Mỗi 5 phút</option>
-                    <option value="10">Mỗi 10 phút</option>
-                    <option value="15">Mỗi 15 phút</option>
-                    <option value="30">Mỗi 30 phút</option>
-                    <option value="60">Mỗi 60 phút</option>
+                    <option value="2">Bật (mỗi ~2 phút)</option>
                 </select>
             </div>
             <div class="form-group toolbar-field">
@@ -105,7 +98,7 @@
                 <button type="button" id="msgToggleFriend" onclick="msgSetThreadFilter('friend')">Người dùng</button>
             </div>
             <div id="msgGroupList" class="msg-group-list">
-                <div class="empty-state">Chưa có tin nhắn mới.<br>Bấm "Quét ngay" để kiểm tra.</div>
+                <div class="empty-state">Chưa có tin nhắn mới.<br>Bấm "Cập nhật ngay" để kiểm tra.</div>
             </div>
         </section>
 
