@@ -15,11 +15,12 @@ ACTIVATION_DURATION_OPTIONS = {
     "3m": {"key": "3m", "label": "3 Tháng", "days": 90, "icon": "📊", "is_permanent": False},
     "6m": {"key": "6m", "label": "6 Tháng", "days": 180, "icon": "📊", "is_permanent": False},
     "lifetime": {"key": "lifetime", "label": "Vĩnh viễn", "days": None, "icon": "💎", "is_permanent": True},
+    "enterprise": {"key": "enterprise", "label": "Doanh nghiệp (10 máy)", "days": None, "icon": "🏢", "is_permanent": True},
 }
 
 DEFAULT_ACTIVATION_OPTION_KEY = os.getenv("DEFAULT_ACTIVATION_OPTION_KEY", "3m")
 
-_ORDER = ["3m", "6m", "lifetime"]
+_ORDER = ["3m", "6m", "lifetime", "enterprise"]
 
 
 def get_activation_duration_options():

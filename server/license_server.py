@@ -116,7 +116,15 @@ PLAN_OPTIONS = {
     "3m": (90, "3 Tháng", False),
     "6m": (180, "6 Tháng", False),
     "lifetime": (0, "Vĩnh viễn", True),
+    "enterprise": (0, "Doanh nghiệp (10 máy)", True),
 }
+
+# Số máy (MAC) tối đa mà 1 key kích hoạt được. Gói doanh nghiệp = 10, còn lại = 1.
+PLAN_MAX_MACHINES = {"enterprise": 10}
+
+
+def _plan_max_machines(plan_key):
+    return int(PLAN_MAX_MACHINES.get(str(plan_key or "").strip().lower(), 1))
 
 _db_lock = threading.Lock()
 
@@ -155,10 +163,13 @@ def init_db():
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT DEFAULT '')"
         )
-        # Migration: thời điểm CẤP key hiện tại (để kill-switch vô hiệu key cũ).
+        # Migration cột mới.
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
         if "key_issued_at" not in cols:
             conn.execute("ALTER TABLE machines ADD COLUMN key_issued_at TEXT DEFAULT ''")
+        if "max_machines" not in cols:
+            # Số MAC tối đa 1 key kích hoạt được (gói doanh nghiệp = 10).
+            conn.execute("ALTER TABLE machines ADD COLUMN max_machines INTEGER DEFAULT 1")
         conn.commit()
 
 
@@ -229,6 +240,7 @@ def _row_to_dict(row):
     caps = _plan_caps(d.get("plan_key"), d.get("is_permanent"))
     d["maxAccounts"] = caps["maxAccounts"]
     d["multiAccountExec"] = caps["multiAccountExec"]
+    d["max_machines"] = int(d.get("max_machines") or _plan_max_machines(d.get("plan_key")))
     return d
 
 
@@ -251,21 +263,60 @@ def send_key_email(machine, key):
         return False
     plan_label = machine.get("plan_label") or machine.get("plan_key") or "Không rõ"
     expiry = "Vĩnh viễn" if machine.get("is_permanent") else (machine.get("expiry") or "-")
+    max_machines = int(machine.get("max_machines") or 1)
+    device_line = (
+        f"Kích hoạt được trên tối đa {max_machines} máy khác nhau"
+        if max_machines > 1 else "Gắn với đúng thiết bị (máy) có MAC ở trên"
+    )
     body = f"""
-    <html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:16px">
-      <div style="max-width:600px;margin:auto;background:#fff;border-radius:10px;padding:22px">
-        <h2 style="color:#2563eb">🔑 Nexus - Key kích hoạt</h2>
-        <p><b>Máy:</b> {machine.get('machine_name') or '-'}</p>
-        <p><b>MAC:</b> <code>{machine.get('mac')}</code></p>
-        <p><b>IP:</b> {machine.get('ip') or '-'}</p>
-        <p><b>Gói:</b> {plan_label} &nbsp; | &nbsp; <b>Hết hạn:</b> {expiry}</p>
-        <div style="font-size:26px;font-weight:800;letter-spacing:4px;text-align:center;
-                    background:#f0f7ff;border:2px solid #2563eb;border-radius:8px;padding:16px;margin:14px 0">
-          {key}
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; background: #f5f5f5; }}
+            .container {{ max-width: 600px; margin: 20px auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+            h1 {{ color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }}
+            .info-block {{ background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #4CAF50; }}
+            .code-block {{ background: #f0f0f0; padding: 18px; margin: 15px 0; border-radius: 5px; border: 2px solid #4CAF50; font-family: monospace; font-size: 28px; font-weight: bold; letter-spacing: 4px; text-align: center; }}
+            .label {{ font-weight: bold; color: #333; }}
+            .value {{ color: #555; font-family: monospace; }}
+            .warning {{ background: #fff3cd; padding: 12px; border-radius: 5px; border-left: 3px solid #ffc107; margin: 15px 0; }}
+            .timestamp {{ color: #999; font-size: 12px; margin-top: 20px; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔐 Nexus - Mã kích hoạt</h1>
+
+            <div class="info-block">
+                <div><span class="label">🖥️ Tên máy:</span> <span class="value">{machine.get('machine_name') or '-'}</span></div>
+                <div><span class="label">📱 MAC Address:</span> <span class="value">{machine.get('mac')}</span></div>
+                <div><span class="label">🌐 IP:</span> <span class="value">{machine.get('ip') or '-'}</span></div>
+            </div>
+
+            <h2 style="color: #4CAF50;">Mã kích hoạt của thiết bị (12 ký tự):</h2>
+            <div class="code-block">{key}</div>
+
+            <div class="info-block">
+                <div><span class="label">📦 Gói:</span> <span class="value">{plan_label}</span></div>
+                <div><span class="label">⏰ Hết hạn:</span> <span class="value">{expiry}</span></div>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Lưu ý:</strong> Mã kích hoạt này:
+                <ul>
+                    <li>✅ {device_line}</li>
+                    <li>✅ Có giới hạn thời gian (theo gói {plan_label})</li>
+                    <li>✅ Tối đa 12 ký tự, dễ nhập</li>
+                    <li>✅ Không thể chỉnh sửa</li>
+                    <li>✅ Được mã hóa và bảo mật</li>
+                </ul>
+                Không chia sẻ mã này cho người khác.
+            </div>
+
+            <p class="timestamp">Tạo lúc: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
-        <p style="color:#666;font-size:13px">Nhập key này vào phần mềm Nexus trên đúng máy có MAC ở trên để kích hoạt.</p>
-      </div>
-    </body></html>
+    </body>
+    </html>
     """
     try:
         for to in recipients:
@@ -291,6 +342,37 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SESSION_SECRET", "") or (ADMIN_TOKEN + "::nexus-session") or secrets.token_hex(32)
 app.permanent_session_lifetime = timedelta(hours=24)   # phiên đăng nhập sống 24h
 init_db()
+
+
+# ─── Tự xóa key CHƯA kích hoạt quá 24h ───────────────────────────────────────
+PENDING_TTL_HOURS = 24
+
+
+def _purge_stale_pending():
+    """Xóa các key còn 'pending' (chưa kích hoạt) được tạo quá PENDING_TTL_HOURS."""
+    cutoff = (datetime.now() - timedelta(hours=PENDING_TTL_HOURS)).isoformat(timespec="seconds")
+    with _db_lock, closing(_conn()) as conn:
+        cur = conn.execute(
+            "DELETE FROM machines WHERE status='pending' AND created_at != '' AND created_at < ?",
+            (cutoff,),
+        )
+        conn.commit()
+        return cur.rowcount
+
+
+def _purge_loop():
+    import time as _t
+    while True:
+        try:
+            n = _purge_stale_pending()
+            if n:
+                print(f"[license_server] Đã xóa {n} key chưa kích hoạt quá {PENDING_TTL_HOURS}h", flush=True)
+        except Exception as exc:
+            print(f"[license_server] purge error: {exc}", flush=True)
+        _t.sleep(1800)  # quét mỗi 30 phút
+
+
+threading.Thread(target=_purge_loop, daemon=True, name="purge-pending").start()
 
 # ─── Đăng nhập bằng EMAIL + MẬT KHẨU (UI hash SHA-256 trước khi gửi) ──────────
 MAX_ACTIVE_SESSIONS = 2          # tối đa 2 thiết bị đăng nhập cùng lúc
@@ -492,6 +574,7 @@ def api_register():
         plan_key = "3m"
     days, plan_label, is_permanent = PLAN_OPTIONS[plan_key]
     key = _gen_key(12)
+    max_machines = _plan_max_machines(plan_key)
     expiry = "" if is_permanent else (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
     ip = _client_ip()
     now = _now()
@@ -503,17 +586,17 @@ def api_register():
             conn.execute(
                 """UPDATE machines SET machine_name=?, ip=?, plan_key=?, plan_label=?,
                    license_key=?, is_permanent=?, expiry=?, status='pending',
-                   email_sent_at=?, key_issued_at=?, note='' WHERE mac=?""",
+                   email_sent_at=?, key_issued_at=?, max_machines=?, note='' WHERE mac=?""",
                 (machine_name or existing["machine_name"], ip, plan_key, plan_label,
-                 key, 1 if is_permanent else 0, expiry, now, now, mac),
+                 key, 1 if is_permanent else 0, expiry, now, now, max_machines, mac),
             )
         else:
             conn.execute(
                 """INSERT INTO machines (mac, machine_name, ip, plan_key, plan_label, license_key,
-                   status, is_permanent, created_at, expiry, email_sent_at, key_issued_at)
-                   VALUES (?,?,?,?,?,?,'pending',?,?,?,?,?)""",
+                   status, is_permanent, created_at, expiry, email_sent_at, key_issued_at, max_machines)
+                   VALUES (?,?,?,?,?,?,'pending',?,?,?,?,?,?)""",
                 (mac, machine_name, ip, plan_key, plan_label, key,
-                 1 if is_permanent else 0, now, expiry, now, now),
+                 1 if is_permanent else 0, now, expiry, now, now, max_machines),
             )
         conn.commit()
         machine = _row_to_dict(conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone())
@@ -547,11 +630,51 @@ def api_verify():
 
     with _db_lock, closing(_conn()) as conn:
         row = conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone()
-        if not row:
-            return jsonify({"valid": False, "error": "Máy chưa đăng ký với máy chủ."}), 404
+
+        # Gói DOANH NGHIỆP: 1 key dùng cho nhiều MAC. Nếu MAC này chưa gắn key đó
+        # mà key là key doanh nghiệp còn chỗ (< max_machines) thì gắn thêm MAC.
+        if (not row) or (row["license_key"] != key):
+            ent = conn.execute(
+                "SELECT * FROM machines WHERE license_key=? AND max_machines>1 ORDER BY id LIMIT 1",
+                (key,),
+            ).fetchone()
+            if ent:
+                ent = _row_to_dict(ent)
+                bound = conn.execute(
+                    "SELECT COUNT(DISTINCT mac) AS c FROM machines WHERE license_key=?", (key,)
+                ).fetchone()["c"]
+                already = conn.execute(
+                    "SELECT 1 FROM machines WHERE license_key=? AND mac=?", (key, mac)
+                ).fetchone()
+                if not already and bound >= int(ent["max_machines"]):
+                    _record_verify_fail(ip)
+                    return jsonify({"valid": False, "error": f"Key doanh nghiệp đã đủ {ent['max_machines']} máy."}), 403
+                # Gắn MAC này vào key doanh nghiệp (kế thừa gói/hạn dùng của key).
+                conn.execute(
+                    """INSERT INTO machines (mac, machine_name, ip, plan_key, plan_label, license_key,
+                       status, is_permanent, created_at, activated_at, expiry, last_seen,
+                       email_sent_at, key_issued_at, max_machines)
+                       VALUES (?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?)
+                       ON CONFLICT(mac) DO UPDATE SET plan_key=excluded.plan_key,
+                         plan_label=excluded.plan_label, license_key=excluded.license_key,
+                         is_permanent=excluded.is_permanent, expiry=excluded.expiry,
+                         status='active', max_machines=excluded.max_machines,
+                         key_issued_at=excluded.key_issued_at""",
+                    (mac, machine_name, _client_ip(), ent["plan_key"], ent["plan_label"], key,
+                     1 if ent["is_permanent"] else 0, _now(), _now(), ent["expiry"], _now(),
+                     ent.get("email_sent_at") or "", ent.get("key_issued_at") or "", int(ent["max_machines"])),
+                )
+                conn.commit()
+                row = conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone()
+            elif not row:
+                return jsonify({"valid": False, "error": "Máy chưa đăng ký với máy chủ."}), 404
+            else:
+                _record_verify_fail(ip)  # sai key -> đếm để chống dò
+                return jsonify({"valid": False, "error": "Key không đúng cho máy này."}), 403
+
         m = _row_to_dict(row)
         if m["license_key"] != key:
-            _record_verify_fail(ip)  # sai key -> đếm để chống dò
+            _record_verify_fail(ip)
             return jsonify({"valid": False, "error": "Key không đúng cho máy này."}), 403
         # Kill-switch: mọi key cấp TRƯỚC mốc key_cutoff đều bị vô hiệu (kể cả key
         # chưa có key_issued_at = key cũ trước bản nâng cấp) -> buộc đăng ký lại.
@@ -635,6 +758,7 @@ def api_settings():
 def api_machines():
     if not _require_admin():
         return jsonify({"success": False, "error": "unauthorized"}), 401
+    _purge_stale_pending()  # dọn key chưa kích hoạt quá 24h mỗi lần mở dashboard
     status = (request.args.get("status") or "").strip()
     q = (request.args.get("q") or "").strip().lower()       # lọc tên máy / mac / ip
     ip = (request.args.get("ip") or "").strip().lower()
