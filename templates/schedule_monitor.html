@@ -11,7 +11,7 @@
 </head>
 <body class="schedmon-page">
 {% include '_nav.html' %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/schedule-monitor.css') }}?v=campaign-group-v2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/schedule-monitor.css') }}?v=campaign-group-v3">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <main class="page schedmon-shell">
@@ -50,6 +50,10 @@
         </div>
 
         <div class="schedmon-topbar-actions">
+            <button type="button" class="btn btn-ghost" id="schedmonSelectToggle" title="Chọn nhiều lịch để xóa">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span>Chọn nhiều</span>
+            </button>
             <button type="button" class="btn btn-ghost" id="schedmonRefreshBtn" onclick="SchedMon.reload()" title="Làm mới dữ liệu">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16"/></svg>
                 <span>Làm mới</span>
@@ -106,6 +110,16 @@
                     <option value="cancelled">Đã hủy</option>
                 </select>
             </label>
+        </div>
+
+        <!-- Thanh thao tác khi chọn nhiều lịch -->
+        <div id="schedmonBulkBar" class="schedmon-bulk-bar" hidden>
+            <label class="schedmon-bulk-all"><input type="checkbox" id="schedmonBulkAll"> Chọn tất cả</label>
+            <span class="schedmon-bulk-count" id="schedmonBulkCount">Đã chọn 0 lịch</span>
+            <div class="schedmon-bulk-actions">
+                <button id="schedmonBulkClear" class="btn btn-ghost btn-sm" type="button">Bỏ chọn</button>
+                <button id="schedmonBulkDelete" class="btn btn-danger btn-sm" type="button" disabled><span>🗑</span> Xóa đã chọn</button>
+            </div>
         </div>
 
         <div class="schedmon-table-shell" tabindex="0" aria-label="Bảng tất cả lịch, có thể cuộn dọc và ngang">
@@ -230,6 +244,6 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/schedule-monitor.js') }}?v=campaign-group-v2"></script>
+<script src="{{ url_for('static', filename='js/schedule-monitor.js') }}?v=campaign-group-v3"></script>
 </body>
 </html>

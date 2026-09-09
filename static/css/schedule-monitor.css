@@ -1555,3 +1555,48 @@ html[data-theme="light"] .schedmon-overlay-head h2 {
     .schedmon-campaign-modal-item { grid-template-columns: 1fr auto; row-gap: 8px; }
     .schedmon-campaign-modal-item .scmi-result { align-items: flex-start; }
 }
+
+/* ─── Chọn nhiều lịch + xóa hàng loạt ─────────────────────────────────────── */
+#schedmonSelectToggle.is-active {
+    color: var(--accent, #2f7fd1);
+    border-color: var(--accent, #2f7fd1);
+    background: rgba(88, 166, 255, .10);
+}
+.schedmon-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    margin: 0 0 12px;
+    border: 1px solid rgba(88, 166, 255, .35);
+    border-radius: 12px;
+    background: rgba(88, 166, 255, .07);
+}
+.schedmon-bulk-all { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+.schedmon-bulk-all input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #2f7fd1); }
+.schedmon-bulk-count { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.schedmon-bulk-actions { display: flex; gap: 8px; margin-left: auto; }
+.schedmon-bulk-actions .btn-danger { background: var(--red, #e5484d); color: #fff; border: 1px solid var(--red, #e5484d); }
+.schedmon-bulk-actions .btn-danger:hover:not(:disabled) { filter: brightness(.95); }
+.schedmon-bulk-actions .btn-danger:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Chừa lề trái cho checkbox — áp cho CẢ header và các dòng để cột vẫn thẳng hàng. */
+.schedmon-table-shell.schedmon-selecting .schedmon-table-head,
+.schedmon-table-shell.schedmon-selecting .schedule-table-row { padding-left: 40px; }
+.schedule-table-row { position: relative; }
+.schedmon-select-box {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+.schedmon-select-box input { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent, #2f7fd1); }
+.schedule-table-row.schedmon-selected {
+    background: rgba(88, 166, 255, .08);
+    box-shadow: inset 3px 0 0 var(--accent, #2f7fd1);
+}

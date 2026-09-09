@@ -12,7 +12,9 @@
         all: [],
         calendarYear: initialCalendarDate.getFullYear(),
         calendarMonth: initialCalendarDate.getMonth(),
-        selectedDateKey: ''
+        selectedDateKey: '',
+        selectMode: false,
+        selected: {}
     };
     var REFRESH_MS = 15000;
     var refreshTimer = null;
@@ -369,6 +371,15 @@
     // ─── "Tất cả lịch" ───────────────────────────────────────────────────
     function jsArg(v) { return JSON.stringify(String(v == null ? '' : v)); }
 
+    // Checkbox chọn lịch (chỉ hiện khi bật chế độ chọn). `ids` = các scheduleId thẻ đại diện.
+    function schedSelectCheckboxHtml(ids) {
+        if (!state.selectMode) return '';
+        var list = (ids || []).filter(Boolean);
+        var checked = list.length > 0 && list.every(function (id) { return state.selected[id]; });
+        return '<label class="schedmon-select-box" title="Chọn lịch" onclick="event.stopPropagation()">' +
+            '<input type="checkbox" data-sched-select-ids="' + escHtml(list.join(',')) + '"' + (checked ? ' checked' : '') + '></label>';
+    }
+
     function buildScheduleCard(sch) {
         var kind = kindInfo(sch);
         var st = sch.status || 'pending';
@@ -380,8 +391,10 @@
         var percent = total ? Math.round((processed / total) * 100) : 0;
 
         var row = document.createElement('div');
-        row.className = 'schedule-table-row';
+        var sid = String(sch.scheduleId || '');
+        row.className = 'schedule-table-row' + (state.selectMode ? ' schedmon-selecting' : '') + (state.selected[sid] ? ' schedmon-selected' : '');
         row.innerHTML =
+            schedSelectCheckboxHtml([sid]) +
             '<div class="schedule-table-cell">' +
                 '<div class="schedule-table-title" title="' + escHtml(sch.title || 'Không có tiêu đề') + '">' + escHtml(sch.title || 'Không có tiêu đề') + '</div>' +
                 '<div class="schedule-table-sub">' + escHtml((sch.message || 'Không có mô tả').slice(0, 90)) + '</div>' +
@@ -449,9 +462,12 @@
             (hasActive ? '<button class="schedule-icon-btn is-danger" title="Hủy cả chiến dịch" onclick="SchedMon.campaignCancel(\'' + cid + '\')">' + iconSvg('stop') + '</button>' : '') +
             '<button class="schedule-icon-btn is-danger" title="Xóa cả chiến dịch" onclick="SchedMon.campaignDelete(\'' + cid + '\')">' + iconSvg('trash') + '</button>';
 
+        var campIds = schedules.map(function (s) { return String(s.scheduleId || ''); }).filter(Boolean);
+        var campSel = campIds.length > 0 && campIds.every(function (id) { return state.selected[id]; });
         var row = document.createElement('div');
-        row.className = 'schedule-table-row schedmon-campaign-row';
+        row.className = 'schedule-table-row schedmon-campaign-row' + (state.selectMode ? ' schedmon-selecting' : '') + (campSel ? ' schedmon-selected' : '');
         row.innerHTML =
+            schedSelectCheckboxHtml(campIds) +
             '<div class="schedule-table-cell">' +
                 '<div class="schedule-table-title" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
                 '<div class="schedule-table-sub">Chiến dịch • ' + schedules.length + ' tài khoản</div>' +
@@ -462,6 +478,69 @@
             '<div class="schedule-table-cell schedule-table-result"><strong>' + ok + '/' + total + ' (' + percent + '%)</strong><span>' + pend + ' chờ · ' + fail + ' lỗi</span></div>' +
             '<div class="schedule-table-cell schedule-table-actions">' + actions + '</div>';
         return row;
+    }
+
+    // ─── Chọn nhiều lịch + xóa hàng loạt ──────────────────────────────────
+    function allScheduleIds() {
+        return (state.all || []).filter(function (x) { return x._itemType === 'schedule'; })
+            .map(function (x) { return String(x.scheduleId || ''); }).filter(Boolean);
+    }
+    function visibleScheduleIds() {
+        return (state.rendered || []).filter(function (x) { return x._itemType === 'schedule'; })
+            .map(function (x) { return String(x.scheduleId || ''); }).filter(Boolean);
+    }
+    function setSchedSelected(ids, checked) {
+        (ids || []).forEach(function (id) { if (!id) return; if (checked) state.selected[id] = true; else delete state.selected[id]; });
+    }
+    // Đếm theo LỊCH/tác vụ (chiến dịch nhiều tài khoản = 1), không đếm từng tài khoản.
+    function selectedSchedTaskCount() {
+        var tasks = 0;
+        buildScheduleGroups((state.rendered || []).filter(function (x) { return x._itemType === 'schedule'; })).forEach(function (g) {
+            var ids = g.items.map(function (s) { return String(s.scheduleId || ''); }).filter(Boolean);
+            if (ids.length && ids.some(function (id) { return state.selected[id]; })) tasks++;
+        });
+        return tasks;
+    }
+    function updateSchedBulkBar() {
+        var hasAny = Object.keys(state.selected).some(function (id) { return state.selected[id]; });
+        var countEl = document.getElementById('schedmonBulkCount');
+        if (countEl) countEl.textContent = 'Đã chọn ' + selectedSchedTaskCount() + ' lịch';
+        var del = document.getElementById('schedmonBulkDelete');
+        if (del) del.disabled = !hasAny;
+        var allBox = document.getElementById('schedmonBulkAll');
+        if (allBox) { var vis = visibleScheduleIds(); allBox.checked = vis.length > 0 && vis.every(function (id) { return state.selected[id]; }); }
+    }
+    function toggleSchedSelectMode(on) {
+        state.selectMode = (on === undefined) ? !state.selectMode : !!on;
+        if (!state.selectMode) state.selected = {};
+        var btn = document.getElementById('schedmonSelectToggle');
+        if (btn) btn.classList.toggle('is-active', state.selectMode);
+        var bar = document.getElementById('schedmonBulkBar');
+        if (bar) bar.hidden = !state.selectMode;
+        var shell = document.querySelector('.schedmon-table-shell');
+        if (shell) shell.classList.toggle('schedmon-selecting', state.selectMode);
+        filterAll();
+    }
+    function clearSchedSelection() { state.selected = {}; filterAll(); }
+    function selectAllSchedVisible(checked) { setSchedSelected(visibleScheduleIds(), checked); filterAll(); }
+    async function deleteSchedSelected() {
+        var ids = Object.keys(state.selected).filter(function (id) { return state.selected[id]; });
+        if (!ids.length) return;
+        var runningById = {};
+        (state.all || []).forEach(function (x) { if (x._itemType === 'schedule') runningById[String(x.scheduleId || '')] = (x.status === 'running'); });
+        var deletable = ids.filter(function (id) { return !runningById[id]; });
+        var skipped = ids.length - deletable.length;
+        if (!deletable.length) { showNotif('Không thể xóa', 'Các lịch đang chạy không thể xóa. Hãy hủy trước.', 'error'); return; }
+        var taskN = selectedSchedTaskCount();
+        var msg = 'Xóa ' + taskN + ' lịch đã chọn và toàn bộ lịch sử?' + (skipped ? ' (' + skipped + ' tài khoản đang chạy sẽ được bỏ qua)' : '');
+        if (!(await nexusConfirm(msg, { title: 'Xóa lịch đã chọn', confirmText: 'Xóa', danger: true }))) return;
+        var okc = 0;
+        for (var i = 0; i < deletable.length; i++) {
+            try { var r = await fetch('/api/schedules/' + encodeURIComponent(deletable[i]), { method: 'DELETE' }); var d = await r.json(); if (!d.error) okc++; } catch (e) { /* tiếp tục */ }
+        }
+        state.selected = {};
+        showNotif('Đã xóa', 'Đã xóa ' + okc + '/' + deletable.length + ' lịch.', okc ? 'success' : 'error');
+        reload();
     }
 
     function buildActionPlanCard(plan) {
@@ -679,11 +758,17 @@
     function renderAll(items) {
         var root = document.getElementById('allList');
         if (!root) return;
+        state.rendered = items || [];
+        // Bỏ khỏi vùng chọn những lịch đã biến mất.
+        var existing = {};
+        allScheduleIds().forEach(function (id) { existing[id] = true; });
+        Object.keys(state.selected).forEach(function (id) { if (!existing[id]) delete state.selected[id]; });
         if (!items.length) {
             var emptyTitle = state.selectedDateKey ? ('Không có lịch ngày ' + formatDateKey(state.selectedDateKey, false)) : 'Chưa có lịch nào';
             var emptyText = state.selectedDateKey ? 'Chọn ngày khác trên lịch tháng hoặc bấm Bỏ lọc để xem toàn bộ.' : 'Tạo chiến dịch đầu tiên để theo dõi tại đây.';
             root.innerHTML = '<div class="schedmon-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><b>' + escHtml(emptyTitle) + '</b><p>' + escHtml(emptyText) + '</p></div>';
             setText('schedListCount', '0 lịch');
+            updateSchedBulkBar();
             return;
         }
         root.innerHTML = '';
@@ -699,6 +784,7 @@
             topCount += 1;
         });
         setText('schedListCount', topCount + ' lịch');
+        updateSchedBulkBar();
     }
 
     function filterAll() {
@@ -1179,6 +1265,26 @@
         if (nextBtn) nextBtn.addEventListener('click', function () { changeCalendarMonth(1); });
         if (calendarClearBtn) calendarClearBtn.addEventListener('click', function () { clearDateFilter(); });
         if (dateFilterClearBtn) dateFilterClearBtn.addEventListener('click', function () { clearDateFilter(); });
+
+        // Chọn nhiều lịch + xóa hàng loạt.
+        var selToggle = document.getElementById('schedmonSelectToggle');
+        if (selToggle) selToggle.addEventListener('click', function () { toggleSchedSelectMode(); });
+        var bulkClear = document.getElementById('schedmonBulkClear');
+        if (bulkClear) bulkClear.addEventListener('click', clearSchedSelection);
+        var bulkDelete = document.getElementById('schedmonBulkDelete');
+        if (bulkDelete) bulkDelete.addEventListener('click', deleteSchedSelected);
+        var bulkAll = document.getElementById('schedmonBulkAll');
+        if (bulkAll) bulkAll.addEventListener('change', function () { selectAllSchedVisible(this.checked); });
+        var allList = document.getElementById('allList');
+        if (allList) allList.addEventListener('change', function (event) {
+            var cb = event.target;
+            if (!cb || !cb.getAttribute || cb.getAttribute('data-sched-select-ids') === null) return;
+            var ids = String(cb.getAttribute('data-sched-select-ids') || '').split(',').filter(Boolean);
+            setSchedSelected(ids, cb.checked);
+            var row = cb.closest ? cb.closest('.schedule-table-row') : null;
+            if (row) row.classList.toggle('schedmon-selected', cb.checked);
+            updateSchedBulkBar();
+        });
 
         updateDateFilterUI();
         reload();
