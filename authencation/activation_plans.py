@@ -12,6 +12,7 @@ import os
 
 # Gói: key -> thông tin hiển thị. Phải khớp PLAN_OPTIONS trong license_server.py.
 ACTIVATION_DURATION_OPTIONS = {
+    "1m": {"key": "1m", "label": "1 Tháng", "days": 30, "icon": "📊", "is_permanent": False},
     "3m": {"key": "3m", "label": "3 Tháng", "days": 90, "icon": "📊", "is_permanent": False},
     "6m": {"key": "6m", "label": "6 Tháng", "days": 180, "icon": "📊", "is_permanent": False},
     "lifetime": {"key": "lifetime", "label": "Vĩnh viễn", "days": None, "icon": "💎", "is_permanent": True},
@@ -20,7 +21,7 @@ ACTIVATION_DURATION_OPTIONS = {
 
 DEFAULT_ACTIVATION_OPTION_KEY = os.getenv("DEFAULT_ACTIVATION_OPTION_KEY", "3m")
 
-_ORDER = ["3m", "6m", "lifetime", "enterprise"]
+_ORDER = ["1m", "3m", "6m", "lifetime", "enterprise"]
 
 
 def get_activation_duration_options():

@@ -845,6 +845,7 @@ except Exception as e:
 
     def get_activation_duration_options():
         return [
+            {"key": "1m", "label": "1 Tháng", "icon": "📊"},
             {"key": "3m", "label": "3 Tháng", "icon": "📊"},
             {"key": "6m", "label": "6 Tháng", "icon": "📊"},
             {"key": "lifetime", "label": "Vĩnh viễn", "icon": "💎"},

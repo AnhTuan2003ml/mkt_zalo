@@ -113,6 +113,7 @@ ADMIN_CREDENTIALS = _load_admin_credentials()
 
 # Gói: key -> (số ngày, nhãn, is_permanent)
 PLAN_OPTIONS = {
+    "1m": (30, "1 Tháng", False),
     "3m": (90, "3 Tháng", False),
     "6m": (180, "6 Tháng", False),
     "lifetime": (0, "Vĩnh viễn", True),
