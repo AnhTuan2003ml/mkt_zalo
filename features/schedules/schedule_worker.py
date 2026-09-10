@@ -7,6 +7,7 @@ import time
 import json
 import random
 import os
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -26,13 +27,28 @@ _MIN_BATCH_DELAY_SEC = 60    # tối thiểu giây nghỉ giữa các batch
 
 
 def _build_message_pool(message: str) -> list:
-    """Tách nội dung thành POOL: mỗi DÒNG không rỗng = 1 mẫu tin nhắn.
+    """Tách nội dung thành POOL: mỗi KHỐI (cách nhau bằng ≥1 DÒNG TRỐNG) = 1 mẫu tin.
 
-    Cho phép truyền nhiều mẫu (từ ô dán hoặc file .txt, mỗi dòng 1 tin) để gửi
-    ngẫu nhiên, tránh mọi người nhận cùng một nội dung (giảm nguy cơ bị chặn).
+    Tin NHIỀU DÒNG giữ nguyên xuống dòng bên trong khối; muốn nhiều mẫu để gửi
+    ngẫu nhiên thì để 1 DÒNG TRỐNG giữa các khối. Ví dụ::
+
+        Em chào chị
+        Link nhóm: https://zalo.me/g/abc      <- MẪU 1 (2 dòng)
+
+        Chào chị, shop em có mẫu mới...        <- MẪU 2
+
+    Gửi ngẫu nhiên các mẫu, tránh trùng liên tiếp (giảm nguy cơ bị chặn).
     """
-    lines = [ln.strip() for ln in str(message or "").replace("\r\n", "\n").split("\n")]
-    return [ln for ln in lines if ln]
+    text = str(message or "").replace("\r\n", "\n").replace("\r", "\n")
+    # Ngăn cách mẫu = 1+ dòng trống (dòng chỉ có khoảng trắng cũng coi là trống).
+    blocks = re.split(r"\n[ \t]*\n+", text)
+    pool = []
+    for block in blocks:
+        # Bỏ trailing space từng dòng; giữ nguyên cấu trúc xuống dòng trong khối.
+        cleaned = "\n".join(ln.rstrip() for ln in block.split("\n")).strip()
+        if cleaned:
+            pool.append(cleaned)
+    return pool
 
 
 class _MessageSpinner:

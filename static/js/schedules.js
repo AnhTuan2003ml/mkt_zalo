@@ -1510,20 +1510,22 @@ function schedShowPersonalGroupDetail(groupId) {
 }
 
 // ─── NOTIFICATION ──────────────────────────────────────────────────────
-// Nạp file .txt nội dung (mỗi dòng 1 mẫu tin) vào ô nội dung tương ứng.
+// Nạp file .txt nội dung (mỗi tin cách nhau 1 DÒNG TRỐNG) vào ô nội dung tương ứng.
 function schedLoadMsgFile(input, textareaId) {
     var f = input && input.files && input.files[0];
     if (!f) return;
     var reader = new FileReader();
     reader.onload = function (e) {
-        var text = String((e.target && e.target.result) || '').replace(/\r\n/g, '\n').trim();
+        var text = String((e.target && e.target.result) || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
         var ta = document.getElementById(textareaId);
         if (ta) {
             var cur = (ta.value || '').trim();
-            ta.value = (cur ? cur + '\n' : '') + text;
+            // Cách nội dung cũ bằng 1 DÒNG TRỐNG để không dính thành 1 mẫu.
+            ta.value = (cur ? cur + '\n\n' : '') + text;
         }
         input.value = '';  // cho phép chọn lại cùng 1 file
-        var n = text.split('\n').filter(function (x) { return x.trim(); }).length;
+        // Đếm số MẪU = số khối cách nhau bằng dòng trống.
+        var n = text.split(/\n[ \t]*\n+/).filter(function (x) { return x.trim(); }).length;
         if (typeof schedShowNotif === 'function') {
             schedShowNotif('Đã nạp file', 'Đã thêm ' + n + ' mẫu tin vào ô nội dung.', 'success');
         }
