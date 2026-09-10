@@ -95,6 +95,8 @@
         .toolbar input:focus, .toolbar select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
         .toolbar input[type=text] { min-width: 190px; flex: 1 1 190px; }
         .toolbar .date-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+        /* Nhãn "Từ"/"Đến" cùng bề rộng -> 2 input date cùng lề trái & bằng nhau. */
+        .toolbar .date-field .date-label { flex: 0 0 auto; min-width: 34px; white-space: nowrap; }
         .toolbar .count { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 
         /* Table: dùng hết chiều rộng khung, mỗi ô 1 dòng (không xuống hàng) */
@@ -191,6 +193,9 @@
             }
             .toolbar .date-field { height: auto; }
             .toolbar .date-field { justify-content: space-between; }
+            /* Input date NẰM TRONG .date-field: co giãn theo chỗ còn lại (trừ nhãn
+               "Từ"/"Đến"), KHÔNG width:100% (nếu 100% sẽ tràn khỏi field -> lệch). */
+            .toolbar .date-field input { flex: 1 1 auto; width: auto; min-width: 0; }
             .toolbar .btn { width: 100%; justify-content: center; }
             .toolbar .count { margin: 4px 0 0; text-align: center; }
 
@@ -289,8 +294,8 @@
                         <option value="disabled">Đã hủy</option>
                         <option value="expired">Hết hạn</option>
                     </select>
-                    <span class="date-field">Từ <input type="date" id="fltFrom"></span>
-                    <span class="date-field">Đến <input type="date" id="fltTo"></span>
+                    <span class="date-field"><span class="date-label">Từ</span><input type="date" id="fltFrom"></span>
+                    <span class="date-field"><span class="date-label">Đến</span><input type="date" id="fltTo"></span>
                     <button class="btn btn-primary" onclick="loadMachines()">Lọc</button>
                     <button class="btn btn-ghost" onclick="resetFilters()">Xóa lọc</button>
                     <span class="count" id="count"></span>
