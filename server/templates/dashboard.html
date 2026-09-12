@@ -118,6 +118,26 @@
         .key-chip .key-text { filter: none; }
         .key-chip .key-ico { font-size: 11px; color: var(--muted); }
 
+        /* Form tạo key doanh nghiệp */
+        .biz-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+        .biz-field { display: flex; flex-direction: column; gap: 5px; }
+        .biz-field.biz-grow { flex: 1 1 220px; min-width: 180px; }
+        .biz-field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .biz-field input, .biz-field select { height: var(--ctrl-h); padding: 0 12px; font-size: 13px;
+                   border: 1px solid #cbd5e1; border-radius: var(--radius-sm); background: #fff; color: var(--ink); }
+        .biz-field input:focus, .biz-field select:focus { outline: none; border-color: var(--brand);
+                   box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+        .biz-field #bizMax { width: 110px; }
+        .biz-result { margin-top: 14px; padding: 13px 15px; border: 1px solid var(--ok); background: var(--ok-bg);
+                   border-radius: var(--radius-sm); font-size: 13px; color: var(--ink); }
+        .biz-result b.k { font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 1px; color: var(--ok); }
+        @media (max-width: 720px) {
+            .biz-form { flex-direction: column; align-items: stretch; }
+            .biz-field, .biz-field.biz-grow { width: 100%; }
+            .biz-field #bizMax { width: 100%; }
+            .biz-actions .btn { width: 100%; }
+        }
+
         .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
         .badge.active { background: var(--ok-bg); color: var(--ok); }
         .badge.pending { background: var(--warn-bg); color: var(--warn); }
@@ -251,6 +271,7 @@
         <div class="tabs" role="tablist">
             <button class="tab active" data-tab="overview" onclick="switchTab('overview')">📊 Tổng quan</button>
             <button class="tab" data-tab="machines" onclick="switchTab('machines')">💻 Máy &amp; Kích hoạt</button>
+            <button class="tab" data-tab="biz" onclick="switchTab('biz')">🏢 Key doanh nghiệp</button>
             <button class="tab" data-tab="email" onclick="switchTab('email')">📧 Cấu hình email</button>
         </div>
 
@@ -311,6 +332,55 @@
                             </tr>
                         </thead>
                         <tbody id="rows"><tr><td colspan="11" class="empty">Đang tải...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Key doanh nghiệp -->
+        <section class="panel" id="panel-biz">
+            <div class="panel-head">
+                <h2>Key doanh nghiệp</h2>
+                <p>Tạo sẵn 1 key dùng cho nhiều máy (mặc định 10). Gửi key cho khách; mỗi máy chỉ cần nhập key để kích hoạt — không cần đăng ký từng máy trước. Hạn dùng tính từ lúc tạo và <b>dùng chung</b> cho mọi máy; nhập lại key trên 1 máy <b>không</b> làm đổi hạn.</p>
+            </div>
+            <div class="card">
+                <div class="card-pad" style="border-bottom:1px solid var(--line-soft)">
+                    <label class="field-label">➕ Tạo key mới</label>
+                    <div class="biz-form">
+                        <div class="biz-field">
+                            <label>Số máy tối đa</label>
+                            <input type="number" id="bizMax" min="1" max="1000" value="10">
+                        </div>
+                        <div class="biz-field">
+                            <label>Thời hạn</label>
+                            <select id="bizDur">
+                                <option value="30">1 Tháng (30 ngày)</option>
+                                <option value="90">3 Tháng (90 ngày)</option>
+                                <option value="180" selected>6 Tháng (180 ngày)</option>
+                                <option value="365">1 Năm (365 ngày)</option>
+                                <option value="0">Vĩnh viễn</option>
+                            </select>
+                        </div>
+                        <div class="biz-field biz-grow">
+                            <label>Ghi chú (tuỳ chọn)</label>
+                            <input type="text" id="bizNote" placeholder="VD: Công ty ABC">
+                        </div>
+                        <div class="biz-field biz-actions">
+                            <button class="btn btn-primary" onclick="createBusinessKey()">Tạo key</button>
+                        </div>
+                    </div>
+                    <div id="bizResult" class="biz-result" hidden></div>
+                </div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:52px">#</th><th>Key</th><th style="width:180px">Gói / Hạn</th>
+                                <th style="width:110px">Máy</th><th style="width:120px">Trạng thái</th>
+                                <th style="width:120px">Ngày tạo</th><th style="width:210px">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bizRows"><tr><td colspan="7" class="empty">Đang tải...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -430,7 +500,7 @@
         function renderRows(machines) {
             var tb = document.getElementById('rows');
             if (!machines.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Không có máy nào khớp bộ lọc.</td></tr>'; return; }
-            tb.innerHTML = machines.map(function (m) {
+            tb.innerHTML = machines.map(function (m, idx) {
                 var acts = '';
                 if (m.status !== 'active') acts += '<button class="a-on" onclick="act(' + m.id + ',\'activate\')">Kích hoạt</button>';
                 if (m.status !== 'disabled') acts += '<button class="a-off" onclick="act(' + m.id + ',\'deactivate\')">Hủy</button>';
@@ -438,7 +508,7 @@
                 acts += '<button class="a-regen" onclick="act(' + m.id + ',\'regen\')">Key mới</button>';
                 acts += '<button class="a-del" onclick="delMachine(' + m.id + ')">Xóa</button>';
                 return '<tr>' +
-                    '<td data-label="#">' + m.id + '</td>' +
+                    '<td data-label="#">' + (idx + 1) + '</td>' +
                     '<td data-label="Tên máy">' + esc(m.machine_name || '-') + '</td>' +
                     '<td class="mac" data-label="MAC">' + esc(m.mac) + '</td>' +
                     '<td data-label="IP">' + esc(m.ip || '-') + '</td>' +
@@ -678,8 +748,100 @@
                 });
         }
 
+        /* ── Key doanh nghiệp ──────────────────────────────── */
+        async function loadBusinessKeys() {
+            var tb = document.getElementById('bizRows');
+            try {
+                var res = await fetch('/api/admin/business-keys');
+                if (guard(res)) return;
+                var data = await res.json();
+                var keys = (data && data.keys) || [];
+                if (!keys.length) {
+                    tb.innerHTML = '<tr><td colspan="7" class="empty">Chưa có key doanh nghiệp nào. Bấm “Tạo key” ở trên.</td></tr>';
+                    return;
+                }
+                tb.innerHTML = keys.map(function (k, i) {
+                    var han = k.is_permanent ? 'Vĩnh viễn' : (k.expiry ? fmt(k.expiry).slice(0, 16) : '-');
+                    var st = (k.status === 'disabled') ? 'disabled' : 'active';
+                    var stLabel = (st === 'disabled') ? 'Đã tắt' : 'Đang bật';
+                    var toggleLabel = (st === 'disabled') ? 'Bật' : 'Tắt';
+                    var toggleTo = (st === 'disabled') ? 'active' : 'disabled';
+                    var full = (k.bound >= k.max_machines);
+                    var srcTag = (k.source === 'machine')
+                        ? '<br><span style="color:var(--muted);font-size:11px">Qua đăng ký máy</span>' : '';
+                    var kesc = esc(k.license_key);
+                    var actions = '<button class="a-plan" onclick="toggleBizKey(\'' + kesc + '\',\'' + toggleTo + '\')">' + toggleLabel + '</button>';
+                    if (k.source === 'db') {
+                        actions += '<button class="a-del" onclick="deleteBizKey(' + k.id + ')">Xóa</button>';
+                    }
+                    return '<tr>' +
+                        '<td data-label="#">' + (i + 1) + '</td>' +
+                        '<td data-label="Key"><span class="key-chip" title="Bấm để copy key" data-key="' + kesc + '" onclick="copyKey(this)"><span class="key-text">' + kesc + '</span><span class="key-ico">📋</span></span>' + srcTag + (k.note ? '<br><span style="color:var(--muted);font-size:11px">' + esc(k.note) + '</span>' : '') + '</td>' +
+                        '<td data-label="Gói / Hạn">' + esc(k.plan_label || k.plan_key || '-') + '<br><span style="color:var(--muted);font-size:11px">' + han + '</span></td>' +
+                        '<td data-label="Máy"><b' + (full ? ' style="color:var(--danger)"' : '') + '>' + (k.bound || 0) + '</b> / ' + (k.max_machines || 0) + '</td>' +
+                        '<td data-label="Trạng thái"><span class="badge ' + st + '">' + stLabel + '</span></td>' +
+                        '<td data-label="Ngày tạo">' + fmt((k.created_at || '').slice(0, 10)) + '</td>' +
+                        '<td class="cell-actions" data-label="Thao tác"><div class="act">' + actions + '</div></td>' +
+                    '</tr>';
+                }).join('');
+            } catch (e) {
+                tb.innerHTML = '<tr><td colspan="7" class="empty">Lỗi tải danh sách.</td></tr>';
+            }
+        }
+
+        async function createBusinessKey() {
+            var max = parseInt(document.getElementById('bizMax').value || '10', 10) || 10;
+            var days = parseInt(document.getElementById('bizDur').value || '0', 10) || 0;
+            var note = document.getElementById('bizNote').value || '';
+            try {
+                var res = await fetch('/api/admin/business-keys', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ maxMachines: max, days: days, permanent: (days === 0), note: note }),
+                });
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) { toast(data.error || 'Tạo key thất bại', 'err'); return; }
+                var box = document.getElementById('bizResult');
+                var han = data.isPermanent ? 'Vĩnh viễn' : (data.expiry ? fmt(data.expiry).slice(0, 16) : '-');
+                box.hidden = false;
+                box.innerHTML = '✅ Đã tạo key: <span class="key-chip" data-key="' + esc(data.key) + '" onclick="copyKey(this)" title="Bấm để copy"><span class="key-text">' + esc(data.key) + '</span><span class="key-ico">📋</span></span>' +
+                    ' &nbsp;<span style="color:var(--muted)">Tối đa <b>' + data.maxMachines + '</b> máy · Hạn: <b>' + han + '</b>. Gửi key này cho khách, mỗi máy nhập để kích hoạt.</span>';
+                document.getElementById('bizNote').value = '';
+                toast('Đã tạo key doanh nghiệp', 'ok');
+                loadBusinessKeys();
+            } catch (e) { toast('Lỗi kết nối', 'err'); }
+        }
+
+        async function toggleBizKey(key, to) {
+            try {
+                var res = await fetch('/api/admin/business-keys/status', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: key, status: to }),
+                });
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) { toast(data.error || 'Lỗi', 'err'); return; }
+                toast(to === 'disabled' ? 'Đã tắt key (khóa các máy dùng key này).' : 'Đã bật lại key.', 'ok');
+                loadBusinessKeys(); loadMachines();
+            } catch (e) { toast('Lỗi kết nối', 'err'); }
+        }
+
+        function deleteBizKey(id) {
+            askConfirm('Xóa key doanh nghiệp',
+                'Xóa key này? Các máy đã kích hoạt vẫn giữ nguyên, nhưng không thể thêm máy mới bằng key này nữa.',
+                async function () {
+                    try {
+                        var res = await fetch('/api/admin/business-keys/' + id, { method: 'DELETE' });
+                        if (guard(res)) return;
+                        toast('Đã xóa key.', 'ok');
+                        loadBusinessKeys();
+                    } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+                });
+        }
+
         loadEmails();
         loadMachines();
+        loadBusinessKeys();
         loadKeyCutoff();
         setInterval(loadMachines, 15000);
     </script>

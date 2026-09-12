@@ -164,6 +164,27 @@ def init_db():
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT DEFAULT '')"
         )
+        # Key DOANH NGHIỆP: admin tạo sẵn 1 key cho nhiều MAC (mặc định 10). Máy
+        # khác nhập key này để kích hoạt (không cần đăng ký từng máy trước). Mỗi MAC
+        # kích hoạt sẽ tạo 1 dòng trong bảng machines, kế thừa hạn dùng của key.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS business_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                license_key TEXT UNIQUE NOT NULL,
+                plan_key TEXT DEFAULT 'enterprise',
+                plan_label TEXT DEFAULT '',
+                is_permanent INTEGER DEFAULT 0,
+                expiry TEXT DEFAULT '',              -- hạn dùng CHUNG cho mọi máy của key
+                max_machines INTEGER DEFAULT 10,
+                email TEXT DEFAULT '',
+                note TEXT DEFAULT '',
+                status TEXT DEFAULT 'active',        -- active | disabled
+                created_at TEXT DEFAULT '',
+                key_issued_at TEXT DEFAULT ''
+            )
+            """
+        )
         # Migration cột mới.
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
         if "key_issued_at" not in cols:
@@ -613,6 +634,38 @@ def api_register():
     })
 
 
+def _resolve_key_template(conn, key):
+    """Tìm 'khuôn' của 1 key nhiều máy (doanh nghiệp) để MAC mới kích hoạt kế thừa.
+
+    Ưu tiên: (1) máy đã đăng ký với key có max_machines>1 (tương thích cũ);
+    (2) key do admin tạo sẵn trong bảng ``business_keys``. Trả dict hoặc None.
+    """
+    ent = conn.execute(
+        "SELECT * FROM machines WHERE license_key=? AND max_machines>1 ORDER BY id LIMIT 1",
+        (key,),
+    ).fetchone()
+    if ent:
+        d = _row_to_dict(ent)
+        return {
+            "plan_key": d["plan_key"], "plan_label": d["plan_label"],
+            "is_permanent": d["is_permanent"], "expiry": d["expiry"],
+            "max_machines": int(d["max_machines"]),
+            "key_issued_at": d.get("key_issued_at") or "",
+            "email_sent_at": d.get("email_sent_at") or "", "status": "active",
+        }
+    b = conn.execute("SELECT * FROM business_keys WHERE license_key=?", (key,)).fetchone()
+    if b:
+        b = dict(b)
+        return {
+            "plan_key": b["plan_key"], "plan_label": b["plan_label"],
+            "is_permanent": b["is_permanent"], "expiry": b["expiry"],
+            "max_machines": int(b["max_machines"]),
+            "key_issued_at": b.get("key_issued_at") or "",
+            "email_sent_at": "", "status": b.get("status") or "active",
+        }
+    return None
+
+
 @app.route("/api/verify", methods=["POST"])
 def api_verify():
     """Client xác thực key. Trả quyền tính năng nếu hợp lệ + còn hạn + active."""
@@ -635,12 +688,10 @@ def api_verify():
         # Gói DOANH NGHIỆP: 1 key dùng cho nhiều MAC. Nếu MAC này chưa gắn key đó
         # mà key là key doanh nghiệp còn chỗ (< max_machines) thì gắn thêm MAC.
         if (not row) or (row["license_key"] != key):
-            ent = conn.execute(
-                "SELECT * FROM machines WHERE license_key=? AND max_machines>1 ORDER BY id LIMIT 1",
-                (key,),
-            ).fetchone()
-            if ent:
-                ent = _row_to_dict(ent)
+            ent = _resolve_key_template(conn, key)
+            if ent and int(ent["max_machines"]) > 1:
+                if ent.get("status") == "disabled":
+                    return jsonify({"valid": False, "error": "Key doanh nghiệp đã bị vô hiệu hóa."}), 403
                 bound = conn.execute(
                     "SELECT COUNT(DISTINCT mac) AS c FROM machines WHERE license_key=?", (key,)
                 ).fetchone()["c"]
@@ -650,7 +701,7 @@ def api_verify():
                 if not already and bound >= int(ent["max_machines"]):
                     _record_verify_fail(ip)
                     return jsonify({"valid": False, "error": f"Key doanh nghiệp đã đủ {ent['max_machines']} máy."}), 403
-                # Gắn MAC này vào key doanh nghiệp (kế thừa gói/hạn dùng của key).
+                # Gắn MAC này vào key doanh nghiệp (kế thừa gói/HẠN DÙNG CHUNG của key).
                 conn.execute(
                     """INSERT INTO machines (mac, machine_name, ip, plan_key, plan_label, license_key,
                        status, is_permanent, created_at, activated_at, expiry, last_seen,
@@ -813,6 +864,165 @@ def api_machines():
         "expiringThisMonth": expiring_this_month,
     }
     return jsonify({"success": True, "machines": items, "stats": stats})
+
+
+@app.route("/api/admin/business-keys", methods=["GET"])
+def api_business_keys():
+    """Danh sách key doanh nghiệp + số máy đã kích hoạt trên mỗi key.
+
+    Gộp 2 nguồn: (1) key admin tạo qua nút (bảng business_keys); (2) key doanh
+    nghiệp phát QUA ĐĂNG KÝ MÁY (machines.max_machines>1) chưa có trong bảng đó.
+    """
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    with closing(_conn()) as conn:
+        items = []
+        seen = set()
+        for r in conn.execute("SELECT * FROM business_keys ORDER BY created_at DESC").fetchall():
+            d = dict(r)
+            d["source"] = "db"
+            d["bound"] = conn.execute(
+                "SELECT COUNT(DISTINCT mac) AS c FROM machines WHERE license_key=?",
+                (d["license_key"],),
+            ).fetchone()["c"]
+            items.append(d)
+            seen.add(d["license_key"])
+        # Key doanh nghiệp phát qua đăng ký máy (gói enterprise cũ) — gom theo key.
+        mrows = conn.execute(
+            """SELECT license_key, plan_key, plan_label, MAX(is_permanent) AS is_permanent,
+                      MAX(expiry) AS expiry, MAX(max_machines) AS max_machines,
+                      MIN(created_at) AS created_at, COUNT(DISTINCT mac) AS bound,
+                      SUM(CASE WHEN status!='disabled' THEN 1 ELSE 0 END) AS active_cnt
+               FROM machines WHERE max_machines>1 AND license_key!=''
+               GROUP BY license_key ORDER BY MIN(created_at) DESC"""
+        ).fetchall()
+        for mr in mrows:
+            d = dict(mr)
+            if d["license_key"] in seen:
+                continue
+            d["source"] = "machine"
+            d["status"] = "active" if int(d.get("active_cnt") or 0) > 0 else "disabled"
+            d["note"] = ""
+            items.append(d)
+    return jsonify({"success": True, "keys": items})
+
+
+@app.route("/api/admin/business-keys", methods=["POST"])
+def api_create_business_key():
+    """Tạo 1 KEY DOANH NGHIỆP dùng cho nhiều MAC (mặc định 10). Máy khác chỉ cần
+    nhập key này để kích hoạt; hạn dùng tính từ lúc tạo, DÙNG CHUNG cho mọi máy."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        max_machines = int(data.get("maxMachines") or data.get("max_machines") or 10)
+    except (TypeError, ValueError):
+        max_machines = 10
+    max_machines = max(1, min(max_machines, 1000))
+
+    # Thời hạn: nhận days (0 = vĩnh viễn) nếu có, ngược lại theo plan_key.
+    plan_key = str(data.get("plan") or data.get("plan_key") or "enterprise").strip().lower()
+    if data.get("days") is not None or data.get("permanent") is not None:
+        is_permanent = bool(data.get("permanent"))
+        try:
+            days = int(data.get("days") or 0)
+        except (TypeError, ValueError):
+            days = 0
+        plan_label = str(data.get("planLabel") or "").strip()
+    else:
+        days, plan_label, is_permanent = PLAN_OPTIONS.get(plan_key, (0, "Doanh nghiệp", True))
+
+    if is_permanent or days <= 0:
+        is_permanent, expiry = True, ""
+    else:
+        is_permanent = False
+        expiry = (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
+    if not plan_label:
+        plan_label = f"Doanh nghiệp ({max_machines} máy)" + ("" if is_permanent else f" · {days} ngày")
+
+    email = str(data.get("email") or "").strip()
+    note = str(data.get("note") or "").strip()
+    now = _now()
+    with _db_lock, closing(_conn()) as conn:
+        key = ""
+        for _ in range(30):  # gen key không trùng (cả business_keys lẫn machines)
+            cand = _gen_key(14)
+            dup = conn.execute(
+                "SELECT 1 FROM business_keys WHERE license_key=? "
+                "UNION SELECT 1 FROM machines WHERE license_key=?", (cand, cand)
+            ).fetchone()
+            if not dup:
+                key = cand
+                break
+        if not key:
+            return jsonify({"success": False, "error": "Không tạo được key duy nhất, thử lại."}), 500
+        conn.execute(
+            """INSERT INTO business_keys (license_key, plan_key, plan_label, is_permanent,
+               expiry, max_machines, email, note, status, created_at, key_issued_at)
+               VALUES (?,?,?,?,?,?,?,?, 'active', ?, ?)""",
+            (key, plan_key, plan_label, 1 if is_permanent else 0, expiry,
+             max_machines, email, note, now, now),
+        )
+        conn.commit()
+    return jsonify({
+        "success": True, "key": key, "planKey": plan_key, "planLabel": plan_label,
+        "isPermanent": is_permanent, "expiry": expiry, "maxMachines": max_machines,
+    })
+
+
+@app.route("/api/admin/business-keys/<int:bid>/status", methods=["POST"])
+def api_business_key_status(bid):
+    """Bật/tắt (active|disabled) 1 key doanh nghiệp. Tắt sẽ khóa luôn các máy đã
+    kích hoạt bằng key đó."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    new_status = str((request.get_json(silent=True) or {}).get("status") or "").strip().lower()
+    if new_status not in ("active", "disabled"):
+        return jsonify({"success": False, "error": "status phải là active hoặc disabled."}), 400
+    with _db_lock, closing(_conn()) as conn:
+        row = conn.execute("SELECT * FROM business_keys WHERE id=?", (bid,)).fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Không tìm thấy key."}), 404
+        conn.execute("UPDATE business_keys SET status=? WHERE id=?", (new_status, bid))
+        # Đồng bộ trạng thái các máy đã kích hoạt bằng key này.
+        conn.execute(
+            "UPDATE machines SET status=? WHERE license_key=?",
+            ("disabled" if new_status == "disabled" else "active", row["license_key"]),
+        )
+        conn.commit()
+    return jsonify({"success": True, "status": new_status})
+
+
+@app.route("/api/admin/business-keys/status", methods=["POST"])
+def api_business_key_status_by_key():
+    """Bật/tắt key doanh nghiệp THEO license_key — dùng cho cả key tạo qua nút lẫn
+    key phát qua đăng ký máy. Đồng bộ cả bảng business_keys lẫn machines."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    key = str(data.get("key") or "").strip().upper()
+    new_status = str(data.get("status") or "").strip().lower()
+    if not key:
+        return jsonify({"success": False, "error": "Thiếu key."}), 400
+    if new_status not in ("active", "disabled"):
+        return jsonify({"success": False, "error": "status phải là active hoặc disabled."}), 400
+    with _db_lock, closing(_conn()) as conn:
+        conn.execute("UPDATE business_keys SET status=? WHERE license_key=?", (new_status, key))
+        conn.execute("UPDATE machines SET status=? WHERE license_key=?", (new_status, key))
+        conn.commit()
+    return jsonify({"success": True, "status": new_status})
+
+
+@app.route("/api/admin/business-keys/<int:bid>", methods=["DELETE"])
+def api_delete_business_key(bid):
+    """Xóa key doanh nghiệp. Không xóa các máy đã kích hoạt (giữ lịch sử); chỉ gỡ
+    khuôn key nên không thể gắn thêm MAC mới bằng key này nữa."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    with _db_lock, closing(_conn()) as conn:
+        conn.execute("DELETE FROM business_keys WHERE id=?", (bid,))
+        conn.commit()
+    return jsonify({"success": True})
 
 
 def _set_status(machine_id, new_status):
