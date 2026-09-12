@@ -1025,6 +1025,24 @@ def api_delete_business_key(bid):
     return jsonify({"success": True})
 
 
+@app.route("/api/admin/business-keys/machines", methods=["GET"])
+def api_business_key_machines():
+    """Danh sách TỪNG MÁY đã kích hoạt bằng 1 key doanh nghiệp (theo license_key).
+
+    Dùng để xem chi tiết + disable/xóa từng máy riêng của key đó (tái dùng các
+    endpoint /api/admin/machines/<id>/... sẵn có)."""
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    key = str(request.args.get("key") or "").strip().upper()
+    if not key:
+        return jsonify({"success": False, "error": "Thiếu key."}), 400
+    with closing(_conn()) as conn:
+        rows = conn.execute(
+            "SELECT * FROM machines WHERE license_key=? ORDER BY created_at DESC", (key,)
+        ).fetchall()
+    return jsonify({"success": True, "machines": [_row_to_dict(r) for r in rows]})
+
+
 def _set_status(machine_id, new_status):
     with _db_lock, closing(_conn()) as conn:
         row = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()

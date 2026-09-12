@@ -151,7 +151,17 @@
         .a-plan { background: var(--warn-bg); color: var(--warn); }
         .a-regen { background: var(--info-bg); color: var(--info); }
         .a-del { background: var(--surface-alt); color: var(--muted); }
+        .a-view { background: var(--info-bg); color: var(--info); }
         .act button:hover { filter: brightness(.96); }
+
+        /* Chi tiết máy của 1 key doanh nghiệp */
+        .biz-detail-row > td { background: var(--surface-alt); padding: 0; }
+        .biz-detail { padding: 12px 14px; }
+        .biz-detail .empty { padding: 10px; color: var(--muted); font-size: 13px; }
+        .biz-mtable { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+        .biz-mtable th, .biz-mtable td { padding: 8px 10px; font-size: 12.5px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+        .biz-mtable thead th { background: var(--surface-alt); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+        .biz-mtable tbody tr:last-child td { border-bottom: none; }
 
         .empty { text-align: center; color: var(--faint); padding: 40px 20px; }
 
@@ -770,7 +780,9 @@
                     var srcTag = (k.source === 'machine')
                         ? '<br><span style="color:var(--muted);font-size:11px">Qua đăng ký máy</span>' : '';
                     var kesc = esc(k.license_key);
-                    var actions = '<button class="a-plan" onclick="toggleBizKey(\'' + kesc + '\',\'' + toggleTo + '\')">' + toggleLabel + '</button>';
+                    var kjs = kesc.replace(/'/g, "\\'");
+                    var actions = '<button class="a-view" onclick="toggleBizMachines(\'' + kjs + '\', this)">👁 Xem máy (' + (k.bound || 0) + ')</button>';
+                    actions += '<button class="a-plan" onclick="toggleBizKey(\'' + kjs + '\',\'' + toggleTo + '\')">' + toggleLabel + '</button>';
                     if (k.source === 'db') {
                         actions += '<button class="a-del" onclick="deleteBizKey(' + k.id + ')">Xóa</button>';
                     }
@@ -782,7 +794,8 @@
                         '<td data-label="Trạng thái"><span class="badge ' + st + '">' + stLabel + '</span></td>' +
                         '<td data-label="Ngày tạo">' + fmt((k.created_at || '').slice(0, 10)) + '</td>' +
                         '<td class="cell-actions" data-label="Thao tác"><div class="act">' + actions + '</div></td>' +
-                    '</tr>';
+                    '</tr>' +
+                    '<tr class="biz-detail-row" data-key="' + kesc + '" hidden><td colspan="7"><div class="biz-detail" data-key="' + kesc + '"><div class="empty">Đang tải máy...</div></div></td></tr>';
                 }).join('');
             } catch (e) {
                 tb.innerHTML = '<tr><td colspan="7" class="empty">Lỗi tải danh sách.</td></tr>';
@@ -824,6 +837,67 @@
                 toast(to === 'disabled' ? 'Đã tắt key (khóa các máy dùng key này).' : 'Đã bật lại key.', 'ok');
                 loadBusinessKeys(); loadMachines();
             } catch (e) { toast('Lỗi kết nối', 'err'); }
+        }
+
+        function toggleBizMachines(key, btn) {
+            var tr = document.querySelector('.biz-detail-row[data-key="' + key + '"]');
+            if (!tr) return;
+            if (tr.hidden) { tr.hidden = false; loadBizMachines(key); }
+            else { tr.hidden = true; }
+        }
+
+        async function loadBizMachines(key) {
+            var box = document.querySelector('.biz-detail[data-key="' + key + '"]');
+            if (!box) return;
+            box.innerHTML = '<div class="empty">Đang tải máy...</div>';
+            try {
+                var res = await fetch('/api/admin/business-keys/machines?key=' + encodeURIComponent(key));
+                if (guard(res)) return;
+                var data = await res.json();
+                var ms = (data && data.machines) || [];
+                if (!ms.length) { box.innerHTML = '<div class="empty">Chưa có máy nào kích hoạt bằng key này.</div>'; return; }
+                var kjs = key.replace(/'/g, "\\'");
+                box.innerHTML = '<table class="biz-mtable"><thead><tr>' +
+                    '<th>#</th><th>Tên máy</th><th>MAC</th><th>IP</th><th>Trạng thái</th><th>Kích hoạt lúc</th><th>Hết hạn</th><th>Thao tác</th>' +
+                    '</tr></thead><tbody>' + ms.map(function (m, i) {
+                        var acts = '';
+                        if (m.status !== 'active') acts += '<button class="a-on" onclick="bizMachineAct(' + m.id + ",'activate','" + kjs + "')\">Kích hoạt</button>";
+                        if (m.status !== 'disabled') acts += '<button class="a-off" onclick="bizMachineAct(' + m.id + ",'deactivate','" + kjs + "')\">Hủy</button>";
+                        acts += '<button class="a-del" onclick="bizDeleteMachine(' + m.id + ",'" + kjs + "')\">Xóa</button>";
+                        return '<tr>' +
+                            '<td>' + (i + 1) + '</td>' +
+                            '<td>' + esc(m.machine_name || '-') + '</td>' +
+                            '<td class="mac">' + esc(m.mac) + '</td>' +
+                            '<td>' + esc(m.ip || '-') + '</td>' +
+                            '<td><span class="badge ' + esc(m.status) + '">' + statusLabel(m.status) + '</span></td>' +
+                            '<td>' + fmt(m.activated_at) + '</td>' +
+                            '<td>' + (m.is_permanent ? 'Vĩnh viễn' : fmt(m.expiry)) + '</td>' +
+                            '<td class="cell-actions"><div class="act">' + acts + '</div></td>' +
+                        '</tr>';
+                    }).join('') + '</tbody></table>';
+            } catch (e) { box.innerHTML = '<div class="empty">Lỗi tải máy.</div>'; }
+        }
+
+        async function bizMachineAct(id, action, key) {
+            try {
+                var res = await fetch('/api/admin/machines/' + id + '/' + action, { method: 'POST' });
+                if (guard(res)) return;
+                toast(action === 'activate' ? 'Đã kích hoạt máy.' : 'Đã hủy máy.', 'ok');
+                loadBizMachines(key); loadMachines();
+            } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+        }
+
+        function bizDeleteMachine(id, key) {
+            askConfirm('Xóa máy khỏi key',
+                'Xóa máy này khỏi key doanh nghiệp? Máy sẽ cần nhập lại key để kích hoạt (nếu key còn chỗ).',
+                async function () {
+                    try {
+                        var res = await fetch('/api/admin/machines/' + id, { method: 'DELETE' });
+                        if (guard(res)) return;
+                        toast('Đã xóa máy.', 'ok');
+                        loadBizMachines(key); loadMachines();
+                    } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+                });
         }
 
         function deleteBizKey(id) {
