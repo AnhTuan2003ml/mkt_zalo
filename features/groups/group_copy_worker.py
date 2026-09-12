@@ -1387,21 +1387,20 @@ class GroupCopyWorker:
         # CHƯA là bạn — độc lập với việc mời trực tiếp bạn bè ở trên (không loại trừ
         # nhau nữa). Giãn nhịp chống spam: 1 người/run, mỗi run cách 5–20 phút.
         if remaining_quota > 0:
-            direct_set = {str(x or "").strip() for x in direct_ids}
-            # Ưu tiên người CHƯA là bạn (cần gửi kết bạn + tin mời).
+            # MẶC ĐỊNH LUÔN GỬI KẾT BẠN: KHÔNG bỏ qua người vừa được mời trực tiếp
+            # ("nhắn được thì bỏ qua kết bạn" là nguyên nhân trước đây khiến không gửi
+            # kết bạn). Ưu tiên người CHƯA là bạn (phải kết bạn mới vào nhóm được);
+            # hết mới tới người còn lại đang pending.
             target = next(
                 (m for m in _pending_members(job)
                  if str(m.get("userId") or "").strip()
-                 and str(m.get("userId")).strip() not in direct_set
                  and m.get("isFriend") is not True),
                 None,
             )
             if target is None:
-                # Hết người lạ -> gửi cho bất kỳ ai còn pending (chưa mời trực tiếp run này).
                 target = next(
                     (m for m in _pending_members(job)
-                     if str(m.get("userId") or "").strip()
-                     and str(m.get("userId")).strip() not in direct_set),
+                     if str(m.get("userId") or "").strip()),
                     None,
                 )
             if target is not None:
@@ -1490,7 +1489,10 @@ class GroupCopyWorker:
             if creating_new_group
             else f"Đã lấy link nhóm và thử thêm trực tiếp {len(direct_ids)} người"
         )
-        prefix += f"; đã gửi {friend_request_sent}/{_daily_limit(job)} lời mời kết bạn hôm nay"
+        # Hiển thị TỔNG đã gửi HÔM NAY (cộng dồn) chứ không phải số của riêng run này
+        # (mỗi run chỉ gửi tối đa 1) — nếu không sẽ luôn thấy 0/1 và tưởng "không tăng".
+        sent_today = int(job.get("dailyFriendRequestCount") or 0)
+        prefix += f"; đã gửi {sent_today}/{_daily_limit(job)} lời mời kết bạn hôm nay"
         if quota_deferred:
             prefix += f", còn {quota_deferred} người chờ hạn mức ngày kế tiếp"
         prefix += "."
