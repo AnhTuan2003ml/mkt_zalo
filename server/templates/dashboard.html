@@ -154,13 +154,13 @@
         .a-view { background: var(--info-bg); color: var(--info); }
         .act button:hover { filter: brightness(.96); }
 
-        /* Chi tiết máy của 1 key doanh nghiệp */
-        .biz-detail-row > td { background: var(--surface-alt); padding: 0; }
-        .biz-detail { padding: 12px 14px; }
-        .biz-detail .empty { padding: 10px; color: var(--muted); font-size: 13px; }
-        .biz-mtable { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+        /* Popup danh sách máy của 1 key doanh nghiệp */
+        .modal.modal-lg { width: min(920px, 100%); }
+        .biz-modal-body { max-height: 60vh; overflow: auto; border: 1px solid var(--line-soft); border-radius: 10px; }
+        .biz-modal-body .empty { padding: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+        .biz-mtable { width: 100%; border-collapse: collapse; background: var(--surface); overflow: hidden; }
         .biz-mtable th, .biz-mtable td { padding: 8px 10px; font-size: 12.5px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
-        .biz-mtable thead th { background: var(--surface-alt); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+        .biz-mtable thead th { background: var(--surface-alt); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; z-index: 1; }
         .biz-mtable tbody tr:last-child td { border-bottom: none; }
 
         .empty { text-align: center; color: var(--faint); padding: 40px 20px; }
@@ -445,6 +445,18 @@
             <div class="modal-actions">
                 <button class="btn btn-ghost" onclick="closeConfirm()">Hủy</button>
                 <button class="btn btn-primary" id="confirmOk">Đồng ý</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal danh sách máy của key doanh nghiệp -->
+    <div class="modal-mask" id="bizMachinesModal">
+        <div class="modal modal-lg">
+            <h3>Máy dùng key <span id="bizMachinesKey" class="mac"></span></h3>
+            <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Có thể kích hoạt / hủy / xóa riêng từng máy của key này.</p>
+            <div class="biz-modal-body" id="bizMachinesBody"><div class="empty">Đang tải...</div></div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeBizMachines()">Đóng</button>
             </div>
         </div>
     </div>
@@ -781,7 +793,7 @@
                         ? '<br><span style="color:var(--muted);font-size:11px">Qua đăng ký máy</span>' : '';
                     var kesc = esc(k.license_key);
                     var kjs = kesc.replace(/'/g, "\\'");
-                    var actions = '<button class="a-view" onclick="toggleBizMachines(\'' + kjs + '\', this)">👁 Xem máy (' + (k.bound || 0) + ')</button>';
+                    var actions = '<button class="a-view" onclick="openBizMachines(\'' + kjs + '\')">👁 Xem máy (' + (k.bound || 0) + ')</button>';
                     actions += '<button class="a-plan" onclick="toggleBizKey(\'' + kjs + '\',\'' + toggleTo + '\')">' + toggleLabel + '</button>';
                     if (k.source === 'db') {
                         actions += '<button class="a-del" onclick="deleteBizKey(' + k.id + ')">Xóa</button>';
@@ -794,8 +806,7 @@
                         '<td data-label="Trạng thái"><span class="badge ' + st + '">' + stLabel + '</span></td>' +
                         '<td data-label="Ngày tạo">' + fmt((k.created_at || '').slice(0, 10)) + '</td>' +
                         '<td class="cell-actions" data-label="Thao tác"><div class="act">' + actions + '</div></td>' +
-                    '</tr>' +
-                    '<tr class="biz-detail-row" data-key="' + kesc + '" hidden><td colspan="7"><div class="biz-detail" data-key="' + kesc + '"><div class="empty">Đang tải máy...</div></div></td></tr>';
+                    '</tr>';
                 }).join('');
             } catch (e) {
                 tb.innerHTML = '<tr><td colspan="7" class="empty">Lỗi tải danh sách.</td></tr>';
@@ -839,15 +850,21 @@
             } catch (e) { toast('Lỗi kết nối', 'err'); }
         }
 
-        function toggleBizMachines(key, btn) {
-            var tr = document.querySelector('.biz-detail-row[data-key="' + key + '"]');
-            if (!tr) return;
-            if (tr.hidden) { tr.hidden = false; loadBizMachines(key); }
-            else { tr.hidden = true; }
+        var bizModalKey = '';
+        function openBizMachines(key) {
+            bizModalKey = key;
+            document.getElementById('bizMachinesKey').textContent = key;
+            document.getElementById('bizMachinesModal').classList.add('show');
+            loadBizMachines(key);
+        }
+        function closeBizMachines() {
+            document.getElementById('bizMachinesModal').classList.remove('show');
+            bizModalKey = '';
+            loadBusinessKeys();  // cập nhật lại số máy (bound) sau khi thao tác
         }
 
         async function loadBizMachines(key) {
-            var box = document.querySelector('.biz-detail[data-key="' + key + '"]');
+            var box = document.getElementById('bizMachinesBody');
             if (!box) return;
             box.innerHTML = '<div class="empty">Đang tải máy...</div>';
             try {
