@@ -46,3 +46,6 @@ ENV/
 Thumbs.db
 
 *.exe
+
+# Aff webhook tach sang repo rieng (webhook_aff)
+webhook/

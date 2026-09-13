@@ -263,6 +263,7 @@ from features.messages.unread_manager import (
     dismiss_group_messages,
     sync_unread_messages,
     get_group_latest_messages,
+    get_group_messages_since,
     start_unread_worker,
 )
 from core.zalo.zalo_config import get_zpw_ver
@@ -274,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.1.7"
+APP_VERSION = "1.3.0"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -835,57 +836,22 @@ def _update_action_plan_batch_status(plan_type: str, plan_id: str, batch_day, pa
     _save_action_plan_store(plan_type, plans)
     return plan, batch
 
-# ─── Device Activation / Info (optional - for device management) ─────────────
+# ─── Danh sách gói kích hoạt (xác thực thực tế qua máy chủ license) ───────────
 try:
-    from authencation.send_info_device import (
-        register_device_on_startup,
-        register_device_with_activation,
-        check_activation_on_startup,
-        validate_activation_code,
-        save_user_activation_code,
-        send_device_log,
-        get_activation_duration_options,
-        get_license_plan,
-    )
+    from authencation.activation_plans import get_activation_duration_options
     DEVICE_TRACKING_ENABLED = True
 except Exception as e:
-    print(f"⚠️  Device activation disabled: {str(e)}")
+    print(f"⚠️  Activation options unavailable: {str(e)}")
     DEVICE_TRACKING_ENABLED = False
-
-    def validate_activation_code():
-        return True, 9999, "Activation module disabled"
-
-    def save_user_activation_code(code_text):
-        return False, "Activation module disabled"
-
-    def register_device_on_startup(*args, **kwargs):
-        return False
-
-    def register_device_with_activation(*args, **kwargs):
-        return False
-
-    def check_activation_on_startup():
-        return True
-
-    def send_device_log(action, details=None):
-        return False
 
     def get_activation_duration_options():
         return [
-            {"key": "3d", "label": "3 Ngày", "icon": "📅"},
-            {"key": "7d", "label": "1 Tuần", "icon": "📈"},
-            {"key": "10d", "label": "10 Ngày", "icon": "📈"},
             {"key": "1m", "label": "1 Tháng", "icon": "📊"},
-            {"key": "2m", "label": "2 Tháng", "icon": "📊"},
             {"key": "3m", "label": "3 Tháng", "icon": "📊"},
             {"key": "6m", "label": "6 Tháng", "icon": "📊"},
             {"key": "lifetime", "label": "Vĩnh viễn", "icon": "💎"},
+            {"key": "enterprise", "label": "Doanh nghiệp (10 máy)", "icon": "🏢"},
         ]
-
-    def get_license_plan():
-        # Module kích hoạt bị tắt: mở full để không chặn khi phát triển.
-        return {"activated": True, "planKey": "", "planLabel": "", "isPermanent": True,
-                "daysRemaining": 9999, "maxAccounts": 0, "multiAccountExec": True}
 
 # ─── Global log queue for SSE streaming ───────────────────────────────────────
 _log_queue = queue.Queue()
@@ -965,16 +931,30 @@ def ensure_schedule_worker_started():
 
 
 def _activation_status_payload():
+    # Trạng thái kích hoạt lấy TỪ MÁY CHỦ license.
     try:
-        is_valid, days_remaining, message = validate_activation_code()
+        from authencation.server_license import get_server_plan
+        plan = get_server_plan()
+        activated = bool(plan.get("activated"))
+        if activated:
+            label = plan.get("planLabel") or plan.get("planKey") or ""
+            if plan.get("isPermanent"):
+                msg = f"✅ License {label} hợp lệ".strip()
+            else:
+                msg = f"✅ License {label} còn {plan.get('daysRemaining', 0)} ngày".strip()
+        else:
+            msg = "🔐 Chưa kích hoạt. Gửi thông tin máy lên máy chủ để nhận key qua email."
+            if plan.get("reason"):
+                msg += f" ({plan.get('reason')})"
+        return {
+            "success": True,
+            "activated": activated,
+            "days_remaining": int(plan.get("daysRemaining") or 0),
+            "message": msg,
+        }
     except Exception as e:
-        is_valid, days_remaining, message = False, 0, f"Lỗi kiểm tra kích hoạt: {e}"
-    return {
-        "success": True,
-        "activated": bool(is_valid),
-        "days_remaining": int(days_remaining or 0),
-        "message": message,
-    }
+        return {"success": True, "activated": False, "days_remaining": 0,
+                "message": f"Lỗi kiểm tra kích hoạt qua máy chủ: {e}"}
 
 
 @app.before_request
@@ -1007,6 +987,7 @@ def require_activation_before_use():
         "api_activation_resend",
         "api_device_register",
         "api_device_log",
+        "api_device_mac",
         "static",
     }
 
@@ -1091,13 +1072,47 @@ def api_activation_status():
     return jsonify(_activation_status_payload())
 
 
-def _current_plan():
+def _server_license_mode():
+    """True nếu đã cấu hình LICENSE_SERVER_URL (xác thực qua máy chủ)."""
     try:
-        return get_license_plan()
+        from authencation.server_license import is_server_mode
+        return is_server_mode()
     except Exception:
-        # Lỗi đọc gói: mở full để không chặn nhầm người dùng hợp lệ.
-        return {"activated": True, "planKey": "", "planLabel": "", "isPermanent": True,
-                "daysRemaining": 0, "maxAccounts": 0, "multiAccountExec": True}
+        return False
+
+
+def _current_plan():
+    # Xác thực license HOÀN TOÀN qua máy chủ (không còn cấp phép offline).
+    try:
+        from authencation.server_license import get_server_plan
+        return get_server_plan()
+    except Exception:
+        # Không đọc được -> coi như chưa kích hoạt (khóa an toàn, gói cơ bản).
+        return {"activated": False, "planKey": "", "planLabel": "", "isPermanent": False,
+                "daysRemaining": 0, "maxAccounts": 2, "multiAccountExec": False}
+
+
+def _license_watchdog():
+    """Định kỳ cập nhật license_gate để KHÓA CỨNG: khi license bị hủy/hết hạn,
+    các worker nền (gửi lịch, sao chép nhóm, quét tin) sẽ tự tạm dừng."""
+    import time as _t
+    from authencation.license_gate import set_active
+    while True:
+        try:
+            if not DEVICE_TRACKING_ENABLED or not _server_license_mode():
+                set_active(True, "")            # không cấu hình license -> không chặn
+            else:
+                plan = _current_plan()
+                set_active(bool(plan.get("activated")), str(plan.get("reason") or ""))
+        except Exception:
+            pass  # lỗi tạm thời -> giữ nguyên trạng thái trước, tránh khóa oan
+        _t.sleep(60)
+
+
+try:
+    threading.Thread(target=_license_watchdog, daemon=True, name="license-watchdog").start()
+except Exception:
+    pass
 
 
 @app.route("/api/license/plan", methods=["GET"])
@@ -1111,16 +1126,34 @@ def api_license_plan():
     return jsonify({"success": True, **plan})
 
 
+@app.route("/api/device/mac", methods=["GET"])
+def api_device_mac():
+    """Trả MAC + tên máy + IP để hiển thị trên giao diện (click copy MAC)."""
+    try:
+        from authencation.server_license import get_machine_info
+        return jsonify({"success": True, **get_machine_info()})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/activation/save", methods=["POST"])
 def api_activation_save():
     data = request.get_json(silent=True) or request.form or {}
     code_text = (data.get("code") or data.get("activation_code") or "").strip()
-    ok, message = save_user_activation_code(code_text)
+
+    # Xác thực key với MÁY CHỦ license (client chỉ check, không tự cấp).
+    try:
+        from authencation.server_license import verify_with_server
+        result = verify_with_server(code_text)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Lỗi xác thực máy chủ: {e}"}), 500
+    ok = bool(result.get("valid"))
+    message = "✅ Kích hoạt thành công!" if ok else (result.get("error") or "Key không hợp lệ.")
     status = _activation_status_payload()
-    if ok and status.get("activated"):
+    if ok:
         ensure_schedule_worker_started()
     return jsonify({
-        "success": bool(ok),
+        "success": ok,
         "message": message,
         "activated": bool(status.get("activated")),
         "days_remaining": status.get("days_remaining", 0),
@@ -1132,35 +1165,26 @@ def api_activation_save():
 def api_activation_resend():
     try:
         data = request.get_json(silent=True) or request.form or {}
-        duration_key = (data.get("duration_key") or data.get("plan") or "1m").strip()
+        duration_key = (data.get("duration_key") or data.get("plan") or "3m").strip()
         options_map = {item["key"]: item for item in get_activation_duration_options()}
-        selected = options_map.get(duration_key, options_map.get("1m", {"key": duration_key, "label": duration_key}))
-        sent = register_device_with_activation(verbose=True, duration_key=duration_key, force=True)
+        selected = options_map.get(duration_key, options_map.get("3m", {"key": duration_key, "label": duration_key}))
+
+        # Gửi thông tin máy lên MÁY CHỦ để server sinh key + gửi email admin.
+        from authencation.server_license import register_with_server
+        result = register_with_server(duration_key)
+        sent = bool(result.get("success") and result.get("sent"))
         status = _activation_status_payload()
-        if not sent:
-            return jsonify({
-                "success": False,
-                "sent": False,
-                "activated": bool(status.get("activated")),
-                "selected_duration": selected,
-                "message": (
-                    "Không gửi được mã kích hoạt. Kiểm tra cấu hình email trong .env: "
-                    "SENDMAIL_USER phải đúng Gmail gửi, SENDMAIL_PASS phải là App Password 16 ký tự "
-                    "chứ không phải mật khẩu Gmail thường. Nếu App Password có dấu cách, hệ thống đã tự bỏ khoảng trắng khi đăng nhập SMTP."
-                ),
-                "status_message": status.get("message", ""),
-            }), 400
         return jsonify({
-            "success": True,
-            "sent": True,
+            "success": bool(result.get("success")),
+            "sent": sent,
             "activated": bool(status.get("activated")),
             "selected_duration": selected,
-            "message": (
-                f"Đã gửi mã kích hoạt 12 ký tự cho gói {selected.get('label', duration_key)}. "
-                "Lưu ý: mã mới sẽ làm mã cũ hết hiệu lực."
+            "message": result.get("message") or (
+                "Đã gửi thông tin máy lên máy chủ. Kiểm tra email để lấy key."
+                if sent else (result.get("error") or "Không gửi được yêu cầu tới máy chủ cấp phép.")
             ),
             "status_message": status.get("message", ""),
-        })
+        }), (200 if result.get("success") else 400)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -1506,8 +1530,41 @@ def api_messages_group_latest():
         else:
             data = request.args
         group_id = (data.get("groupId") or data.get("group_id") or "").strip()
-        account_id = (data.get("account_id") or data.get("accountId") or "").strip()
-        payload = get_group_latest_messages(group_id, account_id or None)
+        # Ưu tiên profileId (uid Zalo — ổn định); vẫn nhận accountId để tương thích.
+        account_ref = (data.get("profileId") or data.get("profile_id")
+                       or data.get("account_id") or data.get("accountId") or "").strip()
+        payload = get_group_latest_messages(group_id, account_ref or None)
+        return jsonify({"success": True, **payload})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+
+
+@app.route("/api/messages/group-since", methods=["GET", "POST"])
+def api_messages_group_since():
+    """API tích hợp: lấy TẤT CẢ tin nhóm mới kể từ mốc (msgId) truyền vào.
+
+    GET  /api/messages/group-since?groupId=...&profileId=...&sinceMsgId=...&count=...
+    POST /api/messages/group-since  {"groupId","profileId","sinceMsgId","count"}
+    Trả về items (cũ->mới, msgId > sinceMsgId) + latestMsgId (mốc mới) để webhook
+    chuyển tiếp và lưu lại. sinceMsgId='0'/rỗng -> chỉ trả trang mới nhất.
+    """
+    try:
+        if request.method == "POST":
+            data = request.get_json(silent=True) or request.form or {}
+        else:
+            data = request.args
+        group_id = (data.get("groupId") or data.get("group_id") or "").strip()
+        account_ref = (data.get("profileId") or data.get("profile_id")
+                       or data.get("account_id") or data.get("accountId") or "").strip()
+        since_msg_id = str(data.get("sinceMsgId") or data.get("since_msg_id") or "0").strip() or "0"
+        try:
+            count = int(data.get("count") or 30)
+        except (TypeError, ValueError):
+            count = 30
+        payload = get_group_messages_since(group_id, account_ref or None,
+                                           since_msg_id=since_msg_id, count=count)
         return jsonify({"success": True, **payload})
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -2695,7 +2752,16 @@ def api_send_group_message():
     photo (file, tùy chọn). Có ảnh -> photo_original/upload + send (nhóm),
     không ảnh -> /api/group/sendmsg như cũ.
     """
-    account_id = str(request.form.get("accountId", request.form.get("account_id", "")) or "").strip()
+    # Ưu tiên profileId (uid Zalo — ổn định); Nexus tự tra accountId + phiên.
+    account_ref = str(
+        request.form.get("profileId")
+        or request.form.get("profile_id")
+        or request.form.get("accountId")
+        or request.form.get("account_id")
+        or ""
+    ).strip()
+    from features.accounts.account_manager import resolve_account_id
+    account_id = resolve_account_id(account_ref) or account_ref
     group_id = str(
         request.form.get("group_id")
         or request.form.get("groupId")
@@ -2704,6 +2770,16 @@ def api_send_group_message():
     ).strip()
     message = str(request.form.get("message", request.form.get("msg", "")) or "").strip()
     photo_file = request.files.get("photo") or request.files.get("image") or request.files.get("file")
+
+    # (Tùy chọn) TRẢ LỜI (quote) một tin gốc: webhook truyền thông tin tin đích cần
+    # trả lời để nhóm đích phản hồi đúng tin tương ứng.
+    q_owner = str(request.form.get("qmsgOwner") or "").strip()
+    q_id = str(request.form.get("qmsgId") or "").strip()
+    q_cli = str(request.form.get("qmsgCliId") or "").strip()
+    q_type = str(request.form.get("qmsgType") or "webchat").strip()
+    q_ts = str(request.form.get("qmsgTs") or "").strip()
+    q_text = str(request.form.get("qmsg") or "").strip()
+    want_quote = bool(q_id and q_cli)
 
     import re
     m = re.search(r"\d{8,}", group_id)
@@ -2717,8 +2793,42 @@ def api_send_group_message():
     if not message and not photo_file:
         return jsonify({"success": False, "error": "Thiếu nội dung tin nhắn hoặc ảnh."}), 400
 
+    def _ids_from_decoded(decoded):
+        """Lấy (msgId, cliMsgId) từ decoded của send_message_smart/send_group_msg."""
+        if not isinstance(decoded, dict):
+            return "", ""
+        d = decoded.get("data") if isinstance(decoded.get("data"), dict) else decoded
+        mid = str((d or {}).get("msgId") or decoded.get("msgId") or "").strip()
+        cli = str(decoded.get("_clientId") or "").strip()
+        return mid, cli
+
     try:
         _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
+
+        def _send_text(txt):
+            """Gửi text: TRẢ LỜI (quote) nếu có thông tin tin gốc, ngược lại gửi
+            thường. Trả (ok, msgId, cliMsgId, sentAsLink, err)."""
+            txt = str(txt or "").strip()
+            if not txt:
+                return False, "", "", False, "Nội dung rỗng."
+            if want_quote:
+                from features.messaging.quote_message import quote_message
+                r = quote_message(
+                    cookies, zpw_enk, imei,
+                    thread_id=group_id, message=txt, is_group=True,
+                    qmsg_owner=q_owner, qmsg_id=q_id, qmsg_cli_id=q_cli,
+                    qmsg_type=q_type, qmsg_ts=q_ts, qmsg_text=q_text,
+                    zpw_ver=get_zpw_ver(),
+                )
+                return (bool(r.get("ok")), str(r.get("msgId") or ""),
+                        str(r.get("cliMsgId") or ""), False,
+                        "" if r.get("ok") else (r.get("message") or "Gửi trả lời lỗi"))
+            from features.messaging.send_link import send_message_smart
+            r = send_message_smart(group_id, txt, zpw_enk, cookies, imei,
+                                   is_group=True, zpw_ver=get_zpw_ver())
+            mid, cli = _ids_from_decoded(r.get("decoded"))
+            return (bool(r.get("ok")), mid, cli, bool(r.get("sentAsLink")),
+                    "" if r.get("ok") else (r.get("error") or "Gửi tin nhắn nhóm thất bại."))
 
         if photo_file:
             image_bytes = photo_file.read()
@@ -2741,18 +2851,18 @@ def api_send_group_message():
                 zpw_ver=get_zpw_ver(),
             )
             if result.get("ok"):
+                # Mặc định map = tin ảnh; nếu có text (thường mang link) thì ưu tiên
+                # tin text làm mốc quote cho lần trả lời sau.
+                sent_msg_id = str(result.get("msgId") or "")
+                sent_cli_id = str(result.get("cliMsgId") or "")
                 text_sent = False
                 text_error = ""
                 if message:
                     try:
-                        from features.messaging.send_link import send_message_smart
-                        text_result = send_message_smart(
-                            group_id, message, zpw_enk, cookies, imei,
-                            is_group=True, zpw_ver=get_zpw_ver(),
-                        )
-                        text_sent = bool(text_result.get("ok"))
-                        if not text_sent:
-                            text_error = f"Gửi text sau ảnh lỗi: {text_result.get('error')}"
+                        # Ảnh đã gửi thường (không quote được ảnh) -> text mang quote.
+                        text_sent, t_mid, t_cli, _sl, text_error = _send_text(message)
+                        if text_sent and t_mid:
+                            sent_msg_id, sent_cli_id = t_mid, t_cli
                     except Exception as text_exc:
                         text_error = f"Gửi text sau ảnh lỗi: {text_exc}"
                 return jsonify({
@@ -2762,6 +2872,8 @@ def api_send_group_message():
                     "urls": result.get("urls"),
                     "textSent": text_sent,
                     "textError": text_error,
+                    "sentMsgId": sent_msg_id,
+                    "sentCliMsgId": sent_cli_id,
                     "data": result.get("decoded"),
                 })
             return jsonify({
@@ -2771,27 +2883,18 @@ def api_send_group_message():
                 "detail": result.get("decoded"),
             }), 400
 
-        # Nội dung chứa link nhóm Zalo -> tự lấy thông tin nhóm rồi gửi link card
-        # (group/sendlink); không có link hoặc lỗi -> gửi text nhóm như cũ.
-        from features.messaging.send_link import send_message_smart
-        result = send_message_smart(
-            group_id, message, zpw_enk, cookies, imei,
-            is_group=True, zpw_ver=get_zpw_ver(),
-        )
-
-        if result.get("ok"):
+        # Không ảnh -> gửi text (quote nếu là tin trả lời; ngược lại text/link card).
+        ok, mid, cli, sent_as_link, err = _send_text(message)
+        if ok:
             return jsonify({
                 "success": True,
-                "message": "Đã gửi tin nhắn vào nhóm." + (" (link card)" if result.get("sentAsLink") else ""),
-                "sentAsLink": bool(result.get("sentAsLink")),
-                "data": result.get("decoded"),
+                "message": ("Đã gửi trả lời vào nhóm." if want_quote
+                            else "Đã gửi tin nhắn vào nhóm." + (" (link card)" if sent_as_link else "")),
+                "sentAsLink": sent_as_link,
+                "sentMsgId": mid,
+                "sentCliMsgId": cli,
             })
-
-        return jsonify({
-            "success": False,
-            "error": result.get("error") or "Gửi tin nhắn nhóm thất bại.",
-            "detail": result.get("decoded"),
-        }), 400
+        return jsonify({"success": False, "error": err or "Gửi tin nhắn nhóm thất bại."}), 400
 
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -3015,9 +3118,19 @@ def _fetch_group_members_worker(task, account_id: str, group_input: str, auto_jo
 
 def _prepare_group_copy_job_worker(task, payload: dict):
     """Lấy thành viên nhóm nguồn và lưu tác vụ sao chép theo hạn mức mỗi ngày."""
+    from features.groups.group_copy_worker import _avatar_hash as _extract_avatar_hash
+
     account_id = str(payload.get("accountId") or "").strip()
     source_input = str(payload.get("sourceInput") or "").strip()
     source_input_type, normalized_source_input = normalize_group_input(source_input)
+    # Link mời nhóm NGUỒN (nếu người dùng nhập bằng link) — cần để tài khoản phụ tự
+    # vào nhóm nguồn và đọc lại thành viên nhằm lấy uid hợp lệ cho phiên của nó.
+    source_group_link = ""
+    for _cand in (payload.get("sourceGroupLink"), payload.get("sourceLink"), source_input):
+        _c = str(_cand or "").strip()
+        if _c.startswith("http") or "zalo.me" in _c:
+            source_group_link = ("https:" + _c) if _c.startswith("//") else _c
+            break
     source_group_id_hint = str(payload.get("sourceGroupId") or "").strip()
     if source_input_type == "group_id" and normalized_source_input:
         # Luôn truyền Group ID sạch vào getmg; không để nhãn ``ID:``, tiền tố g
@@ -3035,7 +3148,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         callback=lambda msg, typ="info": task.log(msg, typ),
         require_imei=False,
         auto_join_when_not_member=True,
-        leave_after_auto_join=True,
+        leave_after_auto_join=False,   # A vào lấy thành viên xong Ở LẠI nhóm, không rời
     )
     uid_list = member_payload.get("uidList") or []
     member_map = member_payload.get("memberMap") or {}
@@ -3099,10 +3212,14 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         is_friend = True if raw_friend is True or friend_text in {"1", "true", "yes"} else (
             False if raw_friend is False or friend_text in {"0", "false", "no"} else None
         )
+        _avatar_url = member.get("avatar") or ""
         clean_members.append({
             "userId": uid,
             "zaloName": member.get("zaloName") or member.get("displayName") or uid,
-            "avatar": member.get("avatar") or "",
+            "avatar": _avatar_url,
+            # Định danh gốc ổn định (hash ảnh) — GIỐNG nhau giữa mọi tài khoản. Dùng để
+            # tài khoản phụ tự phân giải uid RIÊNG của nó khi đọc lại nhóm nguồn.
+            "avatarHash": _extract_avatar_hash(_avatar_url),
             # Quan hệ được dùng để ưu tiên thêm toàn bộ bạn bè trước.
             "isFriend": is_friend,
             "isFr": 1 if is_friend is True else (0 if is_friend is False else None),
@@ -3130,6 +3247,13 @@ def _prepare_group_copy_job_worker(task, payload: dict):
     ]
 
     is_multi = n > 1
+    if is_multi and not source_group_link:
+        task.log(
+            "⚠️ Nhóm nguồn đang nhập bằng ID nên các tài khoản phụ không thể tự đọc lại "
+            "để lấy UID hợp lệ (UID Zalo mã hóa riêng từng tài khoản). Hãy nhập nhóm nguồn "
+            "bằng LINK mời để chạy nhiều tài khoản chính xác.",
+            "warn",
+        )
     target_mode = str(payload.get("targetMode") or "existing").strip()
 
     # Nhiều tài khoản + tạo nhóm mới: TÀI KHOẢN CHÍNH tạo nhóm NGAY tại đây rồi
@@ -3174,6 +3298,8 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         target_mode = "existing"
 
     jobs_created = []
+    # Cùng một chiến dịch (nhiều tài khoản) chung 1 campaignId để giao diện gom nhóm.
+    campaign_id = "camp_" + uuid.uuid4().hex[:12]
     for idx, aid in enumerate(account_ids):
         block = blocks[idx]
         if not block:
@@ -3185,6 +3311,13 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         sub = dict(payload)
         sub["accountId"] = aid
         sub.pop("accountIds", None)
+        sub["campaignId"] = campaign_id
+        # Link nhóm nguồn để tài khoản phụ tự đọc lại (lấy uid riêng hợp lệ).
+        if source_group_link:
+            sub["sourceGroupLink"] = source_group_link
+        # Tài khoản CHÍNH (đầu danh sách) sở hữu nhóm đích: đọc/mời nhóm đích luôn
+        # dùng tài khoản này, kể cả khi job đang chạy bằng tài khoản phụ.
+        sub["targetOwnerAccountId"] = account_ids[0]
         if is_multi:
             sub["title"] = f"{payload.get('title') or 'Sao chép thành viên nhóm'} (TK {idx + 1}/{n} - {acc_name})"
             # Mọi tài khoản dùng chung nhóm đích đã tạo/đã chọn.
@@ -3316,7 +3449,7 @@ def api_group_copy_start():
     consent = bool(data.get("consentConfirmed") or data.get("confirmConsent"))
 
     try:
-        daily_limit = max(1, min(int(data.get("friendRequestDailyLimit") or data.get("dailyLimit") or data.get("batchSize") or 10), 100))
+        daily_limit = max(1, min(int(data.get("friendRequestDailyLimit") or data.get("dailyLimit") or data.get("batchSize") or 10), 30))
     except Exception:
         return jsonify({"success": False, "error": "Số lời mời kết bạn mỗi ngày không hợp lệ."}), 400
     try:
@@ -3380,6 +3513,7 @@ def api_group_copy_start():
         "verifyIntervalMinutes": verify_minutes,
         "campaignDurationDays": campaign_days,
         "removeFriendAfterJoin": bool(data.get("removeFriendAfterJoin")),
+        "leaveGroupAfterDone": bool(data.get("leaveGroupAfterDone")),
         "skipLeaders": bool(data.get("skipLeaders")),
         "startAt": start_at,
         "consentConfirmed": True,
@@ -3566,6 +3700,7 @@ def api_create_schedule_api():
         k, m = divmod(len(recipients), n)
         blocks = [recipients[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
         base_title = str(data.get("title") or "Chiến dịch").strip()
+        campaign_id = "sched_camp_" + uuid.uuid4().hex[:12]  # gom nhóm nhiều tài khoản
         created = []
         for idx, aid in enumerate(account_ids):
             block = blocks[idx]
@@ -3574,6 +3709,7 @@ def api_create_schedule_api():
             sub = dict(data)
             sub.pop("accountIds", None)
             sub["accountId"] = aid
+            sub["campaignId"] = campaign_id
             nm = name_by_id.get(aid, aid[:8])
             sub["accountName"] = nm
             sub["senderName"] = nm
@@ -4064,15 +4200,19 @@ def _chrome_debug_port_alive(port) -> bool:
 @app.route("/api/groups/personal", methods=["GET"])
 def api_get_account_groups():
     """API: Lay danh sach personalGroups da luu trong data/accounts.json theo account dang chon."""
-    account_id = (
-        request.args.get("accountId")
+    # Ưu tiên profileId (uid Zalo — ổn định); vẫn nhận accountId để tương thích.
+    account_ref = (
+        request.args.get("profileId")
+        or request.args.get("profile_id")
+        or request.args.get("accountId")
         or request.args.get("account_id")
         or request.args.get("id")
         or ""
     ).strip()
+    account_id = account_ref
 
-    if not account_id:
-        return jsonify({"success": False, "error": "Thieu accountId", "groups": []}), 400
+    if not account_ref:
+        return jsonify({"success": False, "error": "Thieu profileId/accountId", "groups": []}), 400
 
     try:
         accounts = load_accounts()
@@ -4080,8 +4220,10 @@ def api_get_account_groups():
         account = None
         for acc in accounts:
             aid = str(acc.get("accountId") or acc.get("id") or acc.get("account_id") or "").strip()
-            if aid == account_id:
+            uid = str(acc.get("uid") or "").strip()
+            if account_ref in (aid, uid) and aid:
                 account = acc
+                account_id = aid
                 break
 
         if not account:
@@ -4893,21 +5035,16 @@ def _start_backend_server():
     try:
         _enable_windows_terminal_copy_mode()
 
-        # Kiểm tra/kích hoạt thiết bị trước khi cho worker chạy nền.
-        if DEVICE_TRACKING_ENABLED:
-            try:
-                register_device_on_startup(verbose=True)
-                is_valid, days_remaining, message = validate_activation_code()
-                print(message, flush=True)
-                if is_valid:
-                    ensure_schedule_worker_started()
-                    print(f"✅ License còn {days_remaining} ngày", flush=True)
-                else:
-                    print("🔐 Phần mềm chưa kích hoạt. Mở giao diện /activation để chọn thời gian kích hoạt và nhận mã 12 ký tự qua email.", flush=True)
-            except Exception as e:
-                print(f"⚠️  Lỗi kiểm tra/kích hoạt thiết bị: {str(e)}", flush=True)
-        else:
-            ensure_schedule_worker_started()
+        # Kiểm tra kích hoạt qua MÁY CHỦ license trước khi cho worker chạy nền.
+        try:
+            status = _activation_status_payload()
+            print(status.get("message", ""), flush=True)
+            if status.get("activated"):
+                ensure_schedule_worker_started()
+            else:
+                print("🔐 Phần mềm chưa kích hoạt. Mở /activation, gửi thông tin máy lên máy chủ để nhận key qua email.", flush=True)
+        except Exception as e:
+            print(f"⚠️  Lỗi kiểm tra kích hoạt: {str(e)}", flush=True)
 
         print("✅ Backend đã sẵn sàng", flush=True)
         print("🌐 Giao diện: http://127.0.0.1:5000/policy", flush=True)
