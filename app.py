@@ -2771,6 +2771,16 @@ def api_send_group_message():
     message = str(request.form.get("message", request.form.get("msg", "")) or "").strip()
     photo_file = request.files.get("photo") or request.files.get("image") or request.files.get("file")
 
+    # (Tùy chọn) TRẢ LỜI (quote) một tin gốc: webhook truyền thông tin tin đích cần
+    # trả lời để nhóm đích phản hồi đúng tin tương ứng.
+    q_owner = str(request.form.get("qmsgOwner") or "").strip()
+    q_id = str(request.form.get("qmsgId") or "").strip()
+    q_cli = str(request.form.get("qmsgCliId") or "").strip()
+    q_type = str(request.form.get("qmsgType") or "webchat").strip()
+    q_ts = str(request.form.get("qmsgTs") or "").strip()
+    q_text = str(request.form.get("qmsg") or "").strip()
+    want_quote = bool(q_id and q_cli)
+
     import re
     m = re.search(r"\d{8,}", group_id)
     if m:
@@ -2783,8 +2793,42 @@ def api_send_group_message():
     if not message and not photo_file:
         return jsonify({"success": False, "error": "Thiếu nội dung tin nhắn hoặc ảnh."}), 400
 
+    def _ids_from_decoded(decoded):
+        """Lấy (msgId, cliMsgId) từ decoded của send_message_smart/send_group_msg."""
+        if not isinstance(decoded, dict):
+            return "", ""
+        d = decoded.get("data") if isinstance(decoded.get("data"), dict) else decoded
+        mid = str((d or {}).get("msgId") or decoded.get("msgId") or "").strip()
+        cli = str(decoded.get("_clientId") or "").strip()
+        return mid, cli
+
     try:
         _, cookies, zpw_enk, imei = _get_account_credentials(account_id, require_imei=True)
+
+        def _send_text(txt):
+            """Gửi text: TRẢ LỜI (quote) nếu có thông tin tin gốc, ngược lại gửi
+            thường. Trả (ok, msgId, cliMsgId, sentAsLink, err)."""
+            txt = str(txt or "").strip()
+            if not txt:
+                return False, "", "", False, "Nội dung rỗng."
+            if want_quote:
+                from features.messaging.quote_message import quote_message
+                r = quote_message(
+                    cookies, zpw_enk, imei,
+                    thread_id=group_id, message=txt, is_group=True,
+                    qmsg_owner=q_owner, qmsg_id=q_id, qmsg_cli_id=q_cli,
+                    qmsg_type=q_type, qmsg_ts=q_ts, qmsg_text=q_text,
+                    zpw_ver=get_zpw_ver(),
+                )
+                return (bool(r.get("ok")), str(r.get("msgId") or ""),
+                        str(r.get("cliMsgId") or ""), False,
+                        "" if r.get("ok") else (r.get("message") or "Gửi trả lời lỗi"))
+            from features.messaging.send_link import send_message_smart
+            r = send_message_smart(group_id, txt, zpw_enk, cookies, imei,
+                                   is_group=True, zpw_ver=get_zpw_ver())
+            mid, cli = _ids_from_decoded(r.get("decoded"))
+            return (bool(r.get("ok")), mid, cli, bool(r.get("sentAsLink")),
+                    "" if r.get("ok") else (r.get("error") or "Gửi tin nhắn nhóm thất bại."))
 
         if photo_file:
             image_bytes = photo_file.read()
@@ -2807,18 +2851,18 @@ def api_send_group_message():
                 zpw_ver=get_zpw_ver(),
             )
             if result.get("ok"):
+                # Mặc định map = tin ảnh; nếu có text (thường mang link) thì ưu tiên
+                # tin text làm mốc quote cho lần trả lời sau.
+                sent_msg_id = str(result.get("msgId") or "")
+                sent_cli_id = str(result.get("cliMsgId") or "")
                 text_sent = False
                 text_error = ""
                 if message:
                     try:
-                        from features.messaging.send_link import send_message_smart
-                        text_result = send_message_smart(
-                            group_id, message, zpw_enk, cookies, imei,
-                            is_group=True, zpw_ver=get_zpw_ver(),
-                        )
-                        text_sent = bool(text_result.get("ok"))
-                        if not text_sent:
-                            text_error = f"Gửi text sau ảnh lỗi: {text_result.get('error')}"
+                        # Ảnh đã gửi thường (không quote được ảnh) -> text mang quote.
+                        text_sent, t_mid, t_cli, _sl, text_error = _send_text(message)
+                        if text_sent and t_mid:
+                            sent_msg_id, sent_cli_id = t_mid, t_cli
                     except Exception as text_exc:
                         text_error = f"Gửi text sau ảnh lỗi: {text_exc}"
                 return jsonify({
@@ -2828,6 +2872,8 @@ def api_send_group_message():
                     "urls": result.get("urls"),
                     "textSent": text_sent,
                     "textError": text_error,
+                    "sentMsgId": sent_msg_id,
+                    "sentCliMsgId": sent_cli_id,
                     "data": result.get("decoded"),
                 })
             return jsonify({
@@ -2837,27 +2883,18 @@ def api_send_group_message():
                 "detail": result.get("decoded"),
             }), 400
 
-        # Nội dung chứa link nhóm Zalo -> tự lấy thông tin nhóm rồi gửi link card
-        # (group/sendlink); không có link hoặc lỗi -> gửi text nhóm như cũ.
-        from features.messaging.send_link import send_message_smart
-        result = send_message_smart(
-            group_id, message, zpw_enk, cookies, imei,
-            is_group=True, zpw_ver=get_zpw_ver(),
-        )
-
-        if result.get("ok"):
+        # Không ảnh -> gửi text (quote nếu là tin trả lời; ngược lại text/link card).
+        ok, mid, cli, sent_as_link, err = _send_text(message)
+        if ok:
             return jsonify({
                 "success": True,
-                "message": "Đã gửi tin nhắn vào nhóm." + (" (link card)" if result.get("sentAsLink") else ""),
-                "sentAsLink": bool(result.get("sentAsLink")),
-                "data": result.get("decoded"),
+                "message": ("Đã gửi trả lời vào nhóm." if want_quote
+                            else "Đã gửi tin nhắn vào nhóm." + (" (link card)" if sent_as_link else "")),
+                "sentAsLink": sent_as_link,
+                "sentMsgId": mid,
+                "sentCliMsgId": cli,
             })
-
-        return jsonify({
-            "success": False,
-            "error": result.get("error") or "Gửi tin nhắn nhóm thất bại.",
-            "detail": result.get("decoded"),
-        }), 400
+        return jsonify({"success": False, "error": err or "Gửi tin nhắn nhóm thất bại."}), 400
 
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400

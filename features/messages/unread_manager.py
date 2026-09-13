@@ -703,6 +703,7 @@ def get_group_latest_messages(group_id: str, account_id: Optional[str] = None) -
         sender_uid = gm["senderUid"]
         items.append({
             "msgId": gm["msgId"],
+            "cliMsgId": gm.get("cliMsgId", ""),
             "senderUid": sender_uid,
             "senderName": acc_name if sender_uid in ("", "0") else str(sender_names.get(sender_uid) or ""),
             "msgType": gm["msgType"],
@@ -710,6 +711,9 @@ def get_group_latest_messages(group_id: str, account_id: Optional[str] = None) -
             "thumb": gm["thumb"],
             "href": gm["href"],
             "createTime": gm["ts"],
+            # Tin này TRẢ LỜI tin nào (None nếu không phải reply) -> webhook dựng lại
+            # quote ở nhóm đích.
+            "quote": gm.get("quote"),
         })
     items.sort(key=lambda x: int(x.get("createTime") or 0), reverse=True)
     return {
@@ -779,6 +783,7 @@ def get_group_messages_since(group_id: str, account_id: Optional[str] = None,
         sender_uid = gm["senderUid"]
         items.append({
             "msgId": gm["msgId"],
+            "cliMsgId": gm.get("cliMsgId", ""),
             "senderUid": sender_uid,
             "senderName": acc_name if sender_uid in ("", "0") else str(sender_names.get(sender_uid) or ""),
             "msgType": gm["msgType"],
@@ -786,6 +791,9 @@ def get_group_messages_since(group_id: str, account_id: Optional[str] = None,
             "thumb": gm["thumb"],
             "href": gm["href"],
             "createTime": gm["ts"],
+            # Tin này TRẢ LỜI tin nào (None nếu không phải reply) -> webhook dựng lại
+            # quote ở nhóm đích.
+            "quote": gm.get("quote"),
         })
     return {
         "groupId": group_id,

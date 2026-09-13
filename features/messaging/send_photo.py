@@ -312,11 +312,18 @@ def send_photo(
         error_message = str(resp_json.get("error_message", resp_json.get("errorMessage", "")) or "")
 
     ok = str(error_code) in ("0", "None") or (isinstance(decoded, dict) and decoded.get("msgId"))
+    sent_msg_id = ""
+    if isinstance(decoded, dict):
+        d = decoded.get("data") if isinstance(decoded.get("data"), dict) else decoded
+        sent_msg_id = str((d or {}).get("msgId") or decoded.get("msgId") or "").strip()
     return {
         "ok": bool(ok),
         "message": "Đã gửi ảnh" if ok else (error_message or f"Gửi ảnh lỗi error_code={error_code}"),
         "step": "send",
         "photoId": upload_info.get("photoId"),
+        # msgId + cliMsgId của tin ảnh vừa gửi (để map dựng quote sau).
+        "msgId": sent_msg_id,
+        "cliMsgId": str(upload_info.get("clientId") or ""),
         "urls": {
             "thumbUrl": upload_info.get("thumbUrl"),
             "normalUrl": upload_info.get("normalUrl"),
