@@ -928,6 +928,28 @@ def api_create_business_key():
     nhập key này để kích hoạt; hạn dùng tính từ lúc tạo, DÙNG CHUNG cho mọi máy."""
     if not _require_admin():
         return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    # CHẶN tạo nhiều key: chỉ cho tạo key mới khi KHÔNG còn key doanh nghiệp nào
+    # còn hiệu lực (đang active và chưa hết hạn). Hết hạn / vô hiệu hóa / xóa rồi
+    # mới tạo lại được. Cũng chặn double-click tạo trùng.
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    with closing(_conn()) as conn:
+        active = conn.execute(
+            "SELECT license_key, expiry, is_permanent FROM business_keys "
+            "WHERE status='active' AND (is_permanent=1 OR expiry='' OR expiry >= ?) "
+            "ORDER BY created_at DESC LIMIT 1",
+            (now_iso,),
+        ).fetchone()
+    if active:
+        a = dict(active)
+        han = "vĩnh viễn" if a.get("is_permanent") else str(a.get("expiry") or "").replace("T", " ")
+        return jsonify({
+            "success": False,
+            "activeKeyExists": True,
+            "error": f"Đang có key doanh nghiệp còn hiệu lực (hạn: {han}). "
+                     "Chờ key hết hạn, hoặc vô hiệu hóa/xóa key đó rồi mới tạo key mới.",
+        }), 409
+
     data = request.get_json(silent=True) or {}
     try:
         max_machines = int(data.get("maxMachines") or data.get("max_machines") or 10)

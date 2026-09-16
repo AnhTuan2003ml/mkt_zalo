@@ -376,7 +376,7 @@
                             <input type="text" id="bizNote" placeholder="VD: Công ty ABC">
                         </div>
                         <div class="biz-field biz-actions">
-                            <button class="btn btn-primary" onclick="createBusinessKey()">Tạo key</button>
+                            <button class="btn btn-primary" id="btnCreateBizKey" onclick="createBusinessKey()">Tạo key</button>
                         </div>
                     </div>
                     <div id="bizResult" class="biz-result" hidden></div>
@@ -778,6 +778,16 @@
                 if (guard(res)) return;
                 var data = await res.json();
                 var keys = (data && data.keys) || [];
+                // Còn key doanh nghiệp CÒN HIỆU LỰC (active + chưa hết hạn) -> khóa nút
+                // Tạo key. Hết hạn / vô hiệu hóa / xóa hết mới tạo lại được.
+                var now = Date.now();
+                var hasActive = keys.some(function (k) {
+                    if (k.status === 'disabled') return false;
+                    if (k.is_permanent || !k.expiry) return true;
+                    var t = Date.parse(k.expiry);
+                    return isNaN(t) ? true : (t > now);
+                });
+                _setCreateBizBtn(hasActive);
                 if (!keys.length) {
                     tb.innerHTML = '<tr><td colspan="7" class="empty">Chưa có key doanh nghiệp nào. Bấm “Tạo key” ở trên.</td></tr>';
                     return;
@@ -813,7 +823,18 @@
             }
         }
 
+        // Khóa/mở nút "Tạo key" tùy còn key hiệu lực hay không.
+        function _setCreateBizBtn(locked) {
+            var b = document.getElementById('btnCreateBizKey');
+            if (!b) return;
+            b.disabled = !!locked;
+            b.title = locked ? 'Đang có key còn hiệu lực — chờ key hết hạn / vô hiệu hóa / xóa mới tạo key mới' : '';
+        }
+
         async function createBusinessKey() {
+            var btn = document.getElementById('btnCreateBizKey');
+            if (btn && btn.disabled) return;          // đang khóa hoặc đang gửi -> bỏ qua
+            if (btn) btn.disabled = true;             // chống double-click tạo trùng
             var max = parseInt(document.getElementById('bizMax').value || '10', 10) || 10;
             var days = parseInt(document.getElementById('bizDur').value || '0', 10) || 0;
             var note = document.getElementById('bizNote').value || '';
@@ -832,8 +853,8 @@
                     ' &nbsp;<span style="color:var(--muted)">Tối đa <b>' + data.maxMachines + '</b> máy · Hạn: <b>' + han + '</b>. Gửi key này cho khách, mỗi máy nhập để kích hoạt.</span>';
                 document.getElementById('bizNote').value = '';
                 toast('Đã tạo key doanh nghiệp', 'ok');
-                loadBusinessKeys();
             } catch (e) { toast('Lỗi kết nối', 'err'); }
+            finally { loadBusinessKeys(); }           // cập nhật lại trạng thái khóa nút
         }
 
         async function toggleBizKey(key, to) {
