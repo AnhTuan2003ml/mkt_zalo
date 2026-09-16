@@ -173,8 +173,11 @@ def _format_mac(mac_int):
     return ":".join(mac_hex[i:i + 2] for i in range(0, 12, 2))
 
 
-def register_with_server(plan_key="1m", timeout=20):
-    """Gửi thông tin máy lên server để nhận key qua email."""
+def register_with_server(plan_key="1m", timeout=20, confirm_change=False):
+    """Gửi thông tin máy lên server để nhận key qua email.
+
+    ``confirm_change=True``: xác nhận ĐỔI gói khi máy đang có key còn hiệu lực
+    (server sẽ thay key hiện tại thay vì hỏi lại)."""
     url = get_server_url()
     if not url:
         return {"success": False, "error": "Chưa cấu hình LICENSE_SERVER_URL."}
@@ -182,7 +185,8 @@ def register_with_server(plan_key="1m", timeout=20):
     try:
         resp = requests.post(
             f"{url}/api/register",
-            json={"mac": info["mac"], "machineName": info["machineName"], "plan": plan_key},
+            json={"mac": info["mac"], "machineName": info["machineName"], "plan": plan_key,
+                  "confirmChange": bool(confirm_change)},
             timeout=timeout, proxies=NO_PROXY,
         )
         return resp.json()

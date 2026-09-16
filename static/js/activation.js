@@ -109,14 +109,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function requestCode(buttonRef, loadingText) {
+    async function requestCode(buttonRef, loadingText, confirmChange) {
         const planKey = getSelectedPlanKey();
         const planLabel = getSelectedPlanLabel();
         buttonRef.disabled = true;
         const oldText = buttonRef.textContent;
         buttonRef.textContent = loadingText;
         try {
-            const data = await postJson('/api/activation/resend', { duration_key: planKey });
+            const data = await postJson('/api/activation/resend', {
+                duration_key: planKey, confirm: !!confirmChange,
+            });
+            // Máy đang có key còn hiệu lực -> hỏi xác nhận ĐỔI, đồng ý thì gửi lại.
+            if (data.needConfirm && !confirmChange) {
+                if (window.confirm(data.message || 'Máy đang có key còn hiệu lực. Bạn có chắc muốn đổi/tạo key mới? (key hiện tại sẽ bị thay)')) {
+                    buttonRef.disabled = false;
+                    buttonRef.textContent = oldText;
+                    return requestCode(buttonRef, loadingText, true);
+                }
+                setResult('Đã hủy — giữ nguyên key hiện tại.', true);
+                return;
+            }
             setResult(data.message || `Đã gửi mã cho gói ${planLabel}.`, true);
         } catch (err) {
             setResult(err.message, false);

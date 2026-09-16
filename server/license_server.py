@@ -590,6 +590,7 @@ def api_register():
     mac = str(data.get("mac") or "").strip().upper()
     machine_name = str(data.get("machineName") or data.get("machine_name") or "").strip()
     plan_key = str(data.get("plan") or data.get("planKey") or "3m").strip().lower()
+    confirm_change = bool(data.get("confirmChange") or data.get("confirm"))
     if not mac:
         return jsonify({"success": False, "error": "Thiếu địa chỉ MAC."}), 400
     if plan_key not in PLAN_OPTIONS:
@@ -603,6 +604,61 @@ def api_register():
 
     with _db_lock, closing(_conn()) as conn:
         existing = conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone()
+
+        # Máy đang có key CÒN HIỆU LỰC -> HỎI XÁC NHẬN trước khi cấp key mới (đổi/gia
+        # hạn gói sẽ THAY key hiện tại). Chỉ khi client gửi confirmChange=1 mới cấp.
+        # Chống bấm nhiều lần tạo bừa, nhưng VẪN cho đổi gói nếu người dùng đồng ý.
+        if existing and not confirm_change:
+            ex = dict(existing)
+            st = str(ex.get("status") or "")
+            now_dt = datetime.now()
+            # a) Đã kích hoạt và còn hạn.
+            if st == "active":
+                exp = str(ex.get("expiry") or "")
+                is_perm = bool(ex.get("is_permanent"))
+                valid = is_perm
+                days_left = None
+                if not is_perm and exp:
+                    try:
+                        exp_dt = datetime.fromisoformat(exp)
+                        valid = now_dt <= exp_dt
+                        # Làm tròn LÊN theo ngày cho tự nhiên (còn ~4.9 ngày -> "5 ngày").
+                        secs = (exp_dt - now_dt).total_seconds()
+                        days_left = max(0, int((secs + 86399) // 86400))
+                    except ValueError:
+                        valid = False
+                if valid:
+                    if is_perm:
+                        msg = ("Máy đang có key VĨNH VIỄN. Đổi sang gói mới sẽ THAY key hiện "
+                               "tại. Bạn có chắc muốn đổi?")
+                    else:
+                        msg = (f"Máy đang còn {days_left} ngày sử dụng. Đổi sang gói mới sẽ THAY "
+                               "key hiện tại. Bạn có chắc muốn đổi?")
+                    return jsonify({
+                        "success": False, "needConfirm": True, "currentStatus": "active",
+                        "currentIsPermanent": is_perm, "currentExpiry": exp,
+                        "daysRemaining": days_left, "message": msg,
+                    }), 409
+            # b) Đang chờ nhập key vừa gửi (chưa kích hoạt), còn trong 24h.
+            if st == "pending":
+                issued = str(ex.get("key_issued_at") or ex.get("created_at") or "")
+                issued_dt = None
+                try:
+                    issued_dt = datetime.fromisoformat(issued) if issued else None
+                except ValueError:
+                    issued_dt = None
+                if issued_dt is not None:
+                    age = (now_dt - issued_dt).total_seconds()
+                    if 0 <= age < 24 * 3600:
+                        remain_h = max(1, int((24 * 3600 - age) // 3600) + 1)
+                        return jsonify({
+                            "success": False, "needConfirm": True, "currentStatus": "pending",
+                            "remainHours": remain_h,
+                            "message": ("Máy đang có key vừa gửi qua email (chưa kích hoạt, còn hiệu "
+                                        f"lực ~{remain_h}h). Tạo key mới sẽ thay key cũ. Bạn có chắc "
+                                        "muốn tạo key mới?"),
+                        }), 409
+
         if existing:
             # Máy đã tồn tại: cấp key mới cho gói mới (đổi/gia hạn), đặt pending chờ nhập.
             conn.execute(

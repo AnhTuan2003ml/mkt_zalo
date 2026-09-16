@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.3.4"
+APP_VERSION = "1.3.5"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -1169,13 +1169,20 @@ def api_activation_resend():
         options_map = {item["key"]: item for item in get_activation_duration_options()}
         selected = options_map.get(duration_key, options_map.get("3m", {"key": duration_key, "label": duration_key}))
 
+        # confirm=1 nghĩa là người dùng đã ĐỒNG Ý đổi gói khi máy đang có key còn hiệu lực.
+        confirm_change = bool(data.get("confirm") or data.get("confirmChange"))
+
         # Gửi thông tin máy lên MÁY CHỦ để server sinh key + gửi email admin.
         from authencation.server_license import register_with_server
-        result = register_with_server(duration_key)
+        result = register_with_server(duration_key, confirm_change=confirm_change)
+        need_confirm = bool(result.get("needConfirm"))
         sent = bool(result.get("success") and result.get("sent"))
         status = _activation_status_payload()
+        # needConfirm KHÔNG phải lỗi -> trả 200 để client hỏi xác nhận rồi gửi lại.
+        ok_http = bool(result.get("success")) or need_confirm
         return jsonify({
             "success": bool(result.get("success")),
+            "needConfirm": need_confirm,
             "sent": sent,
             "activated": bool(status.get("activated")),
             "selected_duration": selected,
@@ -1184,7 +1191,7 @@ def api_activation_resend():
                 if sent else (result.get("error") or "Không gửi được yêu cầu tới máy chủ cấp phép.")
             ),
             "status_message": status.get("message", ""),
-        }), (200 if result.get("success") else 400)
+        }), (200 if ok_http else 400)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
