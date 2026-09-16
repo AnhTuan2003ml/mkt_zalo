@@ -9,6 +9,7 @@ Luồng:
   cục bộ để còn dùng được khi tạm mất mạng (grace period).
 - get_server_plan(): trả quyền hiện tại (ưu tiên verify online, fallback cache).
 """
+import hashlib
 import json
 import os
 import socket
@@ -108,10 +109,48 @@ def _write_cache(data):
         print(f"[server_license] Không ghi được cache: {exc}")
 
 
-def get_machine_info():
-    """MAC + tên máy + IP nội bộ của thiết bị hiện tại."""
+def _stable_machine_id():
+    """ID máy ỔN ĐỊNH, KHÔNG đổi theo card mạng/VPN/khởi động lại.
+
+    Ưu tiên Windows MachineGuid (registry) — cố định theo cài đặt Windows. Trả ""
+    nếu không đọc được (sẽ fallback sang MAC phần cứng)."""
     try:
-        mac = _format_mac(uuid.getnode())
+        import winreg  # chỉ có trên Windows
+        access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"SOFTWARE\Microsoft\Cryptography", 0, access) as k:
+            guid, _ = winreg.QueryValueEx(k, "MachineGuid")
+            g = str(guid or "").strip()
+            if g:
+                return g
+    except Exception:
+        pass
+    return ""
+
+
+def _device_mac():
+    """Chuỗi định danh dạng MAC, ỔN ĐỊNH theo máy.
+
+    Nếu lấy được MachineGuid -> dựng MAC tất định từ nó (không đổi theo card mạng
+    /VPN) -> hết cảnh "kích hoạt xong lại đòi nhập key". Không có thì mới fallback
+    sang MAC phần cứng ``uuid.getnode()`` (có thể không ổn định)."""
+    sid = _stable_machine_id()
+    if sid:
+        h = hashlib.md5(("nexus:" + sid).encode("utf-8")).hexdigest()[:12].upper()
+        # Byte đầu: đặt bit locally-administered (|0x02), bỏ bit multicast (&0xFE).
+        first = (int(h[:2], 16) | 0x02) & 0xFE
+        h = f"{first:02X}" + h[2:]
+        return ":".join(h[i:i + 2] for i in range(0, 12, 2))
+    try:
+        return _format_mac(uuid.getnode())
+    except Exception:
+        return ""
+
+
+def get_machine_info():
+    """MAC (định danh ổn định) + tên máy + IP nội bộ của thiết bị hiện tại."""
+    try:
+        mac = _device_mac()
     except Exception:
         mac = ""
     try:
@@ -157,13 +196,27 @@ def verify_with_server(key, timeout=20):
     if not url:
         return {"valid": False, "error": "Chưa cấu hình LICENSE_SERVER_URL."}
     info = get_machine_info()
+    # QUY ĐỔI KEY CŨ: nếu cache còn MAC cũ (bản trước dùng uuid.getnode) khác MAC
+    # ổn định hiện tại -> gửi kèm prevMac để server DỜI kích hoạt cũ sang MAC mới,
+    # KHÔNG bắt nhập lại key.
+    payload = {"mac": info["mac"], "key": key, "machineName": info["machineName"]}
+    prev_mac = str((_read_cache() or {}).get("mac") or "").strip()
+    if prev_mac and prev_mac.upper() != str(info["mac"]).upper():
+        payload["prevMac"] = prev_mac
     try:
         resp = requests.post(
             f"{url}/api/verify",
-            json={"mac": info["mac"], "key": key, "machineName": info["machineName"]},
+            json=payload,
             timeout=timeout, proxies=NO_PROXY,
         )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            data = {"valid": False, "error": f"HTTP {resp.status_code}"}
+        # 429 = bị rate-limit/tạm khóa (nhiều máy chung IP / verify quá dày). ĐÂY LÀ
+        # lỗi TẠM, KHÔNG phải license sai -> đánh dấu để phía trên dùng cache, không khóa.
+        if getattr(resp, "status_code", 200) == 429:
+            data["softError"] = True
     except Exception as exc:
         return {"valid": False, "error": f"Không kết nối được máy chủ cấp phép: {exc}"}
 
@@ -205,13 +258,21 @@ def get_server_plan():
     if data.get("valid"):
         cache = _read_cache()  # đã được verify_with_server cập nhật
         return _plan_result(True, cache)
-    # Server trả không hợp lệ RÕ RÀNG (không phải lỗi mạng) -> khóa.
+    # CHỈ khóa khi server nói license SAI RÕ RÀNG. Lỗi mạng HOẶC rate-limit/tạm khóa
+    # (429, "quá nhiều yêu cầu", "tạm khóa") là lỗi TẠM -> dùng cache, KHÔNG khóa
+    # (tránh cảnh nhiều máy chung IP bị đòi nhập lại key oan).
     err = str(data.get("error") or "")
-    network_error = "kết nối" in err.lower() or "connect" in err.lower()
-    if not network_error:
+    low = err.lower()
+    soft_error = (
+        bool(data.get("softError"))
+        or "kết nối" in low or "connect" in low
+        or "quá nhiều" in low or "qua nhieu" in low
+        or "tạm khóa" in low or "tam khoa" in low
+    )
+    if not soft_error:
         return _plan_result(False, cache, reason=err or "license không hợp lệ")
 
-    # Lỗi mạng: cho dùng cache trong grace period nếu chưa hết hạn.
+    # Lỗi tạm (mạng / rate-limit): cho dùng cache trong grace period nếu chưa hết hạn.
     last = float(cache.get("lastVerifiedAt") or 0)
     if last and (datetime.now().timestamp() - last) <= GRACE_SECONDS:
         if _cache_not_expired(cache):

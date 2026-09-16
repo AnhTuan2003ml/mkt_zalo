@@ -678,12 +678,27 @@ def api_verify():
     data = request.get_json(silent=True) or {}
     mac = str(data.get("mac") or "").strip().upper()
     key = str(data.get("key") or "").strip().upper()
+    prev_mac = str(data.get("prevMac") or data.get("prev_mac") or "").strip().upper()
     machine_name = str(data.get("machineName") or data.get("machine_name") or "").strip()
     if not mac or not key:
         return jsonify({"valid": False, "error": "Thiếu MAC hoặc key."}), 400
 
     with _db_lock, closing(_conn()) as conn:
         row = conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone()
+
+        # QUY ĐỔI KEY CŨ (tương thích ngược): bản mới đổi định danh máy sang MAC ổn
+        # định (MachineGuid). Nếu MAC mới chưa có nhưng client gửi kèm prevMac (MAC
+        # cũ) đang giữ ĐÚNG key này -> DỜI dòng máy cũ sang MAC mới, GIỮ NGUYÊN kích
+        # hoạt/hạn dùng. Không bắt nhập lại key.
+        if (not row) and prev_mac and prev_mac != mac:
+            old = conn.execute("SELECT * FROM machines WHERE mac=?", (prev_mac,)).fetchone()
+            if old and str(old["license_key"] or "").strip().upper() == key:
+                conn.execute(
+                    "UPDATE machines SET mac=?, machine_name=?, ip=? WHERE mac=?",
+                    (mac, machine_name or old["machine_name"], _client_ip(), prev_mac),
+                )
+                conn.commit()
+                row = conn.execute("SELECT * FROM machines WHERE mac=?", (mac,)).fetchone()
 
         # Gói DOANH NGHIỆP: 1 key dùng cho nhiều MAC. Nếu MAC này chưa gắn key đó
         # mà key là key doanh nghiệp còn chỗ (< max_machines) thì gắn thêm MAC.
