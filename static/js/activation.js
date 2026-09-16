@@ -18,6 +18,30 @@ function setResult(message, ok) {
     box.textContent = message || '';
 }
 
+// Popup xác nhận (thay window.confirm). Trả Promise<boolean>.
+function confirmPopup(message) {
+    return new Promise((resolve) => {
+        const ov = document.getElementById('confirmOverlay');
+        const msg = document.getElementById('confirmMessage');
+        const ok = document.getElementById('confirmOk');
+        const cancel = document.getElementById('confirmCancel');
+        if (!ov || !msg || !ok || !cancel) { resolve(window.confirm(message)); return; }
+        msg.textContent = message || 'Bạn có chắc?';
+        const cleanup = (val) => {
+            ov.classList.remove('show');
+            ok.onclick = null; cancel.onclick = null; ov.onclick = null;
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') cleanup(false); };
+        ok.onclick = () => cleanup(true);
+        cancel.onclick = () => cleanup(false);
+        ov.onclick = (e) => { if (e.target === ov) cleanup(false); };  // bấm nền = hủy
+        document.addEventListener('keydown', onKey);
+        ov.classList.add('show');
+    });
+}
+
 function getSelectedPlanKey() {
     const checked = document.querySelector('input[name="activationPlan"]:checked');
     return checked ? checked.value : '1m';
@@ -121,7 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             // Máy đang có key còn hiệu lực -> hỏi xác nhận ĐỔI, đồng ý thì gửi lại.
             if (data.needConfirm && !confirmChange) {
-                if (window.confirm(data.message || 'Máy đang có key còn hiệu lực. Bạn có chắc muốn đổi/tạo key mới? (key hiện tại sẽ bị thay)')) {
+                const agreed = await confirmPopup(data.message || 'Máy đang có key còn hiệu lực. Bạn có chắc muốn đổi/tạo key mới? (key hiện tại sẽ bị thay)');
+                if (agreed) {
                     buttonRef.disabled = false;
                     buttonRef.textContent = oldText;
                     return requestCode(buttonRef, loadingText, true);
