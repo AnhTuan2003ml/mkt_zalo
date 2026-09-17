@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.3.5"
+APP_VERSION = "1.3.6"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -3200,7 +3200,9 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         or account.get("profileId")
         or ""
     ).strip()
-    skip_leaders = bool(payload.get("skipLeaders"))
+    # Mặc định LUÔN bỏ trưởng/phó nhóm nguồn (kể cả khi payload không gửi cờ).
+    # Chỉ khi client gửi rõ skipLeaders=false mới thêm cả owner/admin.
+    skip_leaders = bool(payload.get("skipLeaders", True))
     skipped_leader_count = 0
     clean_members = []
     seen = set()
