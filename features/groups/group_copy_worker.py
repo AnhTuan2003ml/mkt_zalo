@@ -120,13 +120,13 @@ def _daily_limit(job: dict) -> int:
                     job.get("friendRequestDailyLimit")
                     or job.get("dailyLimit")
                     or job.get("batchSize")
-                    or 10
+                    or 25
                 ),
                 30,   # tối đa 30 lời mời kết bạn / tài khoản / ngày
             ),
         )
     except (TypeError, ValueError):
-        return 10
+        return 25
 
 
 def _verify_interval(job: dict) -> int:
@@ -166,21 +166,51 @@ def _next_verify_run(job: dict, after: Optional[datetime] = None) -> str:
 
 
 def _send_gap_minutes(job: dict) -> int:
-    """Khoảng nghỉ NGẪU NHIÊN (phút) giữa 2 lần gửi kết bạn/mời của MỖI tài khoản.
+    """Khoảng NGHỈ giữa 2 ĐỢT gửi (phút) của MỖI tài khoản.
 
-    Mặc định random 5–20 phút để tránh Zalo chặn do gửi dồn dập. Có thể chỉnh
-    qua job: sendMinMinutes / sendMaxMinutes.
+    Mặc định random 15–30 phút: gửi xong 1 đợt thì nghỉ rồi mới sang đợt kế
+    (tránh dồn dập bị Zalo chặn). Chỉnh qua job: sendMinMinutes / sendMaxMinutes.
     """
     try:
-        lo = int(job.get("sendMinMinutes") or 5)
+        lo = int(job.get("sendMinMinutes") or 15)
+    except (TypeError, ValueError):
+        lo = 15
+    try:
+        hi = int(job.get("sendMaxMinutes") or 30)
+    except (TypeError, ValueError):
+        hi = 30
+    lo = max(1, min(lo, 1440))
+    hi = max(lo, min(hi, 1440))
+    return random.randint(lo, hi)
+
+
+def _batch_size(job: dict) -> int:
+    """Số lời mời kết bạn gửi trong MỖI ĐỢT (mặc định random 5–8 người)."""
+    try:
+        lo = int(job.get("batchMinSize") or 5)
     except (TypeError, ValueError):
         lo = 5
     try:
-        hi = int(job.get("sendMaxMinutes") or 20)
+        hi = int(job.get("batchMaxSize") or 8)
     except (TypeError, ValueError):
-        hi = 20
-    lo = max(1, min(lo, 1440))
-    hi = max(lo, min(hi, 1440))
+        hi = 8
+    lo = max(1, min(lo, 30))
+    hi = max(lo, min(hi, 30))
+    return random.randint(lo, hi)
+
+
+def _send_gap_seconds(job: dict) -> int:
+    """Khoảng cách (giây) giữa 2 LẦN GỬI trong cùng 1 đợt (mặc định 60–180s)."""
+    try:
+        lo = int(job.get("sendMinSeconds") or 60)
+    except (TypeError, ValueError):
+        lo = 60
+    try:
+        hi = int(job.get("sendMaxSeconds") or 180)
+    except (TypeError, ValueError):
+        hi = 180
+    lo = max(10, min(lo, 3600))
+    hi = max(lo, min(hi, 3600))
     return random.randint(lo, hi)
 
 
@@ -359,8 +389,11 @@ def _sync_job_schedule(job: dict, now: Optional[datetime] = None) -> None:
         job["nextRunAt"] = ""
         return
 
-    if members and len(joined) + len(skipped) == len(members):
+    if members and len(joined) + len(skipped) == len(members) and (
+        len(joined) > 0 or bool(job.get("sourceUidsResolved"))
+    ):
         # Đã đủ thành viên: hoàn thành chiến dịch và dừng toàn bộ lịch kiểm tra.
+        # (Không kết thúc nếu tất cả chỉ "skipped" do CHƯA phân giải được uid.)
         job["status"] = "done"
         job["completedAt"] = str(job.get("completedAt") or now.isoformat(timespec="seconds"))
         job["nextInviteAt"] = ""
@@ -386,6 +419,15 @@ def _sync_job_schedule(job: dict, now: Optional[datetime] = None) -> None:
             job["nextVerifyAt"] = ""
 
         job["nextRunAt"] = _earliest_iso(candidates) or now.isoformat(timespec="seconds")
+        return
+
+    if members and not job.get("sourceUidsResolved") and not failed:
+        # Còn thành viên nhưng CHƯA phân giải được uid (bị skip tạm) -> giữ pending
+        # để worker thử lại, không kết thúc chiến dịch oan.
+        job["status"] = "pending"
+        if not str(job.get("nextInviteAt") or "").strip():
+            job["nextInviteAt"] = now.isoformat(timespec="seconds")
+        job["nextRunAt"] = str(job.get("nextInviteAt") or now.isoformat(timespec="seconds"))
         return
 
     job["status"] = "partial" if failed else "done"
@@ -657,18 +699,27 @@ def _resolve_own_source_uids(job: dict, zpw_enk: str, cookies: str, imei: str) -
             member["error"] = "Không ghép được người này trong phiên của tài khoản phụ (bỏ qua)."
             skipped += 1
 
-    job["sourceUidsResolved"] = True
     job["sourceUidResolveStats"] = {
         "resolved": resolved,
         "skipped": skipped,
         "at": datetime.now().isoformat(timespec="seconds"),
     }
+    if resolved <= 0:
+        # Không ghép được ai -> coi là lỗi TẠM, KHÔNG đánh dấu "đã phân giải" để
+        # lần chạy sau thử lại (thay vì bỏ qua toàn bộ rồi kết thúc chiến dịch oan).
+        print(
+            f"[group_copy_worker] {job.get('jobId')}: chưa ghép được uid nào trong phiên "
+            "này -> sẽ thử lại (không kết thúc chiến dịch).",
+            flush=True,
+        )
+        return False
+    job["sourceUidsResolved"] = True
     print(
         f"[group_copy_worker] {job.get('jobId')}: tài khoản phụ phân giải uid nhóm nguồn "
         f"-> khớp {resolved}, bỏ qua {skipped}.",
         flush=True,
     )
-    return resolved > 0
+    return True
 
 
 def _maybe_leave_source_group(job: dict, zpw_enk: str = "", cookies: str = "", imei: str = "") -> None:
@@ -1383,28 +1434,36 @@ class GroupCopyWorker:
         quota_deferred = 0
         friend_text = _friend_request_text(job, group_link)
 
-        # Mỗi run gửi 1 lời mời kết bạn KÈM tin nhắn mời (link nhóm) cho MỘT người
-        # CHƯA là bạn — độc lập với việc mời trực tiếp bạn bè ở trên (không loại trừ
-        # nhau nữa). Giãn nhịp chống spam: 1 người/run, mỗi run cách 5–20 phút.
+        # Gửi lời mời kết bạn KÈM link nhóm theo ĐỢT: mỗi đợt 5–8 người, mỗi lần
+        # gửi cách nhau 60–180s; hết đợt nghỉ 15–30 phút mới sang đợt kế. Tôn
+        # trọng hạn mức ngày (20–30/tài khoản). Trừ số đã mời trực tiếp ở trên để
+        # tổng mỗi đợt vẫn nằm trong khoảng 5–8.
+        batch_size = max(1, _batch_size(job) - len(direct_ids))
+        attempted_uids: set = set()
+        if remaining_quota > 0 and direct_ids:
+            time.sleep(_send_gap_seconds(job))  # giãn cách sau lần mời trực tiếp
         if remaining_quota > 0:
-            # MẶC ĐỊNH LUÔN GỬI KẾT BẠN: KHÔNG bỏ qua người vừa được mời trực tiếp
-            # ("nhắn được thì bỏ qua kết bạn" là nguyên nhân trước đây khiến không gửi
-            # kết bạn). Ưu tiên người CHƯA là bạn (phải kết bạn mới vào nhóm được);
-            # hết mới tới người còn lại đang pending.
-            target = next(
-                (m for m in _pending_members(job)
-                 if str(m.get("userId") or "").strip()
-                 and m.get("isFriend") is not True),
-                None,
-            )
-            if target is None:
+            while remaining_quota > 0 and len(attempted_uids) < batch_size:
+                # Ưu tiên người CHƯA là bạn (phải kết bạn mới vào nhóm được);
+                # hết mới tới người còn lại đang pending.
                 target = next(
                     (m for m in _pending_members(job)
-                     if str(m.get("userId") or "").strip()),
+                     if str(m.get("userId") or "").strip()
+                     and str(m.get("userId")) not in attempted_uids
+                     and m.get("isFriend") is not True),
                     None,
                 )
-            if target is not None:
+                if target is None:
+                    target = next(
+                        (m for m in _pending_members(job)
+                         if str(m.get("userId") or "").strip()
+                         and str(m.get("userId")) not in attempted_uids),
+                        None,
+                    )
+                if target is None:
+                    break
                 uid = str(target.get("userId") or "").strip()
+                attempted_uids.add(uid)
                 _consume_friend_request_slot(job, started_at)
                 remaining_quota -= 1
                 target["friendRequestAttempts"] = int(target.get("friendRequestAttempts") or 0) + 1
@@ -1446,6 +1505,10 @@ class GroupCopyWorker:
                     target["error"] = message or "Zalo từ chối gửi lời mời kết bạn."
                     friend_request_failed += 1
 
+                # Giãn cách giữa 2 lần gửi trong CÙNG đợt (60–180s), tránh dồn dập.
+                if remaining_quota > 0 and len(attempted_uids) < batch_size:
+                    time.sleep(_send_gap_seconds(job))
+
         run_record["friendRequestCount"] = friend_request_sent
         run_record["friendRequestFailedCount"] = friend_request_failed
         run_record["dailyFriendRequestCount"] = int(job.get("dailyFriendRequestCount") or 0)
@@ -1458,9 +1521,9 @@ class GroupCopyWorker:
             else f"Có {friend_request_failed} lời mời kết bạn chưa gửi được; hệ thống sẽ thử lại vào đợt sau."
         )
 
-        # Lịch gửi kế tiếp: còn người chưa vào nhóm thì hẹn cách ngẫu nhiên 5–20
-        # phút (giãn nhịp/tài khoản). Nếu đã hết hạn mức kết bạn hôm nay và không
-        # còn bạn bè để mời trực tiếp thì lùi sang giờ chạy ngày kế tiếp.
+        # Lịch gửi kế tiếp: còn người chưa vào nhóm thì hẹn NGHỈ 15–30 phút rồi
+        # sang đợt kế (giãn nhịp/tài khoản). Nếu đã hết hạn mức kết bạn hôm nay và
+        # không còn bạn bè để mời trực tiếp thì lùi sang giờ chạy ngày kế tiếp.
         pending_left = _pending_members(job)
         if pending_left:
             now_after = datetime.now()
@@ -1489,8 +1552,7 @@ class GroupCopyWorker:
             if creating_new_group
             else f"Đã lấy link nhóm và thử thêm trực tiếp {len(direct_ids)} người"
         )
-        # Hiển thị TỔNG đã gửi HÔM NAY (cộng dồn) chứ không phải số của riêng run này
-        # (mỗi run chỉ gửi tối đa 1) — nếu không sẽ luôn thấy 0/1 và tưởng "không tăng".
+        # Hiển thị TỔNG đã gửi HÔM NAY (cộng dồn) chứ không phải số của riêng đợt này.
         sent_today = int(job.get("dailyFriendRequestCount") or 0)
         prefix += f"; đã gửi {sent_today}/{_daily_limit(job)} lời mời kết bạn hôm nay"
         if quota_deferred:

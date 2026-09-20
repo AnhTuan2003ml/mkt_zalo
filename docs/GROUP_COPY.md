@@ -12,8 +12,8 @@ Tính năng hỗ trợ lập lịch mời thành viên từ một nhóm nguồn 
   - **Tạo nhóm mới:** nhập tên nhóm. Đợt đầu tiên được dùng để tạo nhóm.
   - **Nhóm có sẵn:** chọn nhóm trong danh sách nhóm cá nhân.
 - Thời gian bắt đầu.
-- Số người mời trong mỗi đợt, tối đa 100.
-- Khoảng cách giữa hai đợt, từ 1 phút đến 30 ngày.
+- Lời mời kết bạn tối đa mỗi ngày: 20–30 mỗi tài khoản (tối đa 30).
+- Nhịp gửi: mỗi đợt 5–8 người, mỗi lần gửi cách nhau 60–180 giây, nghỉ giữa các đợt 15–30 phút (tránh gửi dồn dập).
 - Xác nhận có quyền mời thành viên và tuân thủ chính sách nền tảng.
 
 ## Quy trình chạy

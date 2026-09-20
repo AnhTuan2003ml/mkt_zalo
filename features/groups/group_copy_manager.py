@@ -336,11 +336,11 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("lastVerificationError", "")
     job.setdefault("targetMemberCount", 0)
 
-    daily_limit = job.get("friendRequestDailyLimit", job.get("dailyLimit", job.get("batchSize", 10)))
+    daily_limit = job.get("friendRequestDailyLimit", job.get("dailyLimit", job.get("batchSize", 25)))
     try:
-        daily_limit = max(1, min(int(daily_limit or 10), 30))
+        daily_limit = max(1, min(int(daily_limit or 25), 30))
     except (TypeError, ValueError):
-        daily_limit = 10
+        daily_limit = 25
     job["dailyLimit"] = daily_limit
     job["batchSize"] = daily_limit
     job["friendRequestDailyLimit"] = daily_limit
@@ -414,10 +414,13 @@ def _normalize_job(job: dict) -> dict:
     _refresh_progress(job)
 
     # Đã đủ thành viên thì kết thúc tác vụ, không tiếp tục theo dõi hay kiểm tra.
+    # LƯU Ý: nếu tất cả chỉ là "skipped" do CHƯA phân giải được uid (sourceUidsResolved
+    # còn False) thì KHÔNG kết thúc — để worker thử lại, tránh đóng chiến dịch oan.
+    _joined_n = int(job.get("joinedCount") or 0)
+    _skipped_n = int(job.get("skippedCount") or 0)
     if job.get("totalMembers") and (
-        int(job.get("joinedCount") or 0) + int(job.get("skippedCount") or 0)
-        >= int(job.get("totalMembers") or 0)
-    ):
+        _joined_n + _skipped_n >= int(job.get("totalMembers") or 0)
+    ) and (_joined_n > 0 or bool(job.get("sourceUidsResolved"))):
         job["status"] = "done"
         job["completedAt"] = str(job.get("completedAt") or _now_iso())
         job["nextInviteAt"] = ""

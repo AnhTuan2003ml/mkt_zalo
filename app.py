@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.3.9"
+APP_VERSION = "1.3.10"
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -3458,7 +3458,7 @@ def api_group_copy_start():
     consent = bool(data.get("consentConfirmed") or data.get("confirmConsent"))
 
     try:
-        daily_limit = max(1, min(int(data.get("friendRequestDailyLimit") or data.get("dailyLimit") or data.get("batchSize") or 10), 30))
+        daily_limit = max(1, min(int(data.get("friendRequestDailyLimit") or data.get("dailyLimit") or data.get("batchSize") or 25), 30))
     except Exception:
         return jsonify({"success": False, "error": "Số lời mời kết bạn mỗi ngày không hợp lệ."}), 400
     try:
