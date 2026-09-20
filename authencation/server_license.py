@@ -216,10 +216,15 @@ def verify_with_server(key, timeout=20):
         try:
             data = resp.json()
         except Exception:
+            # Phản hồi KHÔNG phải JSON (ngrok/proxy/tunnel trả trang HTML, hoặc máy
+            # chủ lỗi) = lỗi TẠM, KHÔNG phải license sai -> đánh dấu softError để
+            # phía trên dùng cache, tránh đòi nhập lại key oan.
             data = {"valid": False, "error": f"HTTP {resp.status_code}"}
-        # 429 = bị rate-limit/tạm khóa (nhiều máy chung IP / verify quá dày). ĐÂY LÀ
-        # lỗi TẠM, KHÔNG phải license sai -> đánh dấu để phía trên dùng cache, không khóa.
-        if getattr(resp, "status_code", 200) == 429:
+            data["softError"] = True
+        # 429 = bị rate-limit/tạm khóa (nhiều máy chung IP / verify quá dày). 5xx =
+        # máy chủ lỗi. CẢ HAI là lỗi TẠM -> dùng cache, KHÔNG khóa.
+        _status = getattr(resp, "status_code", 200)
+        if _status == 429 or _status >= 500:
             data["softError"] = True
     except Exception as exc:
         return {"valid": False, "error": f"Không kết nối được máy chủ cấp phép: {exc}"}
@@ -272,14 +277,19 @@ def get_server_plan():
         or "kết nối" in low or "connect" in low
         or "quá nhiều" in low or "qua nhieu" in low
         or "tạm khóa" in low or "tam khoa" in low
+        or low.startswith("http ")  # phản hồi không phải JSON từ tunnel/proxy
     )
     if not soft_error:
         return _plan_result(False, cache, reason=err or "license không hợp lệ")
 
-    # Lỗi tạm (mạng / rate-limit): cho dùng cache trong grace period nếu chưa hết hạn.
-    last = float(cache.get("lastVerifiedAt") or 0)
-    if last and (datetime.now().timestamp() - last) <= GRACE_SECONDS:
-        if _cache_not_expired(cache):
+    # Lỗi tạm (mạng / rate-limit / tunnel chết): dùng cache.
+    # - Gói VĨNH VIỄN: tin cache (không có hạn để hết) -> không đòi nhập lại key.
+    # - Gói có hạn: cho dùng trong grace period kể từ lần verify online cuối.
+    if _cache_not_expired(cache):
+        if cache.get("isPermanent"):
+            return _plan_result(True, cache, offline=True)
+        last = float(cache.get("lastVerifiedAt") or 0)
+        if last and (datetime.now().timestamp() - last) <= GRACE_SECONDS:
             return _plan_result(True, cache, offline=True)
     return _plan_result(False, cache, reason="mất kết nối máy chủ quá lâu")
 
