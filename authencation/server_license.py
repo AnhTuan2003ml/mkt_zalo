@@ -62,14 +62,16 @@ GRACE_SECONDS = 3 * 24 * 3600     # (dự phòng) số giây tối thiểu khi m
 
 
 def _reverify_seconds():
-    """Giãn nhịp verify online (giây). Mặc định 5 phút để khi HỦY KÍCH HOẠT trên
-    máy chủ thì client khóa trong ~5 phút. Chỉnh qua LICENSE_REVERIFY_SECONDS:
-    - Đặt nhỏ (vd 60) = khóa nhanh hơn nhưng nhiều request tới tunnel.
-    - Đặt lớn (vd 3600) = ít request (hợp ngrok free 20k/tháng khi nhiều máy)."""
+    """Giãn nhịp verify online (giây). Mặc định 6 GIỜ để KHÔNG làm cạn quota
+    ngrok free (300s cũ = ~288 request/máy/ngày, rất nhanh hết limit). Khi server
+    không tới được, client dùng cache tới hạn license nên không bị khóa oan.
+    Chỉnh qua LICENSE_REVERIFY_SECONDS:
+    - Đặt nhỏ (vd 300) = phát hiện hủy kích hoạt nhanh hơn nhưng tốn request.
+    - Đặt lớn (vd 86400 = 1 ngày) = cực ít request khi nhiều máy."""
     try:
-        v = int(os.getenv("LICENSE_REVERIFY_SECONDS", "300") or 300)
+        v = int(os.getenv("LICENSE_REVERIFY_SECONDS", "21600") or 21600)
     except (TypeError, ValueError):
-        v = 300
+        v = 21600
     return max(60, v)
 
 
@@ -95,20 +97,85 @@ def _cache_path():
         return os.path.join(os.path.expanduser("~"), ".nexus_server_license_cache")
 
 
-def _read_cache():
+def _alt_cache_paths():
+    """Các vị trí dự phòng để lưu/đọc key (file bị AV/cleanup xóa vẫn còn bản khác)."""
+    paths = []
+    for base in (os.environ.get("APPDATA"), os.environ.get("LOCALAPPDATA"),
+                 os.environ.get("PROGRAMDATA"), os.path.expanduser("~")):
+        if not base:
+            continue
+        paths.append(os.path.join(base, "Nexus", ".server_license_cache"))
+    return paths
+
+
+# Khóa registry lưu key (nguồn chính, khó bị xóa hơn file).
+_REG_SUBKEY = r"Software\Nexus"
+_REG_VALUE = "LicenseCache"
+
+
+def _reg_read():
     try:
-        with open(_cache_path(), "r", encoding="utf-8") as f:
-            return json.load(f)
+        import winreg
+        access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_SUBKEY, 0, access) as k:
+            val, _ = winreg.QueryValueEx(k, _REG_VALUE)
+        data = json.loads(val) if val else {}
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
 
-def _write_cache(data):
+def _reg_write(payload: str) -> None:
     try:
-        with open(_cache_path(), "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
+        import winreg
+        access = winreg.KEY_WRITE | getattr(winreg, "KEY_WOW64_64KEY", 0)
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, _REG_SUBKEY, 0, access) as k:
+            winreg.SetValueEx(k, _REG_VALUE, 0, winreg.REG_SZ, payload)
     except Exception as exc:
-        print(f"[server_license] Không ghi được cache: {exc}")
+        print(f"[server_license] Không ghi được registry: {exc}")
+
+
+def _reg_delete() -> None:
+    try:
+        import winreg
+        access = winreg.KEY_WRITE | getattr(winreg, "KEY_WOW64_64KEY", 0)
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_SUBKEY, 0, access) as k:
+            winreg.DeleteValue(k, _REG_VALUE)
+    except Exception:
+        pass
+
+
+def _read_cache():
+    # 1) Registry (nguồn chính).
+    data = _reg_read()
+    if data:
+        return data
+    # 2) File cache chính + các vị trí dự phòng.
+    for path in [_cache_path()] + _alt_cache_paths():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and data:
+                return data
+        except Exception:
+            continue
+    return {}
+
+
+def _write_cache(data):
+    payload = json.dumps(data, ensure_ascii=False)
+    _reg_write(payload)  # registry trước
+    written = 0
+    for path in [_cache_path()] + _alt_cache_paths():
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(payload)
+            written += 1
+        except Exception:
+            continue
+    if not written:
+        print("[server_license] Không ghi được cache license ra file/registry.")
 
 
 def _stable_machine_id():
@@ -232,6 +299,7 @@ def verify_with_server(key, timeout=20):
         return {"valid": False, "error": f"Không kết nối được máy chủ cấp phép: {exc}"}
 
     if data.get("valid"):
+        _now_ts = datetime.now().timestamp()
         _write_cache({
             "mac": info["mac"],
             "key": key,
@@ -242,7 +310,8 @@ def verify_with_server(key, timeout=20):
             "daysRemaining": data.get("daysRemaining"),
             "maxAccounts": data.get("maxAccounts", 2),
             "multiAccountExec": bool(data.get("multiAccountExec")),
-            "lastVerifiedAt": datetime.now().timestamp(),
+            "lastVerifiedAt": _now_ts,
+            "lastAttemptAt": _now_ts,
         })
     return data
 
@@ -259,10 +328,17 @@ def get_server_plan():
     if not key:
         return _plan_result(False, cache, reason="chưa kích hoạt")
 
-    # Vừa verify online gần đây -> dùng cache, không gọi server (giảm tải + nhanh).
-    last = float(cache.get("lastVerifiedAt") or 0)
-    if last and (datetime.now().timestamp() - last) < REVERIFY_SECONDS and _cache_not_expired(cache):
+    # Vừa verify/thử online gần đây -> dùng cache, KHÔNG gọi server (giảm tải +
+    # tránh làm cạn quota ngrok free khi server tạm chết).
+    now_ts = datetime.now().timestamp()
+    last = float(cache.get("lastAttemptAt") or cache.get("lastVerifiedAt") or 0)
+    if last and (now_ts - last) < REVERIFY_SECONDS and _cache_not_expired(cache):
         return _plan_result(True, cache, offline=True)
+
+    # Ghi mốc LẦN THỬ (dù thành công hay không) để lần sau trong cùng chu kỳ
+    # không dội request vào server.
+    cache["lastAttemptAt"] = now_ts
+    _write_cache(cache)
 
     # Thử verify online để phản ánh hủy kích hoạt / hết hạn kịp thời.
     data = verify_with_server(key, timeout=8)
@@ -322,7 +398,9 @@ def _plan_result(activated, cache, reason="", offline=False):
 
 
 def clear_cache():
-    try:
-        os.remove(_cache_path())
-    except Exception:
-        pass
+    _reg_delete()
+    for path in [_cache_path()] + _alt_cache_paths():
+        try:
+            os.remove(path)
+        except Exception:
+            pass
