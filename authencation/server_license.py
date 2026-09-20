@@ -56,7 +56,9 @@ _LOADED_ENV_PATH = _load_client_env()
 
 # Bỏ qua system proxy (tool bắt gói gây lỗi SSL) — gọi thẳng.
 NO_PROXY = {"http": None, "https": None}
-GRACE_SECONDS = 3 * 24 * 3600     # cho phép dùng cache tối đa 3 ngày khi mất mạng
+# Header gửi kèm: bỏ trang cảnh báo của ngrok (nếu có) để luôn nhận JSON.
+_REQ_HEADERS = {"ngrok-skip-browser-warning": "true", "Accept": "application/json"}
+GRACE_SECONDS = 3 * 24 * 3600     # (dự phòng) số giây tối thiểu khi mất mạng
 
 
 def _reverify_seconds():
@@ -187,7 +189,7 @@ def register_with_server(plan_key="1m", timeout=20, confirm_change=False):
             f"{url}/api/register",
             json={"mac": info["mac"], "machineName": info["machineName"], "plan": plan_key,
                   "confirmChange": bool(confirm_change)},
-            timeout=timeout, proxies=NO_PROXY,
+            timeout=timeout, proxies=NO_PROXY, headers=_REQ_HEADERS,
         )
         return resp.json()
     except Exception as exc:
@@ -211,7 +213,7 @@ def verify_with_server(key, timeout=20):
         resp = requests.post(
             f"{url}/api/verify",
             json=payload,
-            timeout=timeout, proxies=NO_PROXY,
+            timeout=timeout, proxies=NO_PROXY, headers=_REQ_HEADERS,
         )
         try:
             data = resp.json()
@@ -282,16 +284,13 @@ def get_server_plan():
     if not soft_error:
         return _plan_result(False, cache, reason=err or "license không hợp lệ")
 
-    # Lỗi tạm (mạng / rate-limit / tunnel chết): dùng cache.
-    # - Gói VĨNH VIỄN: tin cache (không có hạn để hết) -> không đòi nhập lại key.
-    # - Gói có hạn: cho dùng trong grace period kể từ lần verify online cuối.
+    # Lỗi TẠM (mạng / rate-limit / tunnel chết): dùng cache tới ĐÚNG HẠN của
+    # license (gói vĩnh viễn -> không hết hạn). Không khóa chỉ vì máy chủ tạm
+    # không với tới được -> hết cảnh "được lúc lại bắt kích hoạt lại".
+    # (Khi online trở lại, server vẫn áp được hủy kích hoạt / key-cutoff.)
     if _cache_not_expired(cache):
-        if cache.get("isPermanent"):
-            return _plan_result(True, cache, offline=True)
-        last = float(cache.get("lastVerifiedAt") or 0)
-        if last and (datetime.now().timestamp() - last) <= GRACE_SECONDS:
-            return _plan_result(True, cache, offline=True)
-    return _plan_result(False, cache, reason="mất kết nối máy chủ quá lâu")
+        return _plan_result(True, cache, offline=True)
+    return _plan_result(False, cache, reason="license đã hết hạn (ngoại tuyến)")
 
 
 def _cache_not_expired(cache):
