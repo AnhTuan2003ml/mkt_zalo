@@ -275,7 +275,14 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
+
+# Cổng giao diện Nexus (mở trình duyệt tới đây). Dùng port ÍT DÙNG để tránh đụng
+# 5000 (hay bị app khác chiếm -> báo 404). Đổi được qua env NEXUS_UI_PORT.
+try:
+    UI_PORT = int(os.getenv("NEXUS_UI_PORT", "5137") or "5137")
+except (TypeError, ValueError):
+    UI_PORT = 5137
 UPDATE_REPO = "AnhTuan2003ml/mkt_zalo"
 UPDATE_ASSET_NAME = "Nexus.zip"
 UPDATE_HASH_ASSET_NAME = UPDATE_ASSET_NAME + ".sha256"
@@ -1224,7 +1231,7 @@ def accounts_page():
 
 @app.route("/guide")
 def guide_page():
-    return render_template("guide.html", active_page="guide")
+    return render_template("guide.html", active_page="guide", ui_port=UI_PORT)
 
 
 @app.route("/messages")
@@ -5056,9 +5063,9 @@ def _start_backend_server():
             print(f"⚠️  Lỗi kiểm tra kích hoạt: {str(e)}", flush=True)
 
         print("✅ Backend đã sẵn sàng", flush=True)
-        print("🌐 Giao diện: http://127.0.0.1:5000/policy", flush=True)
+        print(f"🌐 Giao diện: http://127.0.0.1:{UI_PORT}/policy", flush=True)
         print("👉 Bấm nút 'Mở giao diện' để mở trình duyệt.", flush=True)
-        app.run(debug=False, port=5000, host="127.0.0.1", use_reloader=False, threaded=True)
+        app.run(debug=False, port=UI_PORT, host="127.0.0.1", use_reloader=False, threaded=True)
     except Exception as e:
         print(f"❌ Lỗi khởi động backend: {e}", flush=True)
         import traceback
@@ -5080,8 +5087,8 @@ def _cleanup_update_script():
         pass
 
 
-NEXUS_UI_URL = "http://127.0.0.1:5000/policy"
-NEXUS_UI_ORIGIN = "http://127.0.0.1:5000"
+NEXUS_UI_URL = f"http://127.0.0.1:{UI_PORT}/policy"
+NEXUS_UI_ORIGIN = f"http://127.0.0.1:{UI_PORT}"
 NEXUS_UI_EDGE_DEBUG_PORT = 9322
 
 
@@ -5316,7 +5323,7 @@ def _launch_wait_window():
 
     def backend_is_ready():
         try:
-            with socket.create_connection(("127.0.0.1", 5000), timeout=0.08):
+            with socket.create_connection(("127.0.0.1", UI_PORT), timeout=0.08):
                 return True
         except OSError:
             return False
