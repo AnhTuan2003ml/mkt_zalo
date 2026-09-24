@@ -30,7 +30,10 @@
         pickerOpen: false,
         pickerSearch: '',
         pickerSort: 'name',
-        highlightJobId: ''
+        highlightJobId: '',
+        campaignModalId: '',
+        selectMode: false,
+        selected: {}
     };
 
     var ICON_DETAIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -743,6 +746,7 @@
         var payload = {
             accountId: accountId,
             sourceInput: sourceInput,
+            phoneList: (($('groupCopyPhoneList') || {}).value || '').trim(),
             // Khi preview đã xác minh được nhóm, gửi thêm ID đầy đủ cho backend.
             // Backend vẫn giữ sourceInput gốc để link có thể tự join khi cần.
             sourceGroupId: state.sourceGroupInfo ? getGroupId(state.sourceGroupInfo) : '',
@@ -752,6 +756,7 @@
             campaignDurationDays: campaignDays,
             verifyIntervalMinutes: verifyMinutes,
             removeFriendAfterJoin: !!(($('groupCopyRemoveFriend') || {}).checked),
+            leaveGroupAfterDone: !!(($('groupCopyLeaveAfterDone') || {}).checked),
             skipLeaders: !!(($('groupCopySkipLeaders') || {}).checked),
             accountIds: [accountId].concat(Array.from(state.extraAccountIds || [])).filter(function (v, i, arr) { return v && arr.indexOf(v) === i; }),
             consentConfirmed: !!(($('groupCopyConsent') || {}).checked)
@@ -774,11 +779,11 @@
         if (!payload.accountId) return 'Vui lòng chọn tài khoản thực hiện.';
         var account = state.accounts.find(function (item) { return getAccountId(item) === payload.accountId; });
         if (account && !accountReady(account)) return 'Tài khoản chưa sẵn sàng: cần zpwEnk, zpw_sek và IMEI cùng phiên.';
-        if (!payload.sourceInput) return 'Vui lòng dán link hoặc ID nhóm nguồn.';
+        if (!payload.sourceInput && !payload.phoneList) return 'Vui lòng dán link/ID nhóm nguồn hoặc danh sách số điện thoại.';
         if (payload.targetMode === 'new' && !payload.newGroupName) return 'Vui lòng nhập tên nhóm mới.';
         if (payload.targetMode === 'existing' && !payload.targetGroupId) return 'Vui lòng chọn một nhóm hiện tại.';
         if (!payload.startAt) return 'Vui lòng chọn thời gian bắt đầu.';
-        if (!payload.dailyLimit || payload.dailyLimit < 1 || payload.dailyLimit > 100) return 'Số lời mời kết bạn mỗi ngày phải từ 1 đến 100.';
+        if (!payload.dailyLimit || payload.dailyLimit < 1 || payload.dailyLimit > 30) return 'Số lời mời kết bạn mỗi ngày phải từ 1 đến 30.';
         if (!payload.campaignDurationDays || payload.campaignDurationDays < 1 || payload.campaignDurationDays > 365) return 'Thời gian chạy chiến dịch phải từ 1 đến 365 ngày.';
         if (!payload.verifyIntervalMinutes || payload.verifyIntervalMinutes < 1 || payload.verifyIntervalMinutes > 1440) return 'Chu kỳ thử add lại phải từ 1 đến 1440 phút.';
         if (!payload.consentConfirmed) return 'Vui lòng xác nhận quyền quản lý nhóm và gửi lời mời.';
@@ -860,6 +865,7 @@
             $('groupCopyConsent').checked = false;
             resetSourcePreview();
             $('groupCopySource').value = '';
+            if ($('groupCopyPhoneList')) $('groupCopyPhoneList').value = '';
             state.targetGroup = null;
             renderTargetPreview();
             await loadJobs();
@@ -923,6 +929,16 @@
         return haystack.indexOf(query) !== -1;
     }
 
+    // Checkbox chọn tác vụ (chỉ hiện khi bật chế độ chọn nhiều). `ids` là danh sách
+    // jobId mà thẻ này đại diện (thẻ đơn = 1 job; thẻ chiến dịch = nhiều job).
+    function selectCheckboxHtml(ids) {
+        if (!state.selectMode) return '';
+        var list = (ids || []).filter(Boolean);
+        var allChecked = list.length > 0 && list.every(function (id) { return state.selected[id]; });
+        return '<label class="gc-select-box" title="Chọn tác vụ" onclick="event.stopPropagation()">' +
+            '<input type="checkbox" data-select-ids="' + esc(list.join(',')) + '"' + (allChecked ? ' checked' : '') + '></label>';
+    }
+
     function buildJobCard(job) {
         var source = job.sourceGroup || {};
         var sourceName = source.name || job.sourceInput || '-';
@@ -944,7 +960,7 @@
         if (job.targetGroupId && (status === 'pending' || status === 'monitoring' || status === 'failed')) kebabItems += '<button type="button" data-job-verify="' + esc(jobId) + '">Kiểm tra ngay</button>';
         if (status === 'pending' || status === 'monitoring') kebabItems += '<button type="button" data-job-cancel="' + esc(jobId) + '">Tạm dừng tác vụ</button>';
         if ((status === 'failed' || status === 'cancelled') && Number(job.pendingCount || 0) > 0) kebabItems += '<button type="button" data-job-resume="' + esc(jobId) + '">Tiếp tục</button>';
-        if (status !== 'running') kebabItems += '<button type="button" class="is-danger" data-job-delete="' + esc(jobId) + '">Xóa tác vụ</button>';
+        kebabItems += '<button type="button" class="is-danger" data-job-delete="' + esc(jobId) + '">Xóa tác vụ</button>';
 
         var quickActions = '<button type="button" class="gc-btn-sm is-primary" data-job-detail="' + esc(jobId) + '">' + ICON_DETAIL + ' Chi tiết</button>';
         if (job.targetGroupId && (status === 'pending' || status === 'monitoring' || status === 'failed')) {
@@ -957,12 +973,13 @@
         }
 
         var card = document.createElement('div');
-        card.className = 'gc-job-card' + (jobId === state.highlightJobId ? ' gc-job-highlight' : '');
+        card.className = 'gc-job-card' + (jobId === state.highlightJobId ? ' gc-job-highlight' : '') + (state.selectMode ? ' gc-selecting' : '') + (state.selected[jobId] ? ' gc-selected' : '');
         card.setAttribute('data-job-card', jobId);
         var jobTitle = String(job.title || ('Sao chép vào ' + targetName));
         var accountNameText = String(job.accountName || job.accountId || 'Tài khoản');
         card.innerHTML =
             '<div class="gc-job-head">' +
+                selectCheckboxHtml([jobId]) +
                 '<div class="gc-job-heading">' +
                     '<div class="gc-job-title-row"><span class="gc-job-title-icon">' + miniAvatarHtml(targetName, job.targetGroupAvatar) + '</span><div><strong class="gc-job-title" title="' + esc(jobTitle) + '">' + esc(jobTitle) + '</strong><small>Kế hoạch chuyển thành viên</small></div></div>' +
                     '<div class="gc-job-route">' +
@@ -997,28 +1014,233 @@
         return card;
     }
 
+    // ─── Gom job cùng 1 chiến dịch (nhiều tài khoản) thành 1 nhóm ───────────────
+    function buildJobGroups(jobs) {
+        var groups = [], byId = {};
+        (jobs || []).forEach(function (job) {
+            var cid = String((job && job.campaignId) || '').trim();
+            if (!cid) { groups.push({ campaignId: '', jobs: [job] }); return; }
+            if (byId[cid]) byId[cid].jobs.push(job);
+            else { var g = { campaignId: cid, jobs: [job] }; byId[cid] = g; groups.push(g); }
+        });
+        return groups;
+    }
+
+    function campaignTitleOf(job) {
+        var t = String((job && job.title) || '');
+        // Bỏ hậu tố "(TK 1/5 - Tên)" để lấy tên chiến dịch chung.
+        return t.replace(/\s*\(TK\s*\d+\s*\/\s*\d+[^)]*\)\s*$/, '').trim() ||
+            ('Sao chép vào ' + String((job && job.targetGroupName) || 'nhóm đích'));
+    }
+
+    function campaignStatus(jobs) {
+        var s = jobs.map(function (j) { return String((j && j.status) || 'pending'); });
+        if (s.indexOf('running') >= 0) return 'running';
+        if (s.some(function (x) { return x === 'pending' || x === 'monitoring'; })) return 'pending';
+        if (s.some(function (x) { return x === 'failed'; })) return 'failed';
+        if (s.length && s.every(function (x) { return x === 'done'; })) return 'done';
+        return s[0] || 'pending';
+    }
+
+    // Thẻ TỔNG cho chiến dịch nhiều tài khoản: xem chi tiết mới bung từng thành viên.
+    function buildCampaignCard(jobs) {
+        var first = jobs[0] || {};
+        var source = first.sourceGroup || {};
+        var sourceName = source.name || first.sourceInput || '-';
+        var targetName = first.targetGroupName || (first.targetMode === 'new' ? first.newGroupName : '') || 'Chưa xác định';
+        var title = campaignTitleOf(first);
+        var status = campaignStatus(jobs);
+        var sum = function (key, alt) {
+            return jobs.reduce(function (a, j) { return a + Number((j && (j[key] || (alt ? j[alt] : 0))) || 0); }, 0);
+        };
+        var total = sum('totalMembers');
+        var joined = sum('joinedCount', 'successCount');
+        var directAdded = sum('preExistingCount');
+        var invited = sum('invitedCount');
+        var pending = sum('pendingCount', 'remainingCount');
+        var failed = sum('failedCount');
+        var percent = total ? Math.max(0, Math.min(100, Math.round(joined * 100 / total))) : 0;
+        var ids = jobs.map(function (j) { return String(j.jobId || ''); }).filter(Boolean).join(',');
+
+        var canPause = jobs.some(function (j) { return j.status === 'pending' || j.status === 'monitoring'; });
+        var canResume = jobs.some(function (j) { return (j.status === 'failed' || j.status === 'cancelled') && Number(j.pendingCount || 0) > 0; });
+        var canDelete = true;  // cho phép xóa cả chiến dịch kể cả khi có tác vụ đang chạy
+
+        var actions = '<button type="button" class="gc-btn-sm is-primary" data-campaign-toggle="1">' + ICON_DETAIL + ' Xem chi tiết (' + jobs.length + ' tài khoản)</button>';
+        if (canPause) actions += '<button type="button" class="gc-btn-sm is-warning" data-campaign-cancel="' + esc(ids) + '">' + ICON_PAUSE + ' Tạm dừng cả chiến dịch</button>';
+        if (canResume) actions += '<button type="button" class="gc-btn-sm is-success" data-campaign-resume="' + esc(ids) + '">' + ICON_RESUME + ' Tiếp tục cả chiến dịch</button>';
+        if (canDelete) actions += '<button type="button" class="gc-btn-sm is-danger" data-campaign-delete="' + esc(ids) + '">Xóa cả chiến dịch</button>';
+
+        var campJobIds = jobs.map(function (j) { return String(j.jobId || ''); }).filter(Boolean);
+        var card = document.createElement('div');
+        var campSelected = campJobIds.length > 0 && campJobIds.every(function (id) { return state.selected[id]; });
+        card.className = 'gc-job-card gc-campaign-card' + (state.selectMode ? ' gc-selecting' : '') + (campSelected ? ' gc-selected' : '');
+        card.setAttribute('data-campaign-card', first.campaignId || '');
+        card.innerHTML =
+            '<div class="gc-job-head">' +
+                selectCheckboxHtml(campJobIds) +
+                '<div class="gc-job-heading">' +
+                    '<div class="gc-job-title-row"><span class="gc-job-title-icon">' + miniAvatarHtml(targetName, first.targetGroupAvatar) + '</span><div><strong class="gc-job-title" title="' + esc(title) + '">' + esc(title) + '</strong><small>Chiến dịch • ' + jobs.length + ' tài khoản</small></div></div>' +
+                    '<div class="gc-job-route">' +
+                        '<span class="gc-job-route-node">' + miniAvatarHtml(sourceName, source.avt || source.avatar) +
+                            '<span class="gc-job-route-copy"><small>Nhóm nguồn</small><strong title="' + esc(sourceName) + '">' + esc(sourceName) + '</strong></span></span>' +
+                        '<span class="gc-job-route-arrow">→</span>' +
+                        '<span class="gc-job-route-node">' + miniAvatarHtml(targetName, first.targetGroupAvatar) +
+                            '<span class="gc-job-route-copy"><small>Nhóm đích</small><strong title="' + esc(targetName) + '">' + esc(targetName) + '</strong></span></span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="gc-job-owner"><span>Tài khoản tham gia</span><strong>' + jobs.length + ' tài khoản</strong></div>' +
+                '<div class="gc-job-head-meta">' +
+                    '<span class="group-copy-job-badge ' + esc(status) + '">' + esc(statusLabel(status)) + '</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="gc-job-progress-row"><div class="group-copy-progress"><span style="width:' + percent + '%"></span></div><span class="gc-job-progress-pct">' + percent + '%</span></div>' +
+            '<div class="gc-job-stats">' +
+                '<div class="gc-job-stat"><span>Tổng nguồn</span><strong>' + total + '</strong></div>' +
+                '<div class="gc-job-stat is-success"><span>Thêm trực tiếp</span><strong>' + directAdded + '</strong></div>' +
+                '<div class="gc-job-stat"><span>Đã mời kết bạn</span><strong>' + invited + '</strong></div>' +
+                '<div class="gc-job-stat is-success"><span>Đã vào nhóm</span><strong>' + joined + '</strong></div>' +
+                '<div class="gc-job-stat"><span>Đang chờ</span><strong>' + pending + '</strong></div>' +
+                '<div class="gc-job-stat' + (failed ? ' is-danger' : '') + '"><span>Lỗi</span><strong>' + failed + '</strong></div>' +
+            '</div>' +
+            '<div class="gc-job-foot">' +
+                '<div class="gc-job-timing"><span>Gộp tiến độ của ' + jobs.length + ' tài khoản</span></div>' +
+                '<div class="gc-job-actions">' + actions + '</div>' +
+            '</div>';
+        // Chi tiết từng tài khoản hiển thị trong POPUP (không bung inline gây nhảy layout).
+        return card;
+    }
+
+    // Popup chi tiết chiến dịch: liệt kê từng tài khoản (thẻ job) trong 1 modal.
+    function openCampaignModal(campaignId) {
+        var cid = String(campaignId || '');
+        var jobs = (state.jobs || []).filter(function (j) { return String((j && j.campaignId) || '') === cid; });
+        if (!jobs.length) { closeCampaignModal(); return; }
+        jobs.sort(function (a, b) { return Number(a.multiAccountIndex || 0) - Number(b.multiAccountIndex || 0); });
+        var body = $('groupCopyCampaignBody');
+        body.innerHTML = '';
+        jobs.forEach(function (j) { body.appendChild(buildJobCard(j)); });
+        var first = jobs[0] || {};
+        $('groupCopyCampaignTitle').textContent = campaignTitleOf(first);
+        $('groupCopyCampaignSub').textContent = jobs.length + ' tài khoản trong chiến dịch';
+        $('groupCopyCampaignOverlay').classList.add('show');
+        state.campaignModalId = cid;
+    }
+    function closeCampaignModal() {
+        var ov = $('groupCopyCampaignOverlay');
+        if (ov) ov.classList.remove('show');
+        state.campaignModalId = '';
+    }
+
+    async function campaignAction(idsCsv, action) {
+        var ids = String(idsCsv || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        for (var i = 0; i < ids.length; i++) {
+            try { await jobAction(ids[i], action); } catch (e) { /* tiếp tục các job còn lại */ }
+        }
+    }
+
+    // ─── Chọn nhiều tác vụ + xóa hàng loạt ─────────────────────────────────
+    function allVisibleJobIds() {
+        return (state.jobs || []).filter(jobMatchesFilter)
+            .map(function (j) { return String(j.jobId || ''); }).filter(Boolean);
+    }
+    function setSelected(ids, checked) {
+        (ids || []).forEach(function (id) {
+            if (!id) return;
+            if (checked) state.selected[id] = true; else delete state.selected[id];
+        });
+    }
+    // Đếm theo TÁC VỤ (chiến dịch nhiều tài khoản = 1 tác vụ), không đếm job con.
+    function selectedTaskCount() {
+        var tasks = 0;
+        buildJobGroups(state.jobs || []).forEach(function (g) {
+            var ids = g.jobs.map(function (j) { return String(j.jobId || ''); }).filter(Boolean);
+            if (ids.length && ids.some(function (id) { return state.selected[id]; })) tasks++;
+        });
+        return tasks;
+    }
+    function updateBulkBar() {
+        var hasAny = Object.keys(state.selected).some(function (id) { return state.selected[id]; });
+        var tasks = selectedTaskCount();
+        var countEl = $('groupCopyBulkCount');
+        if (countEl) countEl.textContent = 'Đã chọn ' + tasks + ' tác vụ';
+        var delBtn = $('groupCopyBulkDelete');
+        if (delBtn) delBtn.disabled = !hasAny;
+        var allBox = $('groupCopyBulkAll');
+        if (allBox) {
+            var visible = allVisibleJobIds();
+            allBox.checked = visible.length > 0 && visible.every(function (id) { return state.selected[id]; });
+        }
+    }
+    function toggleSelectMode(on) {
+        state.selectMode = (on === undefined) ? !state.selectMode : !!on;
+        if (!state.selectMode) state.selected = {};
+        var btn = $('groupCopySelectToggle');
+        if (btn) btn.classList.toggle('is-active', state.selectMode);
+        var bar = $('groupCopyBulkBar');
+        if (bar) bar.hidden = !state.selectMode;
+        renderJobs(state.jobs);
+    }
+    function clearSelection() {
+        state.selected = {};
+        renderJobs(state.jobs);
+    }
+    function selectAllVisible(checked) {
+        setSelected(allVisibleJobIds(), checked);
+        renderJobs(state.jobs);
+    }
+    async function deleteSelected() {
+        var ids = Object.keys(state.selected).filter(function (id) { return state.selected[id]; });
+        if (!ids.length) return;
+        // Xóa MỌI tác vụ đã chọn (kể cả đang chạy) — worker sẽ tự dừng an toàn.
+        var taskN = selectedTaskCount();
+        var msg = 'Xóa ' + taskN + ' tác vụ đã chọn (kể cả đang chạy) và toàn bộ lịch sử?';
+        if (!(await nexusConfirm(msg, { title: 'Xóa tác vụ đã chọn', confirmText: 'Xóa', danger: true }))) return;
+        var okCount = 0;
+        for (var i = 0; i < ids.length; i++) {
+            try {
+                var r = await fetch('/api/group-copy/jobs/' + encodeURIComponent(ids[i]), { method: 'DELETE' });
+                var d = await r.json();
+                if (r.ok && d.success) okCount++;
+            } catch (e) { /* tiếp tục các tác vụ còn lại */ }
+        }
+        state.selected = {};
+        showToast('Đã xóa ' + okCount + '/' + ids.length + ' tác vụ.', okCount ? 'success' : 'error');
+        await loadJobs();
+    }
+
     function renderJobs(jobs) {
         var container = $('groupCopyJobs');
         state.jobs = Array.isArray(jobs) ? jobs : [];
         renderSummary(state.jobs);
+        // Bỏ khỏi vùng chọn những tác vụ đã biến mất sau khi tải lại.
+        var existing = {};
+        state.jobs.forEach(function (j) { existing[String(j.jobId || '')] = true; });
+        Object.keys(state.selected).forEach(function (id) { if (!existing[id]) delete state.selected[id]; });
 
         var filtered = state.jobs.filter(jobMatchesFilter);
+        var nGroupsFiltered = buildJobGroups(filtered).length;
+        var nGroupsTotal = buildJobGroups(state.jobs).length;
         $('groupCopyJobsCount').textContent = (state.jobFilter !== 'all' || state.jobSearch)
-            ? filtered.length + '/' + state.jobs.length + ' tác vụ'
-            : state.jobs.length + ' tác vụ';
+            ? nGroupsFiltered + '/' + nGroupsTotal + ' tác vụ'
+            : nGroupsTotal + ' tác vụ';
 
         if (!state.jobs.length) {
             state.selectedJobId = '';
             container.innerHTML = '<div class="group-copy-empty">Chưa có tác vụ sao chép nhóm.<br>Bấm "Thêm tác vụ" để tạo kế hoạch đầu tiên.</div>';
             closeDetailOverlay();
             resetDetailPane();
+            updateBulkBar();
             return;
         }
         if (!filtered.length) {
             container.innerHTML = '<div class="group-copy-empty">Không có tác vụ phù hợp với bộ lọc hoặc từ khóa tìm kiếm hiện tại.</div>';
         } else {
             container.innerHTML = '';
-            filtered.forEach(function (job) { container.appendChild(buildJobCard(job)); });
+            buildJobGroups(filtered).forEach(function (g) {
+                if (g.jobs.length > 1) container.appendChild(buildCampaignCard(g.jobs));
+                else container.appendChild(buildJobCard(g.jobs[0]));
+            });
         }
 
         if (state.highlightJobId) {
@@ -1031,6 +1253,13 @@
         }
 
         if (state.selectedJobId && state.detailOverlayOpen) showDetail(state.selectedJobId, true);
+        // Popup chi tiết chiến dịch đang mở -> cập nhật lại theo dữ liệu mới (hoặc đóng nếu hết).
+        if (state.campaignModalId) {
+            var stillThere = (state.jobs || []).some(function (j) { return String((j && j.campaignId) || '') === state.campaignModalId; });
+            if (stillThere) openCampaignModal(state.campaignModalId);
+            else closeCampaignModal();
+        }
+        updateBulkBar();
     }
 
     async function jobAction(jobId, action) {
@@ -1388,6 +1617,7 @@
         document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
                 setAccountMenu(false);
+                closeCampaignModal();
                 closeDetail();
                 closeGroupPicker();
                 closeCreateOverlay();
@@ -1397,6 +1627,24 @@
         $('groupCopyAddBtn').addEventListener('click', openCreateOverlay);
         $('groupCopyCreateClose').addEventListener('click', closeCreateOverlay);
         $('groupCopyCreateOverlay').addEventListener('click', function (event) { if (event.target === $('groupCopyCreateOverlay')) closeCreateOverlay(); });
+
+        if ($('groupCopyCampaignClose')) $('groupCopyCampaignClose').addEventListener('click', closeCampaignModal);
+        if ($('groupCopyCampaignOverlay')) $('groupCopyCampaignOverlay').addEventListener('click', function (event) { if (event.target === $('groupCopyCampaignOverlay')) closeCampaignModal(); });
+
+        // Chọn nhiều tác vụ + xóa hàng loạt.
+        if ($('groupCopySelectToggle')) $('groupCopySelectToggle').addEventListener('click', function () { toggleSelectMode(); });
+        if ($('groupCopyBulkClear')) $('groupCopyBulkClear').addEventListener('click', clearSelection);
+        if ($('groupCopyBulkDelete')) $('groupCopyBulkDelete').addEventListener('click', deleteSelected);
+        if ($('groupCopyBulkAll')) $('groupCopyBulkAll').addEventListener('change', function () { selectAllVisible(this.checked); });
+        if ($('groupCopyJobs')) $('groupCopyJobs').addEventListener('change', function (event) {
+            var cb = event.target;
+            if (!cb || !cb.getAttribute || cb.getAttribute('data-select-ids') === null) return;
+            var ids = String(cb.getAttribute('data-select-ids') || '').split(',').filter(Boolean);
+            setSelected(ids, cb.checked);
+            var card = cb.closest ? cb.closest('.gc-job-card') : null;
+            if (card) card.classList.toggle('gc-selected', cb.checked);
+            updateBulkBar();
+        });
 
         $('groupCopyStartBtn').addEventListener('click', startJob);
         $('groupCopyRefreshJobsBtn').addEventListener('click', async function () {
@@ -1438,6 +1686,21 @@
                 if (menu) menu.hidden = isOpen;
                 return;
             }
+            // ─ Thao tác cấp CHIẾN DỊCH (nhiều tài khoản) ─
+            var campToggle = event.target.closest('[data-campaign-toggle]');
+            if (campToggle) {
+                var cardEl = campToggle.closest('.gc-campaign-card');
+                var cid = cardEl && cardEl.getAttribute('data-campaign-card');
+                openCampaignModal(cid);
+                return;
+            }
+            var campCancel = event.target.closest('[data-campaign-cancel]');
+            var campResume = event.target.closest('[data-campaign-resume]');
+            var campDelete = event.target.closest('[data-campaign-delete]');
+            if (campCancel) { if (await nexusConfirm('Tạm dừng TẤT CẢ tài khoản trong chiến dịch này?', { title: 'Tạm dừng chiến dịch' })) campaignAction(campCancel.getAttribute('data-campaign-cancel'), 'cancel'); return; }
+            if (campResume) { campaignAction(campResume.getAttribute('data-campaign-resume'), 'resume'); return; }
+            if (campDelete) { if (await nexusConfirm('Xóa CẢ chiến dịch (mọi tài khoản) và toàn bộ lịch sử?', { title: 'Xóa chiến dịch', confirmText: 'Xóa', danger: true })) campaignAction(campDelete.getAttribute('data-campaign-delete'), 'delete'); return; }
+
             var detail = event.target.closest('[data-job-detail]');
             var verify = event.target.closest('[data-job-verify]');
             var cancel = event.target.closest('[data-job-cancel]');

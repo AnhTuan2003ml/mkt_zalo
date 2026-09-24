@@ -103,6 +103,10 @@ def send_group_msg(
     else:
         decoded_data = data_field
 
+    # Đính clientId (= cliMsgId Zalo gán cho tin) để phía trên map dựng lại quote.
+    if isinstance(decoded_data, dict):
+        decoded_data.setdefault("_clientId", client_id)
+
     return response_json, decoded_data
 
 

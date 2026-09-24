@@ -216,26 +216,26 @@
     <section class="guide-section-pro" id="sec-api-gui-tin">
         <header class="guide-section-heading">
             <span class="guide-section-number">04</span>
-            <div><span class="guide-section-eyebrow">Dành cho hệ thống bên ngoài</span><h2>Tích hợp API gửi tin nhắn</h2><p>Nexus mở API HTTP tại <code style="font-family:Consolas,monospace">http://127.0.0.1:5000</code> khi ứng dụng đang chạy. Lấy <code style="font-family:Consolas,monospace">accountId</code> của tài khoản trạng thái Sẵn sàng từ <code style="font-family:Consolas,monospace">GET /api/accounts</code> rồi gọi các endpoint dưới đây.</p></div>
+            <div><span class="guide-section-eyebrow">Dành cho hệ thống bên ngoài</span><h2>Tích hợp API gửi tin nhắn</h2><p>Nexus mở API HTTP tại <code style="font-family:Consolas,monospace">http://127.0.0.1:{{ ui_port }}</code> khi ứng dụng đang chạy. Lấy <code style="font-family:Consolas,monospace">accountId</code> của tài khoản trạng thái Sẵn sàng từ <code style="font-family:Consolas,monospace">GET /api/accounts</code> rồi gọi các endpoint dưới đây.</p></div>
         </header>
 
         <p class="guide-api-note" style="margin-top:0"><strong>Hành vi chung cho cả cá nhân và nhóm:</strong> ảnh luôn gửi trước, nội dung <code>message</code> gửi thành tin nhắn riêng ngay sau ảnh (không làm chú thích). Nội dung chứa link nhóm dạng <code>https://zalo.me/g/...</code> tự động gửi thành thẻ link có tên và ảnh nhóm (response có <code>sentAsLink: true</code>; nếu lỗi vẫn gửi văn bản thường). Ảnh tối đa 20MB; phải có ít nhất <code>message</code> hoặc <code>photo</code>.</p>
 
         <div class="guide-api-columns">
             <pre class="guide-api-code"><span class="cmt"># Chỉ gửi tin nhắn cho cá nhân (JSON)</span>
-curl -X POST http://127.0.0.1:5000/api/send-sms \
+curl -X POST http://127.0.0.1:{{ ui_port }}/api/send-sms \
   -H "Content-Type: application/json" \
   -d '{"accountId":"&lt;accountId&gt;","to_uid":"&lt;uid&gt;","message":"Xin chào!"}'</pre>
             <pre class="guide-api-code"><span class="cmt"># Gửi ảnh kèm tin nhắn cho cá nhân</span>
 <span class="cmt"># (chỉ gửi ảnh: bỏ dòng message)</span>
-curl -X POST http://127.0.0.1:5000/api/send-photo \
+curl -X POST http://127.0.0.1:{{ ui_port }}/api/send-photo \
   -F "accountId=&lt;accountId&gt;" \
   -F "to_uid=&lt;uid&gt;" \
   -F "message=Nội dung gửi sau ảnh" \
   -F "photo=@anh.jpg"</pre>
             <pre class="guide-api-code"><span class="cmt"># Gửi vào nhóm: cùng dạng, đổi to_uid thành group_id</span>
 <span class="cmt"># (chỉ tin nhắn: bỏ photo; chỉ ảnh: bỏ message)</span>
-curl -X POST http://127.0.0.1:5000/api/send-group-message \
+curl -X POST http://127.0.0.1:{{ ui_port }}/api/send-group-message \
   -F "accountId=&lt;accountId&gt;" \
   -F "group_id=&lt;groupId&gt;" \
   -F "message=Nội dung gửi sau ảnh" \
@@ -248,7 +248,7 @@ curl -X POST http://127.0.0.1:5000/api/send-group-message \
         <div class="guide-api-columns">
             <pre class="guide-api-code"><span class="cmt"># Lấy tin nhắn mới nhất của nhóm truyền vào</span>
 <span class="cmt"># (bỏ account_id để dùng tài khoản sẵn sàng đầu tiên)</span>
-curl "http://127.0.0.1:5000/api/messages/group-latest?groupId=&lt;groupId&gt;&amp;account_id=&lt;accountId&gt;"</pre>
+curl "http://127.0.0.1:{{ ui_port }}/api/messages/group-latest?groupId=&lt;groupId&gt;&amp;account_id=&lt;accountId&gt;"</pre>
             <pre class="guide-api-code"><span class="cmt"># Response rút gọn</span>
 {
   "success": true,

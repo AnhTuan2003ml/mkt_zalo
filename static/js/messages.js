@@ -164,16 +164,10 @@ async function loadSettings() {
     try {
         const data = await apiJson('/api/messages/settings');
         messageState.settings = data.settings || {};
+        // Tự động cập nhật cố định ~2 phút/lần (bỏ chọn chu kỳ cũ): chỉ Bật/Tắt.
         const auto = !!messageState.settings.auto_check_enabled;
-        const interval = Number(messageState.settings.check_interval_minutes || 1);
         const autoSel = qs('autoUpdateSelect');
-        if (autoSel) {
-            const value = auto ? String(interval) : '0';
-            if (![...autoSel.options].some(o => o.value === value)) {
-                autoSel.add(new Option(`Mỗi ${interval} phút`, value));
-            }
-            autoSel.value = value;
-        }
+        if (autoSel) autoSel.value = auto ? '2' : '0';
         const retSel = qs('retentionSelect');
         if (retSel) {
             const hours = String(Number(messageState.settings.retention_hours ?? 24));
@@ -254,7 +248,7 @@ async function saveSettings() {
         const autoValue = Number(qs('autoUpdateSelect')?.value || 0);
         const payload = {
             auto_check_enabled: autoValue > 0,
-            check_interval_minutes: autoValue > 0 ? autoValue : Number(messageState.settings.check_interval_minutes || 1),
+            check_interval_minutes: 2,  // cố định ~2 phút (không còn dùng chu kỳ tùy chọn)
             retention_hours: Number(qs('retentionSelect')?.value ?? 24),
         };
         const data = await apiJson('/api/messages/settings', {
@@ -637,7 +631,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!e.target.closest('.account-combo')) closeAccountMenu();
     });
 
-    // Tự làm mới hiển thị từ db (worker server quét Zalo theo chu kỳ đã lưu).
+    // Làm mới HIỂN THỊ từ db (chỉ đọc local, không gọi Zalo). Việc quét Zalo do
+    // worker server tự chạy ~2 phút/lần khi bật "Tự động cập nhật", hoặc khi bấm
+    // nút "Cập nhật ngay".
     setInterval(() => {
         if (!document.hidden) loadUnread();
     }, UI_REFRESH_MS);

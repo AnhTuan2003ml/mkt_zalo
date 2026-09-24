@@ -118,6 +118,7 @@ def normalize_schedule(schedule: dict) -> dict:
 
     return {
         "scheduleId": schedule.get("scheduleId", "sch_" + str(uuid.uuid4())[:8]),
+        "campaignId": str(schedule.get("campaignId") or "").strip(),
         "title": (schedule.get("title") or "L\u1ecbch g\u1eedi tin").strip(),
         "accountId": schedule.get("accountId", ""),
         "accountName": schedule.get("accountName", ""),

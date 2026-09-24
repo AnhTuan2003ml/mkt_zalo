@@ -105,6 +105,35 @@ def _parse_content(msg_type: str, content):
     return text, thumb, href
 
 
+def _extract_quote(m: dict) -> dict:
+    """Trích thông tin tin GỐC mà tin này TRẢ LỜI (nếu là reply/quote).
+
+    Tin reply của Zalo mang field ``quote`` = tin được trích dẫn:
+        {ownerId, globalMsgId, cliMsgId, cliMsgType, ts, msg, attach, ...}
+    Trả dict chuẩn hóa để phía trên map & dựng lại quote ở nhóm đích, hoặc None.
+    """
+    q = m.get("quote")
+    if not isinstance(q, dict):
+        return None
+    global_id = str(q.get("globalMsgId") or q.get("gMsgID") or q.get("msgId") or "").strip()
+    cli_id = str(q.get("cliMsgId") or q.get("cMsgID") or "").strip()
+    if not (global_id or cli_id):
+        return None
+    raw_msg = q.get("msg")
+    if isinstance(raw_msg, dict):
+        qtext = str(raw_msg.get("title") or raw_msg.get("description") or "").strip()
+    else:
+        qtext = str(raw_msg or "").strip()
+    return {
+        "ownerId": str(q.get("ownerId") or q.get("uidFrom") or "").strip(),
+        "globalMsgId": global_id,
+        "cliMsgId": cli_id,
+        "msgType": str(q.get("cliMsgType") or q.get("msgType") or ""),
+        "ts": str(q.get("ts") or ""),
+        "text": qtext,
+    }
+
+
 def _normalize_group_msg(m: dict) -> dict:
     text, thumb, href = _parse_content(m.get("msgType"), m.get("content"))
     return {
@@ -117,6 +146,8 @@ def _normalize_group_msg(m: dict) -> dict:
         "text": text,
         "thumb": thumb,
         "href": href,
+        # Tin này TRẢ LỜI tin nào (None nếu không phải reply).
+        "quote": _extract_quote(m),
     }
 
 

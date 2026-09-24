@@ -1,0 +1,27 @@
+# Cấu hình deploy Fly.io cho máy chủ cấp phép Nexus.
+# Đổi "app" thành tên bạn tạo bằng: fly launch --no-deploy
+app = "nexus-license"
+primary_region = "sin"   # Singapore — gần Việt Nam
+
+[build]
+
+[env]
+  PORT = "8080"
+  LICENSE_DB_PATH = "/data/licenses.db"
+
+# Giữ máy chủ LUÔN chạy (license server không được ngủ) để DB + phiên ổn định.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+# Volume bền giữ DB SQLite lâu dài. Tạo bằng: fly volumes create licdata --size 1
+[mounts]
+  source = "licdata"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

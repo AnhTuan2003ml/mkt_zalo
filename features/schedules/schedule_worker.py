@@ -7,6 +7,7 @@ import time
 import json
 import random
 import os
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -16,7 +17,70 @@ from features.groups.send_sms_group import send_group_msg
 from features.messaging.send_sms import send_sms
 from features.messaging.send_photo import send_photo
 from features.messaging.send_link import extract_zalo_group_link, resolve_group_link_info, send_message_smart
-from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result
+from features.schedules.schedule_manager import DATA_DIR, load_schedules, update_schedule, append_schedule_result, get_schedule
+
+# ─── SÀN nhịp gửi (ổn định, tránh Zalo chặn vì nhắn quá nhanh) ───────────────
+# Áp làm giá trị tối thiểu kể cả khi cấu hình lịch đặt thấp hơn.
+_MIN_MSG_DELAY_SEC = 8       # tối thiểu giây giữa 2 tin nhắn
+_MAX_MSG_DELAY_SEC = 18      # trần mặc định (random min..max mỗi tin)
+_MIN_BATCH_DELAY_SEC = 60    # tối thiểu giây nghỉ giữa các batch
+
+
+def _build_message_pool(message: str) -> list:
+    """Tách nội dung thành POOL: mỗi KHỐI (cách nhau bằng ≥1 DÒNG TRỐNG) = 1 mẫu tin.
+
+    Tin NHIỀU DÒNG giữ nguyên xuống dòng bên trong khối; muốn nhiều mẫu để gửi
+    ngẫu nhiên thì để 1 DÒNG TRỐNG giữa các khối. Ví dụ::
+
+        Em chào chị
+        Link nhóm: https://zalo.me/g/abc      <- MẪU 1 (2 dòng)
+
+        Chào chị, shop em có mẫu mới...        <- MẪU 2
+
+    Gửi ngẫu nhiên các mẫu, tránh trùng liên tiếp (giảm nguy cơ bị chặn).
+    """
+    text = str(message or "").replace("\r\n", "\n").replace("\r", "\n")
+    # Ngăn cách mẫu = 1+ dòng trống (dòng chỉ có khoảng trắng cũng coi là trống).
+    blocks = re.split(r"\n[ \t]*\n+", text)
+    pool = []
+    for block in blocks:
+        # Bỏ trailing space từng dòng; giữ nguyên cấu trúc xuống dòng trong khối.
+        cleaned = "\n".join(ln.rstrip() for ln in block.split("\n")).strip()
+        if cleaned:
+            pool.append(cleaned)
+    return pool
+
+
+class _MessageSpinner:
+    """Chọn ngẫu nhiên 1 mẫu tin, TRÁNH lặp lại các mẫu vừa gửi gần nhất."""
+
+    def __init__(self, pool: list):
+        self.pool = list(pool or [])
+        self.recent: list = []
+
+    def next(self) -> str:
+        if not self.pool:
+            return ""
+        if len(self.pool) == 1:
+            return self.pool[0]
+        # Tránh tối đa (n-1) mẫu gần nhất để tin liền nhau không trùng.
+        avoid_n = min(len(self.recent), len(self.pool) - 1)
+        avoid = set(self.recent[-avoid_n:]) if avoid_n else set()
+        choices = [m for m in self.pool if m not in avoid] or self.pool
+        pick = random.choice(choices)
+        self.recent.append(pick)
+        if len(self.recent) > len(self.pool):
+            self.recent = self.recent[-len(self.pool):]
+        return pick
+
+
+def _license_active() -> bool:
+    """Còn hiệu lực license? Lỗi/không có gate -> True (tránh khóa oan)."""
+    try:
+        from authencation.license_gate import is_active
+        return is_active()
+    except Exception:
+        return True
 
 
 def _prepare_link_info(message: str, zpw_enk: str, cookies: str, zpw_ver: str, imei: str = ""):
@@ -70,11 +134,18 @@ def _resume_progress(recipients, results, id_key):
     return remaining, success_count, failed_count, consecutive_errors
 
 
+# Số chiến dịch tối đa chạy SONG SONG cùng lúc (mỗi chiến dịch 1 thread riêng).
+MAX_CONCURRENT_SCHEDULES = 16
+
+
 class ScheduleWorker:
     def __init__(self):
         self.running = False
         self.thread = None
-        
+        # Các scheduleId đang được một thread xử lý — tránh chạy trùng 1 lịch.
+        self._active = set()
+        self._active_lock = threading.Lock()
+
     def start(self):
         """Start worker thread."""
         if self.running:
@@ -83,35 +154,70 @@ class ScheduleWorker:
         self.thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.thread.start()
         print("[schedule_worker] Worker started")
-        
+
     def stop(self):
         """Stop worker thread."""
         self.running = False
-        
+
     def _worker_loop(self):
-        """Main worker loop: check every 5 seconds."""
+        """Vòng điều phối: mỗi 5 giây quét lịch cần chạy rồi GIAO cho thread riêng.
+
+        Worker KHÔNG tự gửi tin trong vòng lặp này (tránh blocking): mỗi chiến
+        dịch đến hạn được chạy trong một thread độc lập nên nhiều tài khoản /
+        nhiều chiến dịch chạy SONG SONG, không cái nào chặn cái nào.
+        """
         print("[schedule_worker] Worker loop started")
         while self.running:
             try:
-                self._check_and_run_schedules()
+                if _license_active():
+                    self._dispatch()
+                # License bị hủy/hết hạn -> tạm dừng gửi lịch (khóa cứng).
             except Exception as e:
                 print(f"[schedule_worker] Error in loop: {e}")
             time.sleep(5)
-            
-    def _check_and_run_schedules(self):
-        """Kiểm tra và chạy lịch cần chạy."""
+
+    def _dispatch(self):
+        """Quét lịch đến hạn và spawn thread xử lý cho từng lịch (song song)."""
         schedules = load_schedules()
         now = datetime.now().isoformat()
-        
+
         for sch in schedules:
             sch_id = sch.get("scheduleId")
             status = sch.get("status")
             run_at = sch.get("runAt", "")
-            
-            # Worker chạy tuần tự: lịch running còn lưu là lượt đã bị ngắt.
-            if status == "running" or (status == "pending" and run_at and run_at <= now):
+
+            # Lịch cần chạy: đang pending & đến giờ, HOẶC đang running (bị ngắt
+            # giữa chừng do tắt app) cần chạy tiếp.
+            due = status == "running" or (status == "pending" and run_at and run_at <= now)
+            if not due:
+                continue
+
+            with self._active_lock:
+                if sch_id in self._active:
+                    continue  # đã có thread đang chạy lịch này
+                if len(self._active) >= MAX_CONCURRENT_SCHEDULES:
+                    continue  # đủ tải, chờ lượt quét sau
+                self._active.add(sch_id)
+
+            t = threading.Thread(target=self._run_and_release, args=(sch_id,), daemon=True)
+            t.start()
+
+    def _run_and_release(self, sch_id):
+        """Chạy 1 chiến dịch trong thread riêng rồi giải phóng khỏi danh sách active."""
+        try:
+            sch = get_schedule(sch_id)
+            if sch:
                 print(f"[schedule_worker] Running schedule: {sch_id}")
                 self._run_schedule(sch)
+        except Exception as e:
+            print(f"[schedule_worker] Schedule {sch_id} crashed: {e}")
+            try:
+                update_schedule(sch_id, {"status": "failed"})
+            except Exception:
+                pass
+        finally:
+            with self._active_lock:
+                self._active.discard(sch_id)
                 
     def _run_schedule(self, schedule: dict):
         """Chạy một lịch gửi tin - xử lý theo batch."""
@@ -168,11 +274,12 @@ class ScheduleWorker:
 
         # Batch config
         batch_size = batch_config.get("batchSize", 10)
-        batch_delay_sec = batch_config.get("batchDelaySec", 30)
+        # Nghỉ giữa batch: áp SÀN tối thiểu để ổn định.
+        batch_delay_sec = max(_MIN_BATCH_DELAY_SEC, int(batch_config.get("batchDelaySec", _MIN_BATCH_DELAY_SEC) or _MIN_BATCH_DELAY_SEC))
 
-        # Rate limit config
-        min_delay = rate_limit.get("minDelaySec", 3)
-        max_delay = rate_limit.get("maxDelaySec", 5)
+        # Rate limit: áp SÀN để KHÔNG nhắn quá nhanh (dù cấu hình đặt thấp hơn).
+        min_delay = max(_MIN_MSG_DELAY_SEC, int(rate_limit.get("minDelaySec", _MIN_MSG_DELAY_SEC) or _MIN_MSG_DELAY_SEC))
+        max_delay = max(min_delay + 4, int(rate_limit.get("maxDelaySec", _MAX_MSG_DELAY_SEC) or _MAX_MSG_DELAY_SEC))
         max_errors = rate_limit.get("maxConsecutiveErrors", 5)
 
         # Nội dung chứa link nhóm Zalo -> resolve info nhóm 1 lần cho cả lịch.
@@ -205,6 +312,11 @@ class ScheduleWorker:
             filtered_recipients, previous_results, "userId"
         )
 
+        # Nội dung random: mỗi dòng = 1 mẫu tin, chọn ngẫu nhiên không lặp gần nhất.
+        msg_pool = _build_message_pool(message)
+        spinner = _MessageSpinner(msg_pool)
+        single_msg = len(msg_pool) <= 1  # >1 mẫu -> không dùng link_info dựng sẵn
+
         # Xử lý theo batch
         for batch_start in range(0, len(filtered_recipients), batch_size):
             batch = filtered_recipients[batch_start:batch_start + batch_size]
@@ -221,6 +333,8 @@ class ScheduleWorker:
                 uid = recipient.get("userId")
                 zalo_name = recipient.get("zaloName", "")
                 avatar = recipient.get("avatar", "")
+                msg = spinner.next()                    # mẫu tin random cho người này
+                li = link_info if single_msg else None   # nhiều mẫu -> để hàm tự xử lý link
 
                 try:
                     if photo_bytes is not None:
@@ -233,10 +347,10 @@ class ScheduleWorker:
                         )
                         sent_ok = bool(photo_result.get("ok"))
                         send_error = photo_result.get("message", "Gửi ảnh thất bại")
-                        if sent_ok and message:
+                        if sent_ok and msg:
                             text_result = send_message_smart(
-                                uid, message, zpw_enk, cookies, imei,
-                                is_group=False, zpw_ver=zpw_ver, link_info=link_info,
+                                uid, msg, zpw_enk, cookies, imei,
+                                is_group=False, zpw_ver=zpw_ver, link_info=li,
                             )
                             if not text_result.get("ok"):
                                 sent_ok = False
@@ -244,8 +358,8 @@ class ScheduleWorker:
                     else:
                         print(f"[schedule_worker] Sending to {uid} ({zalo_name})...")
                         text_result = send_message_smart(
-                            uid, message, zpw_enk, cookies, imei,
-                            is_group=False, zpw_ver=zpw_ver, link_info=link_info,
+                            uid, msg, zpw_enk, cookies, imei,
+                            is_group=False, zpw_ver=zpw_ver, link_info=li,
                         )
                         sent_ok = bool(text_result.get("ok"))
                         send_error = text_result.get("error", "")
@@ -324,11 +438,12 @@ class ScheduleWorker:
 
         # Batch config
         batch_size = batch_config.get("batchSize", 10)
-        batch_delay_sec = batch_config.get("batchDelaySec", 30)
+        # Nghỉ giữa batch: áp SÀN tối thiểu để ổn định.
+        batch_delay_sec = max(_MIN_BATCH_DELAY_SEC, int(batch_config.get("batchDelaySec", _MIN_BATCH_DELAY_SEC) or _MIN_BATCH_DELAY_SEC))
 
-        # Rate limit config
-        min_delay = rate_limit.get("minDelaySec", 3)
-        max_delay = rate_limit.get("maxDelaySec", 5)
+        # Rate limit: áp SÀN để KHÔNG nhắn quá nhanh (dù cấu hình đặt thấp hơn).
+        min_delay = max(_MIN_MSG_DELAY_SEC, int(rate_limit.get("minDelaySec", _MIN_MSG_DELAY_SEC) or _MIN_MSG_DELAY_SEC))
+        max_delay = max(min_delay + 4, int(rate_limit.get("maxDelaySec", _MAX_MSG_DELAY_SEC) or _MAX_MSG_DELAY_SEC))
         max_errors = rate_limit.get("maxConsecutiveErrors", 5)
 
         # Đổi status => running
@@ -338,6 +453,11 @@ class ScheduleWorker:
         recipients, success_count, failed_count, consecutive_errors = _resume_progress(
             recipients, previous_results or [], "groupId"
         )
+
+        # Nội dung random: mỗi dòng = 1 mẫu tin, chọn ngẫu nhiên không lặp gần nhất.
+        msg_pool = _build_message_pool(message)
+        spinner = _MessageSpinner(msg_pool)
+        single_msg = len(msg_pool) <= 1
 
         # Xử lý theo batch
         for batch_start in range(0, len(recipients), batch_size):
@@ -356,6 +476,8 @@ class ScheduleWorker:
                 if not group_id:
                     print(f"[schedule_worker] Schedule {sch_id}: Missing groupId in recipient")
                     continue
+                msg = spinner.next()                    # mẫu tin random cho nhóm này
+                li = link_info if single_msg else None
 
                 try:
                     if photo_bytes is not None:
@@ -369,10 +491,10 @@ class ScheduleWorker:
                         error_code = 0 if photo_result.get("ok") else -1
                         if error_code != 0:
                             print(f"[schedule_worker] Photo to group {group_id} failed: {photo_result.get('message')}")
-                        elif message:
+                        elif msg:
                             text_result = send_message_smart(
-                                group_id, message, zpw_enk, cookies, imei,
-                                is_group=True, zpw_ver=zpw_ver, link_info=link_info,
+                                group_id, msg, zpw_enk, cookies, imei,
+                                is_group=True, zpw_ver=zpw_ver, link_info=li,
                             )
                             error_code = 0 if text_result.get("ok") else -1
                             if error_code != 0:
@@ -380,8 +502,8 @@ class ScheduleWorker:
                     else:
                         print(f"[schedule_worker] Sending to group {group_id}...")
                         text_result = send_message_smart(
-                            group_id, message, zpw_enk, cookies, imei,
-                            is_group=True, zpw_ver=zpw_ver, link_info=link_info,
+                            group_id, msg, zpw_enk, cookies, imei,
+                            is_group=True, zpw_ver=zpw_ver, link_info=li,
                         )
                         error_code = 0 if text_result.get("ok") else -1
 

@@ -136,4 +136,12 @@ def quote_message(
         message_text = str(decoded.get("error_message") or "")
     if not message_text:
         message_text = str(response_json.get("error_message") or "")
-    return {"ok": ok, "code": outer or inner, "message": message_text, "raw": response_json}
+    # msgId của tin trả lời vừa gửi (để map cho lần reply tiếp theo); cliMsgId =
+    # clientId ta tự sinh (Zalo dùng chính giá trị này làm cliMsgId của tin).
+    sent_msg_id = ""
+    if isinstance(decoded, dict):
+        data_obj = decoded.get("data") if isinstance(decoded.get("data"), dict) else decoded
+        if isinstance(data_obj, dict):
+            sent_msg_id = str(data_obj.get("msgId") or "").strip()
+    return {"ok": ok, "code": outer or inner, "message": message_text,
+            "msgId": sent_msg_id, "cliMsgId": str(client_id), "raw": response_json}

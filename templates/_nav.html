@@ -2,7 +2,18 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-viewport.css') }}?v=nexus-viewport-v4-20260905">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-masterise.css') }}?v=nexus-masterise-v11-20260908">
+<!-- Theme workspace nạp TRỰC TIẾP (trước khi vẽ) để hết cảnh "vẽ xong mới đổi theme" gây nháy. -->
+<link rel="stylesheet" id="nexusThemeV15" href="{{ url_for('static', filename='css/nexus-theme-v15-workspace.css') }}?v=nexus-theme-v15-workspace-20260909">
 <script src="{{ url_for('static', filename='js/theme.js') }}?v=nexus-light-v3-20260728"></script>
+<style id="nexusAntiFlicker">
+/* Chuyển trang mượt: nội dung hiện ra bằng fade nhẹ, không chớp trắng, không nhảy layout. */
+@media (prefers-reduced-motion: no-preference){
+  .page{animation:nexusPageIn .18s ease-out both}
+}
+@keyframes nexusPageIn{from{opacity:0}to{opacity:1}}
+/* Loader chuyển vùng: mờ dần thay vì bật/tắt đột ngột. */
+.nexus-workspace-loader{transition:opacity .16s ease}
+</style>
 <style id="nexusUpdaterButtonOnlyStyle">
 .nexus-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .sidebar-updater.sidebar-updater-button-only{display:block!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
@@ -138,29 +149,16 @@
 <script>
 (function () {
     'use strict';
-
-    function mountNexusWorkspaceThemeV15() {
-        ['nexusContrastV11', 'nexusThemeV12', 'nexusThemeV13', 'nexusThemeV14', 'nexusThemeV15'].forEach(function (id) {
-            var old = document.getElementById(id);
-            if (old) old.remove();
-        });
-
-        document.querySelectorAll('link[href*="nexus-contrast-v11.css"], link[href*="nexus-theme-v12.css"], link[href*="nexus-theme-v13-light.css"], link[href*="nexus-theme-v14-blacktext.css"], link[href*="nexus-theme-v15-workspace.css"]').forEach(function (old) {
-            old.remove();
-        });
-
-        var link = document.createElement('link');
-        link.id = 'nexusThemeV15';
-        link.rel = 'stylesheet';
-        link.href = "{{ url_for('static', filename='css/nexus-theme-v15-workspace.css') }}?v=nexus-theme-v15-workspace-20260728";
-        document.head.appendChild(link);
-    }
-
-    if (document.readyState === 'complete') {
-        mountNexusWorkspaceThemeV15();
-    } else {
-        window.addEventListener('load', mountNexusWorkspaceThemeV15, { once: true });
-    }
+    // Theme workspace đã được nạp trực tiếp bằng <link id="nexusThemeV15"> ở trên nên
+    // KHÔNG swap lúc load nữa (đó là nguyên nhân gây nháy/đổi theme sau khi vẽ). Ở đây
+    // chỉ dọn các theme CŨ (v11–v14) nếu còn sót lại từ bản trước, một lần, không tạo lại.
+    ['nexusContrastV11', 'nexusThemeV12', 'nexusThemeV13', 'nexusThemeV14'].forEach(function (id) {
+        var old = document.getElementById(id);
+        if (old) old.remove();
+    });
+    document.querySelectorAll('link[href*="nexus-contrast-v11.css"], link[href*="nexus-theme-v12.css"], link[href*="nexus-theme-v13-light.css"], link[href*="nexus-theme-v14-blacktext.css"]').forEach(function (old) {
+        old.remove();
+    });
 })();
 </script>
 

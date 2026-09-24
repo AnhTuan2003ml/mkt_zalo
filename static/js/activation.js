@@ -18,6 +18,30 @@ function setResult(message, ok) {
     box.textContent = message || '';
 }
 
+// Popup xác nhận (thay window.confirm). Trả Promise<boolean>.
+function confirmPopup(message) {
+    return new Promise((resolve) => {
+        const ov = document.getElementById('confirmOverlay');
+        const msg = document.getElementById('confirmMessage');
+        const ok = document.getElementById('confirmOk');
+        const cancel = document.getElementById('confirmCancel');
+        if (!ov || !msg || !ok || !cancel) { resolve(window.confirm(message)); return; }
+        msg.textContent = message || 'Bạn có chắc?';
+        const cleanup = (val) => {
+            ov.classList.remove('show');
+            ok.onclick = null; cancel.onclick = null; ov.onclick = null;
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') cleanup(false); };
+        ok.onclick = () => cleanup(true);
+        cancel.onclick = () => cleanup(false);
+        ov.onclick = (e) => { if (e.target === ov) cleanup(false); };  // bấm nền = hủy
+        document.addEventListener('keydown', onKey);
+        ov.classList.add('show');
+    });
+}
+
 function getSelectedPlanKey() {
     const checked = document.querySelector('input[name="activationPlan"]:checked');
     return checked ? checked.value : '1m';
@@ -53,7 +77,42 @@ async function checkStatus() {
 
 window.checkStatus = checkStatus;
 
+// Hiển thị IP máy + MAC; bấm vào ô để copy MAC.
+async function loadDeviceInfo() {
+    const box = document.getElementById('deviceMacBox');
+    if (!box) return;
+    try {
+        const data = await fetch('/api/device/mac').then(r => r.json());
+        if (data && data.success) {
+            const ipEl = document.getElementById('deviceIp');
+            const macEl = document.getElementById('deviceMac');
+            if (ipEl) ipEl.textContent = data.ip || '-';
+            if (macEl) macEl.textContent = data.mac || '-';
+            box.dataset.mac = data.mac || '';
+        }
+    } catch (e) { /* ignore */ }
+    box.addEventListener('click', async () => {
+        const mac = box.dataset.mac || '';
+        if (!mac) return;
+        const hint = document.getElementById('deviceMacCopyHint');
+        try {
+            await navigator.clipboard.writeText(mac);
+        } catch (e) {
+            const ta = document.createElement('textarea');
+            ta.value = mac; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            document.body.removeChild(ta);
+        }
+        if (hint) {
+            const old = hint.textContent;
+            hint.textContent = '✓ Đã copy MAC';
+            setTimeout(() => { hint.textContent = old; }, 1800);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    loadDeviceInfo();
     const saveBtn = document.getElementById('saveActivationBtn');
     const resendBtn = document.getElementById('resendActivationBtn');
     const requestBtn = document.getElementById('requestActivationBtn');
@@ -74,14 +133,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function requestCode(buttonRef, loadingText) {
+    async function requestCode(buttonRef, loadingText, confirmChange) {
         const planKey = getSelectedPlanKey();
         const planLabel = getSelectedPlanLabel();
         buttonRef.disabled = true;
         const oldText = buttonRef.textContent;
         buttonRef.textContent = loadingText;
         try {
-            const data = await postJson('/api/activation/resend', { duration_key: planKey });
+            const data = await postJson('/api/activation/resend', {
+                duration_key: planKey, confirm: !!confirmChange,
+            });
+            // Máy đang có key còn hiệu lực -> hỏi xác nhận ĐỔI, đồng ý thì gửi lại.
+            if (data.needConfirm && !confirmChange) {
+                const agreed = await confirmPopup(data.message || 'Máy đang có key còn hiệu lực. Bạn có chắc muốn đổi/tạo key mới? (key hiện tại sẽ bị thay)');
+                if (agreed) {
+                    buttonRef.disabled = false;
+                    buttonRef.textContent = oldText;
+                    return requestCode(buttonRef, loadingText, true);
+                }
+                setResult('Đã hủy — giữ nguyên key hiện tại.', true);
+                return;
+            }
             setResult(data.message || `Đã gửi mã cho gói ${planLabel}.`, true);
         } catch (err) {
             setResult(err.message, false);

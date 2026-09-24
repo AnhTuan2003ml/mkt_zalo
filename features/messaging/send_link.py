@@ -265,6 +265,8 @@ def send_link_message(
     except Exception as exc:
         raise RuntimeError(f"Response sendlink không phải JSON: {response.text[:300]}") from exc
     decoded = _decode_data_field(resp_json, zpw_enk)
+    if isinstance(decoded, dict):
+        decoded.setdefault("_clientId", client_id)
     return resp_json, decoded
 
 
