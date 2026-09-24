@@ -746,6 +746,7 @@
         var payload = {
             accountId: accountId,
             sourceInput: sourceInput,
+            phoneList: (($('groupCopyPhoneList') || {}).value || '').trim(),
             // Khi preview đã xác minh được nhóm, gửi thêm ID đầy đủ cho backend.
             // Backend vẫn giữ sourceInput gốc để link có thể tự join khi cần.
             sourceGroupId: state.sourceGroupInfo ? getGroupId(state.sourceGroupInfo) : '',
@@ -778,7 +779,7 @@
         if (!payload.accountId) return 'Vui lòng chọn tài khoản thực hiện.';
         var account = state.accounts.find(function (item) { return getAccountId(item) === payload.accountId; });
         if (account && !accountReady(account)) return 'Tài khoản chưa sẵn sàng: cần zpwEnk, zpw_sek và IMEI cùng phiên.';
-        if (!payload.sourceInput) return 'Vui lòng dán link hoặc ID nhóm nguồn.';
+        if (!payload.sourceInput && !payload.phoneList) return 'Vui lòng dán link/ID nhóm nguồn hoặc danh sách số điện thoại.';
         if (payload.targetMode === 'new' && !payload.newGroupName) return 'Vui lòng nhập tên nhóm mới.';
         if (payload.targetMode === 'existing' && !payload.targetGroupId) return 'Vui lòng chọn một nhóm hiện tại.';
         if (!payload.startAt) return 'Vui lòng chọn thời gian bắt đầu.';
@@ -864,6 +865,7 @@
             $('groupCopyConsent').checked = false;
             resetSourcePreview();
             $('groupCopySource').value = '';
+            if ($('groupCopyPhoneList')) $('groupCopyPhoneList').value = '';
             state.targetGroup = null;
             renderTargetPreview();
             await loadJobs();

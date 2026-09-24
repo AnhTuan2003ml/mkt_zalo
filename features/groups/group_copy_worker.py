@@ -997,6 +997,50 @@ def _is_member_read_error(msg: str) -> bool:
     )
 
 
+def _is_session_error(msg: str) -> bool:
+    """Lỗi PHIÊN (hết hạn/không hợp lệ cookies + zpwEnk + imei) -> KHÔI PHỤC ĐƯỢC bằng
+    cách đăng nhập lại; KHÔNG được coi là lỗi cứng để giết chiến dịch."""
+    low = str(msg or "").lower()
+    return (
+        "[114]" in low
+        or "zpw_sek" in low
+        or "zpwenk" in low
+        or "session" in low
+        or "unauthorized" in low
+        or "401" in low
+        or "hết hạn" in low
+        or "het han" in low
+        or "đăng nhập" in low
+        or "dang nhap" in low
+    )
+
+
+def _refresh_campaign_session(account_id: str, account: dict) -> dict:
+    """LUÔN GIỮ PHIÊN: đọc lại cookie mới nhất từ Chrome của tài khoản (nếu đang mở)
+    trước mỗi chu kỳ, tránh dùng cookie đã xoay vòng gây "Tham số không hợp lệ"."""
+    try:
+        port = (account or {}).get("remoteDebugPort")
+        if not port:
+            return account
+        from features.accounts.account_network_monitor import refresh_account_cookies
+        refresh_account_cookies(str(account_id), int(port), timeout=6.0)
+        return get_account(account_id) or account
+    except Exception as exc:
+        print(f"[group_copy_worker] giu phien (refresh cookie) loi account={account_id}: {exc}", flush=True)
+        return account
+
+
+def _recover_campaign_session(account_id: str) -> bool:
+    """Khôi phục MẠNH khi phiên hết hạn: nạp lại trang Zalo trong Chrome của tài khoản
+    để bắt lại zpwEnk + zpw_sek. Cần Chrome của tài khoản còn mở."""
+    try:
+        from app import _refresh_account_session_blocking
+        return bool(_refresh_account_session_blocking(str(account_id), timeout=18.0))
+    except Exception as exc:
+        print(f"[group_copy_worker] khoi phuc phien loi account={account_id}: {exc}", flush=True)
+        return False
+
+
 class GroupCopyWorker:
     def __init__(self) -> None:
         self.running = False
@@ -1078,11 +1122,12 @@ class GroupCopyWorker:
             account = get_account(str(job.get("accountId") or ""))
             if not account:
                 raise ValueError("Không tìm thấy tài khoản thực hiện.")
+            account = _refresh_campaign_session(str(job.get("accountId") or ""), account)
             cookies = str(account.get("cookies") or "").strip()
             zpw_enk = str(account.get("zpwEnk") or "").strip()
             imei = str(account.get("imei") or "").strip()
             if not all([cookies, zpw_enk, imei]):
-                raise ValueError("Tài khoản chưa đủ cookies, zpwEnk hoặc IMEI.")
+                raise ValueError("Tài khoản chưa đủ cookies, zpwEnk hoặc IMEI (phiên có thể đã hết hạn).")
 
             # Tài khoản phụ trong nhóm chung: chờ tài khoản chủ tạo xong nhóm đích
             # rồi mượn Group ID + link, không tạo nhóm riêng.
@@ -1242,7 +1287,17 @@ class GroupCopyWorker:
             # được thành viên ("Tham số không hợp lệ") -> DỪNG HẲN tài khoản đó (không
             # lặp mãi), và chia phần việc còn lại cho các tài khoản đọc được. Đúng yêu
             # cầu: "chỉ dùng tài khoản lấy được thành viên".
-            if _is_member_read_error(str(exc)):
+            owner_id = str(job.get("targetOwnerAccountId") or "").strip()
+            current_id = str(job.get("accountId") or "").strip()
+            is_owner_acc = (not owner_id) or owner_id == current_id
+            session_err = _is_session_error(str(exc))
+
+            # Lỗi PHIÊN (cookies/zpwEnk hết hạn) hoặc lỗi đọc trên TÀI KHOẢN CHÍNH là
+            # TẠM THỜI — chỉ cần đăng nhập lại là chu kỳ sau chạy tiếp; TUYỆT ĐỐI không
+            # đánh dấu failed/không chia lại (tránh chết chiến dịch oan sang hôm sau).
+            # Chỉ dừng-và-chia-lại với NICK PHỤ thật sự không đọc được nhóm (không phải
+            # lỗi phiên).
+            if _is_member_read_error(str(exc)) and not session_err and not is_owner_acc:
                 errs = int(job.get("memberReadErrors") or 0) + 1
                 job["memberReadErrors"] = errs
                 if errs >= MAX_MEMBER_READ_ERRORS:
@@ -1258,17 +1313,39 @@ class GroupCopyWorker:
                     )
                     return  # redistribute_campaign_members đã mark job failed + lưu
 
-            retry_at = datetime.now() + timedelta(minutes=10)
+            # LUÔN GIỮ PHIÊN: khi phát hiện lỗi phiên, tự nạp lại trang Zalo trong Chrome
+            # của tài khoản để bắt lại zpwEnk + zpw_sek, KHÔNG chờ người dùng bấm tay.
+            recovered_session = _recover_campaign_session(current_id) if session_err else False
+
+            if session_err:
+                retry_minutes = 2 if recovered_session else 15
+            else:
+                retry_minutes = 10
+            retry_at = datetime.now() + timedelta(minutes=retry_minutes)
             job["status"] = "pending"
             job["nextRunAt"] = retry_at.isoformat(timespec="seconds")
             # Đợt mời/kiểm tra vẫn giữ lịch cũ nếu có, nếu không thì bám theo retry.
             if not str(job.get("nextInviteAt") or "").strip() and _pending_members(job):
                 job["nextInviteAt"] = job["nextRunAt"]
-            _remain = max(0, MAX_MEMBER_READ_ERRORS - int(job.get("memberReadErrors") or 0))
-            job["lastNotice"] = (
-                f"Gặp lỗi tạm thời ({exc}). Sẽ thử lại sau 10 phút"
-                + (f"; nếu vẫn không đọc được thành viên sau {_remain} lần nữa sẽ dừng tài khoản này và chia việc cho tài khoản khác." if _is_member_read_error(str(exc)) else ".")
-            )
+            if session_err and recovered_session:
+                job["lastNotice"] = (
+                    "Phiên đã được TỰ LÀM MỚI từ trình duyệt của tài khoản; chiến dịch "
+                    f"tiếp tục sau ~{retry_minutes} phút, không cần thao tác."
+                )
+            elif session_err:
+                job["lastNotice"] = (
+                    "Phiên đăng nhập của tài khoản có thể đã hết hạn (lỗi 114/cookies) và "
+                    "chưa tự làm mới được (Chrome của tài khoản có thể đã đóng). Hãy mở lại "
+                    f"và ĐĂNG NHẬP LẠI tài khoản; chiến dịch sẽ tự chạy tiếp sau ~{retry_minutes} phút, KHÔNG cần tạo lại."
+                )
+            elif _is_member_read_error(str(exc)) and not is_owner_acc:
+                _remain = max(0, MAX_MEMBER_READ_ERRORS - int(job.get("memberReadErrors") or 0))
+                job["lastNotice"] = (
+                    f"Gặp lỗi tạm thời ({exc}). Sẽ thử lại sau {retry_minutes} phút; "
+                    f"nếu vẫn không đọc được thành viên sau {_remain} lần nữa sẽ dừng tài khoản này và chia việc cho tài khoản khác."
+                )
+            else:
+                job["lastNotice"] = f"Gặp lỗi tạm thời ({exc}). Sẽ thử lại sau {retry_minutes} phút."
             save_job(job)
             print(f"[group_copy_worker] {job_id} loi tam thoi, se thu lai: {exc}", flush=True)
 

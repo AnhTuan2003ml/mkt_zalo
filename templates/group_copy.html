@@ -11,7 +11,7 @@
 </head>
 <body>
 {% include '_nav.html' %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-campaign-v8">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/group-copy.css') }}?v=group-copy-campaign-v9">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=nexus-light-v3-20260728">
 <div class="page group-copy-page">
@@ -149,10 +149,10 @@
 
             <!-- Bước 2: Nhóm nguồn & nhóm đích -->
             <section class="gc-sec">
-                <div class="gc-sec-head"><span class="gc-sec-no">2</span><div class="gc-sec-copy"><strong>Nhóm nguồn & nhóm đích</strong><small>Nguồn để lấy thành viên, và nhóm sẽ mời họ vào</small></div></div>
+                <div class="gc-sec-head"><span class="gc-sec-no">2</span><div class="gc-sec-copy"><strong>Nguồn thành viên & nhóm đích</strong><small>Lấy thành viên từ nhóm nguồn và/hoặc danh sách số điện thoại, rồi mời vào nhóm đích</small></div></div>
                 <div class="gc-sec-grid gc-grid-2">
                     <div class="gc-field">
-                        <label for="groupCopySource">Nhóm nguồn <span class="gc-lb-note">(nên dán LINK)</span></label>
+                        <label for="groupCopySource">Nhóm nguồn <span class="gc-lb-note">(tùy chọn nếu đã dán số — nên dán LINK)</span></label>
                         <input id="groupCopySource" type="text" placeholder="Dán link Zalo hoặc Group ID" autocomplete="off">
                         <div id="groupCopySourcePreview" class="gc-group-preview" hidden></div>
                     </div>
@@ -175,6 +175,11 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                <div class="gc-field gc-field-full">
+                    <label for="groupCopyPhoneList">Danh sách số điện thoại <span class="gc-lb-note">(tùy chọn — mỗi số 1 dòng)</span></label>
+                    <textarea id="groupCopyPhoneList" rows="5" placeholder="0399xxxxxx&#10;0912xxxxxx&#10;+8498xxxxxxx" autocomplete="off"></textarea>
+                    <small class="gc-hint">App dùng tài khoản chính tìm UID từ từng số, tự gửi kết bạn rồi thêm vào nhóm đích khi đã là bạn — giống sao chép nhóm. Số ẩn/không dùng Zalo sẽ được bỏ qua.</small>
                 </div>
             </section>
 
@@ -353,6 +358,6 @@
 
 <div class="member-toast-stack" id="groupCopyToastStack" aria-live="polite" aria-atomic="true"></div>
 
-<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-campaign-v8"></script>
+<script src="{{ url_for('static', filename='js/group-copy.js') }}?v=group-copy-campaign-v9"></script>
 </body>
 </html>

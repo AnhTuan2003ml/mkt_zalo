@@ -63,7 +63,8 @@
 .gc-field > label { font-size: 12px; font-weight: 700; color: #bfd0de; }
 .gc-field input[type="text"],
 .gc-field input[type="number"],
-.gc-field input[type="datetime-local"] {
+.gc-field input[type="datetime-local"],
+.gc-field textarea {
     width: 100%;
     min-height: 42px;
     padding: 9px 12px;
@@ -74,11 +75,18 @@
     font-size: 13.5px;
     transition: border-color .15s ease, box-shadow .15s ease;
 }
-.gc-field input:focus {
+.gc-field textarea {
+    resize: vertical;
+    line-height: 1.5;
+    font-family: inherit;
+}
+.gc-field input:focus,
+.gc-field textarea:focus {
     outline: none;
     border-color: rgba(72, 184, 255, .5);
     box-shadow: 0 0 0 3px rgba(72, 184, 255, .1);
 }
+.gc-field-full { margin-top: 14px; }
 .gc-hint { color: var(--text-muted); font-size: 11px; line-height: 1.4; }
 
 .group-copy-input-suffix { position: relative; }

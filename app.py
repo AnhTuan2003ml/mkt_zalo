@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.3"
 
 # Cổng giao diện Nexus (mở trình duyệt tới đây). Dùng port ÍT DÙNG để tránh đụng
 # 5000 (hay bị app khác chiếm -> báo 404). Đổi được qua env NEXUS_UI_PORT.
@@ -3154,24 +3154,43 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         hint_type, normalized_hint = normalize_group_input(source_group_id_hint)
         if hint_type == "group_id":
             source_input = normalized_hint
+    phone_list = payload.get("phoneList") or []
+    if isinstance(phone_list, str):
+        phone_list = phone_list.replace(",", "\n").splitlines()
+    phone_list = [str(p or "").strip() for p in phone_list if str(p or "").strip()]
+
     task.set_progress(10)
-    task.log("Đang đọc thông tin và danh sách thành viên nhóm nguồn...")
-    member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
-        account_id,
-        source_input,
-        callback=lambda msg, typ="info": task.log(msg, typ),
-        require_imei=False,
-        auto_join_when_not_member=True,
-        leave_after_auto_join=False,   # A vào lấy thành viên xong Ở LẠI nhóm, không rời
-    )
-    uid_list = member_payload.get("uidList") or []
-    member_map = member_payload.get("memberMap") or {}
-    source_group_id = str(member_payload.get("groupId") or "").strip()
-    source_group = format_group_info(
-        member_payload.get("groupInfo") or {},
-        group_id=source_group_id,
-        fallback_total=len(uid_list),
-    )
+    if source_input:
+        task.log("Đang đọc thông tin và danh sách thành viên nhóm nguồn...")
+        member_payload, account, cookies, zpw_enk, imei, zpw_ver = _fetch_group_members_session_safe(
+            account_id,
+            source_input,
+            callback=lambda msg, typ="info": task.log(msg, typ),
+            require_imei=False,
+            auto_join_when_not_member=True,
+            leave_after_auto_join=False,   # A vào lấy thành viên xong Ở LẠI nhóm, không rời
+        )
+        uid_list = member_payload.get("uidList") or []
+        member_map = member_payload.get("memberMap") or {}
+        source_group_id = str(member_payload.get("groupId") or "").strip()
+        source_group = format_group_info(
+            member_payload.get("groupInfo") or {},
+            group_id=source_group_id,
+            fallback_total=len(uid_list),
+        )
+    else:
+        account = get_account(account_id) or {}
+        cookies = str(account.get("cookies") or "").strip()
+        zpw_enk = str(account.get("zpwEnk") or "").strip()
+        imei = str(account.get("imei") or "").strip()
+        zpw_ver = None
+        member_payload = {"uidList": [], "memberMap": {}, "groupInfo": {}}
+        uid_list = []
+        member_map = {}
+        source_group_id = ""
+        source_group = format_group_info({}, group_id="", fallback_total=len(phone_list))
+        source_group["name"] = "Danh sách số điện thoại"
+        task.log(f"Không có nhóm nguồn — chỉ dùng {len(phone_list)} số điện thoại đã dán.")
 
     target_group_id = str(payload.get("targetGroupId") or "").strip()
     if payload.get("targetMode") == "existing" and target_group_id == source_group_id:
@@ -3243,8 +3262,49 @@ def _prepare_group_copy_job_worker(task, payload: dict):
 
     if skipped_leader_count:
         task.log(f"Đã bỏ qua {skipped_leader_count} trưởng/phó nhóm của nhóm nguồn theo thiết lập.")
-    if not clean_members:
-        raise ValueError("Không tìm thấy thành viên hợp lệ trong nhóm nguồn.")
+
+    phone_members = []
+    if phone_list:
+        from features.profiles.search_info_from_phone import get_profile_by_phone, normalize_vn_phone
+        task.log(f"Đang tìm UID từ {len(phone_list)} số điện thoại bằng tài khoản chính...")
+        seen_phone = set()
+        phone_ok = 0
+        phone_fail = 0
+        for raw_phone in phone_list:
+            norm_phone = normalize_vn_phone(raw_phone)
+            if not norm_phone or norm_phone in seen_phone:
+                continue
+            seen_phone.add(norm_phone)
+            try:
+                prof = get_profile_by_phone(raw_phone, zpw_enk, cookies, imei=imei, zpw_ver=zpw_ver)
+            except Exception as exc:
+                prof = None
+                task.log(f"Lỗi tìm UID cho số {raw_phone}: {exc}", "warn")
+            phone_uid = str((prof or {}).get("userId") or "").strip()
+            if not prof or not phone_uid:
+                phone_fail += 1
+                task.log(f"Không tìm được UID cho số {raw_phone} (số ẩn / không dùng Zalo / bị giới hạn).", "warn")
+                continue
+            if phone_uid == account_uid or phone_uid in seen:
+                continue
+            seen.add(phone_uid)
+            fr_text = str(prof.get("isFr")).strip().lower()
+            is_friend = True if fr_text in {"1", "true"} else (False if fr_text in {"0", "false", ""} else None)
+            _phone_avatar = prof.get("avatar") or ""
+            phone_members.append({
+                "userId": phone_uid,
+                "zaloName": prof.get("zaloName") or prof.get("displayName") or raw_phone,
+                "avatar": _phone_avatar,
+                "avatarHash": _extract_avatar_hash(_phone_avatar),
+                "isFriend": is_friend,
+                "isFr": 1 if is_friend is True else (0 if is_friend is False else None),
+                "sourcePhone": norm_phone,
+            })
+            phone_ok += 1
+        task.log(f"Tìm UID từ số điện thoại xong: thành công {phone_ok}, thất bại {phone_fail}.")
+
+    if not clean_members and not phone_members:
+        raise ValueError("Không tìm thấy thành viên hợp lệ trong nhóm nguồn hoặc danh sách số điện thoại.")
 
     task.set_progress(85)
 
@@ -3261,6 +3321,11 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         clean_members[i * k + min(i, m):(i + 1) * k + min(i + 1, m)]
         for i in range(n)
     ]
+    if phone_members:
+        if not blocks:
+            blocks = [[]]
+        blocks[0] = list(blocks[0] or []) + phone_members
+    total_members = len(clean_members) + len(phone_members)
 
     is_multi = n > 1
     if is_multi and not source_group_link:
@@ -3357,7 +3422,8 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         jobs_created.append(job)
 
     task.log(
-        f"Đã lập lịch {len(clean_members)} thành viên"
+        f"Đã lập lịch {total_members} thành viên"
+        + (f" (gồm {len(phone_members)} từ số điện thoại)" if phone_members else "")
         + (f" chia cho {n} tài khoản (mỗi tài khoản một khối liên tiếp, không trùng)." if is_multi else ".")
         + f" Mỗi tài khoản gửi tối đa {payload.get('friendRequestDailyLimit', payload.get('dailyLimit'))} lời mời kết bạn/ngày."
     )
@@ -3367,7 +3433,7 @@ def _prepare_group_copy_job_worker(task, payload: dict):
         "jobCount": len(jobs_created),
         "accountCount": n,
         "sourceGroup": source_group,
-        "totalMembers": len(clean_members),
+        "totalMembers": total_members,
         "verifyIntervalMinutes": first_job.get("verifyIntervalMinutes", 30),
         "campaignDurationDays": first_job.get("campaignDurationDays", 30),
     }
@@ -3457,6 +3523,12 @@ def api_group_copy_start():
     if source_group_id:
         hint_type, normalized_hint = normalize_group_input(source_group_id)
         source_group_id = normalized_hint if hint_type == "group_id" else ""
+    phone_list_raw = data.get("phoneList") or data.get("phones") or ""
+    if isinstance(phone_list_raw, list):
+        phone_lines = [str(p or "") for p in phone_list_raw]
+    else:
+        phone_lines = str(phone_list_raw).replace(",", "\n").splitlines()
+    phone_list = [p.strip() for p in phone_lines if p and p.strip()]
     target_mode = str(data.get("targetMode") or "existing").strip().lower()
     target_group_id = str(data.get("targetGroupId") or "").strip()
     target_group_name = str(data.get("targetGroupName") or "").strip()
@@ -3479,8 +3551,8 @@ def api_group_copy_start():
 
     if not account_id:
         return jsonify({"success": False, "error": "Vui lòng chọn tài khoản thực hiện."}), 400
-    if not source_input:
-        return jsonify({"success": False, "error": "Vui lòng dán link hoặc ID nhóm nguồn."}), 400
+    if not source_input and not phone_list:
+        return jsonify({"success": False, "error": "Vui lòng dán link/ID nhóm nguồn hoặc danh sách số điện thoại."}), 400
     if target_mode not in {"existing", "new"}:
         return jsonify({"success": False, "error": "Kiểu nhóm đích không hợp lệ."}), 400
     if target_mode == "existing" and not target_group_id:
@@ -3519,6 +3591,7 @@ def api_group_copy_start():
         "sourceInput": source_input,
         "sourceInputType": source_input_type,
         "sourceGroupId": source_group_id or (source_input if source_input_type == "group_id" else ""),
+        "phoneList": phone_list,
         "targetMode": target_mode,
         "targetGroupId": target_group_id,
         "targetGroupName": target_group_name,
@@ -3535,10 +3608,11 @@ def api_group_copy_start():
         "consentConfirmed": True,
     }
 
+    source_desc = source_input if source_input else f"{len(phone_list)} số điện thoại"
     task = run_task_in_background(
         _prepare_group_copy_job_worker,
         "Lập lịch sao chép nhóm",
-        f"Đọc thành viên từ {source_input}, thêm bạn bè trực tiếp, gửi kết bạn và kiểm tra add lại trong {campaign_days} ngày",
+        f"Đọc thành viên từ {source_desc}, thêm bạn bè trực tiếp, gửi kết bạn và kiểm tra add lại trong {campaign_days} ngày",
         payload,
     )
     return jsonify({
