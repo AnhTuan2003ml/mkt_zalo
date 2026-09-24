@@ -167,6 +167,10 @@ def _normalize_member(item) -> Optional[dict]:
         "avatarHash": str(item.get("avatarHash") or "").strip().lower(),
         # Tài khoản phụ đã phân giải được uid riêng cho người này chưa.
         "sourceUidResolved": bool(item.get("sourceUidResolved")),
+        # Người được thêm từ SỐ ĐIỆN THOẠI: giữ số gốc để worker tự tra UID dần theo
+        # lịch (userId tạm dạng "phone:<số>" đến khi tra được).
+        "sourcePhone": str(item.get("sourcePhone") or "").strip(),
+        "phoneResolveAttempts": max(0, _to_int(item.get("phoneResolveAttempts"), 0)),
         "isFriend": friend_state,
         "status": status,
         "error": str(item.get("error") or "").strip(),

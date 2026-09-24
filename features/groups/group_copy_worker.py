@@ -983,6 +983,8 @@ def _remove_joined_campaign_friends(
 MAX_CONCURRENT_COPY_JOBS = 16   # số tài khoản/tác vụ chạy SONG SONG tối đa
 MAX_SOURCE_JOIN_ATTEMPTS = 3    # số lần thử tự vào/đọc nhóm nguồn trước khi chia lại việc
 MAX_MEMBER_READ_ERRORS = 3      # số lần lỗi đọc thành viên ("Tham số không hợp lệ") trước khi DỪNG tài khoản
+MAX_PHONE_RESOLVE_ATTEMPTS = 3  # số lần thử tra UID từ số điện thoại trước khi bỏ qua
+PHONE_RESOLVE_PER_CYCLE = 5     # số số điện thoại tra mỗi chu kỳ (rải để tránh giới hạn tần suất)
 
 
 def _is_member_read_error(msg: str) -> bool:
@@ -1039,6 +1041,94 @@ def _recover_campaign_session(account_id: str) -> bool:
     except Exception as exc:
         print(f"[group_copy_worker] khoi phuc phien loi account={account_id}: {exc}", flush=True)
         return False
+
+
+def _is_unresolved_phone(uid) -> bool:
+    return str(uid or "").startswith("phone:")
+
+
+def _resolve_phone_members(job: dict, zpw_enk: str, cookies: str, imei: str,
+                           account_uid: str = "", limit: int = PHONE_RESOLVE_PER_CYCLE) -> dict:
+    """Tra UID cho member thêm từ SỐ ĐIỆN THOẠI (userId tạm "phone:<số>").
+
+    Rải theo từng chu kỳ (mỗi lần vài số) để tránh Zalo giới hạn tần suất. Tra được ->
+    gán userId thật để vào pipeline kết bạn/add nhóm; thất bại quá số lần -> 'skipped'.
+    """
+    import time as _t
+    import random as _r
+    members = job.get("members") or []
+    existing_uids = {
+        str(m.get("userId") or "").strip()
+        for m in members
+        if str(m.get("userId") or "").strip() and not _is_unresolved_phone(m.get("userId"))
+    }
+    pend = [
+        m for m in members
+        if _is_unresolved_phone(m.get("userId")) and str(m.get("status") or "pending") == "pending"
+    ]
+    if not pend:
+        return {"resolved": 0, "failed": 0, "skipped": 0, "remaining": 0}
+
+    try:
+        from features.profiles.search_info_from_phone import get_profile_by_phone
+    except Exception as exc:
+        print(f"[group_copy_worker] khong import duoc get_profile_by_phone: {exc}", flush=True)
+        return {"resolved": 0, "failed": 0, "skipped": 0, "remaining": len(pend)}
+
+    resolved = failed = skipped = 0
+    for member in pend[:max(1, int(limit))]:
+        phone = str(member.get("sourcePhone") or "").strip()
+        if not phone:
+            member["status"] = "skipped"
+            member["error"] = "Thiếu số điện thoại gốc."
+            skipped += 1
+            continue
+        prof = None
+        for attempt in range(3):
+            if attempt:
+                _t.sleep(min(6.0, 1.5 * attempt + _r.uniform(0.3, 1.0)))
+            else:
+                _t.sleep(_r.uniform(0.2, 0.6))
+            try:
+                prof = get_profile_by_phone(phone, zpw_enk, cookies, imei=imei, zpw_ver=get_zpw_ver())
+            except Exception:
+                prof = None
+            if prof and str(prof.get("userId") or "").strip():
+                break
+        real_uid = str((prof or {}).get("userId") or "").strip()
+        if not real_uid:
+            member["phoneResolveAttempts"] = int(member.get("phoneResolveAttempts") or 0) + 1
+            if int(member.get("phoneResolveAttempts") or 0) >= MAX_PHONE_RESOLVE_ATTEMPTS:
+                member["status"] = "skipped"
+                member["error"] = "Không tra được UID (số ẩn tìm kiếm/không dùng Zalo)."
+                skipped += 1
+            else:
+                failed += 1
+            continue
+        if real_uid == str(account_uid or "").strip() or real_uid in existing_uids:
+            member["status"] = "skipped"
+            member["error"] = "Trùng người đã có trong chiến dịch hoặc trùng chính tài khoản."
+            skipped += 1
+            continue
+        existing_uids.add(real_uid)
+        fr_text = str(prof.get("isFr")).strip().lower()
+        is_friend = True if fr_text in {"1", "true"} else (False if fr_text in {"0", "false"} else None)
+        member["userId"] = real_uid
+        member["zaloName"] = prof.get("zaloName") or prof.get("displayName") or member.get("zaloName") or phone
+        member["avatar"] = prof.get("avatar") or ""
+        member["avatarHash"] = _avatar_hash(member["avatar"])
+        member["isFriend"] = is_friend
+        member["isFr"] = 1 if is_friend is True else (0 if is_friend is False else None)
+        member["status"] = "pending"
+        member["error"] = ""
+        member["sourceUidResolved"] = True
+        resolved += 1
+
+    remaining = sum(
+        1 for m in (job.get("members") or [])
+        if _is_unresolved_phone(m.get("userId")) and str(m.get("status") or "pending") == "pending"
+    )
+    return {"resolved": resolved, "failed": failed, "skipped": skipped, "remaining": remaining}
 
 
 class GroupCopyWorker:
@@ -1206,6 +1296,18 @@ class GroupCopyWorker:
                     save_job(job)
                     return
                 job["sourceJoinAttempts"] = 0
+
+            # Người thêm từ SỐ ĐIỆN THOẠI: tra UID DẦN mỗi chu kỳ (vài số/lần) để tránh
+            # bị Zalo giới hạn tần suất; tra được thì vào pipeline kết bạn/add nhóm.
+            if any(_is_unresolved_phone(m.get("userId")) for m in (job.get("members") or [])):
+                account_uid = str(account.get("uid") or account.get("userId") or "").strip()
+                pr = _resolve_phone_members(job, zpw_enk, cookies, imei, account_uid=account_uid)
+                if pr.get("resolved") or pr.get("skipped"):
+                    print(
+                        f"[group_copy_worker] {job_id}: tra so dien thoai -> resolved={pr['resolved']} "
+                        f"skipped={pr['skipped']} remaining={pr['remaining']}",
+                        flush=True,
+                    )
 
             # Chỉ coi đợt mời là đến hạn dựa trên danh sách pending trước lúc
             # kiểm tra. Nếu lần kiểm tra phát hiện ai vừa rời nhóm, người đó được
@@ -1375,9 +1477,11 @@ class GroupCopyWorker:
         if creating_new_group:
             group_name = str(job.get("newGroupName") or job.get("targetGroupName") or "Nhóm mới").strip()
             # Ưu tiên thành viên đã xác định là bạn bè để tăng khả năng tạo nhóm
-            # và thêm trực tiếp ngay ở request đầu tiên.
+            # và thêm trực tiếp ngay ở request đầu tiên. Bỏ qua người CHƯA tra được UID
+            # từ số điện thoại (userId tạm "phone:<số>") — không dùng làm seed tạo nhóm.
             prioritized = sorted(
-                [member for member in pending if member.get("isFriend") is not False],
+                [member for member in pending
+                 if member.get("isFriend") is not False and not _is_unresolved_phone(member.get("userId"))],
                 key=lambda member: 0 if member.get("isFriend") is True else 1,
             )
             seed_ids = [
@@ -1385,6 +1489,14 @@ class GroupCopyWorker:
                 for member in prioritized[:50]
                 if str(member.get("userId") or "").strip()
             ]
+            if not seed_ids:
+                # Chưa có UID hợp lệ nào (đang tra số điện thoại dần) -> hoãn tạo nhóm,
+                # thử lại chu kỳ sau khi đã tra được người đầu tiên.
+                run_record["action"] = "wait_phone_resolve_before_create_group"
+                run_record["status"] = "done"
+                job["nextInviteAt"] = _next_send_run(job, datetime.now())
+                job["lastNotice"] = "Đang tra UID từ số điện thoại để tạo nhóm; sẽ tạo khi có người đầu tiên."
+                return
             response_json, decoded_raw = create_group(
                 group_name,
                 seed_ids,
@@ -1526,6 +1638,7 @@ class GroupCopyWorker:
                 target = next(
                     (m for m in _pending_members(job)
                      if str(m.get("userId") or "").strip()
+                     and not _is_unresolved_phone(m.get("userId"))
                      and str(m.get("userId")) not in attempted_uids
                      and m.get("isFriend") is not True),
                     None,
@@ -1534,6 +1647,7 @@ class GroupCopyWorker:
                     target = next(
                         (m for m in _pending_members(job)
                          if str(m.get("userId") or "").strip()
+                         and not _is_unresolved_phone(m.get("userId"))
                          and str(m.get("userId")) not in attempted_uids),
                         None,
                     )

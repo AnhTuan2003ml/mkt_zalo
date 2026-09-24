@@ -134,6 +134,42 @@ def _resume_progress(recipients, results, id_key):
     return remaining, success_count, failed_count, consecutive_errors
 
 
+def _is_unresolved_phone(uid) -> bool:
+    return str(uid or "").startswith("phone:")
+
+
+def _resolve_phone_to_uid(recipient: dict, zpw_enk: str, cookies: str, imei: str, zpw_ver) -> str:
+    """Tra UID từ số điện thoại NGAY trước khi gửi (rải theo lịch, không cần tra trước).
+
+    Có thử lại vài lần phòng Zalo giới hạn tần suất; tra được thì cập nhật tên/avatar
+    để hiển thị. Không ra UID -> trả chuỗi rỗng để lịch bỏ qua người này.
+    """
+    import time as _t
+    import random as _r
+    phone = str(recipient.get("phone") or recipient.get("phoneNormalized") or "").strip()
+    if not phone and _is_unresolved_phone(recipient.get("userId")):
+        phone = str(recipient.get("userId"))[len("phone:"):]
+    if not phone:
+        return ""
+    try:
+        from features.profiles.search_info_from_phone import get_profile_by_phone
+    except Exception:
+        return ""
+    for attempt in range(3):
+        if attempt:
+            _t.sleep(min(6.0, 1.5 * attempt + _r.uniform(0.3, 1.0)))
+        try:
+            prof = get_profile_by_phone(phone, zpw_enk, cookies, imei=imei, zpw_ver=zpw_ver)
+        except Exception:
+            prof = None
+        uid = str((prof or {}).get("userId") or "").strip()
+        if uid:
+            recipient["zaloName"] = prof.get("zaloName") or prof.get("displayName") or recipient.get("zaloName") or phone
+            recipient["avatar"] = prof.get("avatar") or recipient.get("avatar") or ""
+            return uid
+    return ""
+
+
 # Số chiến dịch tối đa chạy SONG SONG cùng lúc (mỗi chiến dịch 1 thread riêng).
 MAX_CONCURRENT_SCHEDULES = 16
 
@@ -330,11 +366,46 @@ class ScheduleWorker:
                     print(f"[schedule_worker] Schedule {sch_id}: Max consecutive errors reached")
                     break
 
-                uid = recipient.get("userId")
+                result_uid = recipient.get("userId")   # khóa ổn định để resume (phone: giữ nguyên)
+                uid = result_uid
                 zalo_name = recipient.get("zaloName", "")
                 avatar = recipient.get("avatar", "")
                 msg = spinner.next()                    # mẫu tin random cho người này
                 li = link_info if single_msg else None   # nhiều mẫu -> để hàm tự xử lý link
+
+                # Người nhận thêm từ SỐ ĐIỆN THOẠI: tra UID NGAY trước khi gửi (rải theo
+                # lịch, không cần tra trước). Không ra UID -> bỏ qua người này.
+                if _is_unresolved_phone(uid):
+                    real_uid = recipient.get("resolvedUserId") or _resolve_phone_to_uid(
+                        recipient, zpw_enk, cookies, imei, zpw_ver
+                    )
+                    if not real_uid:
+                        failed_count += 1
+                        append_schedule_result(sch_id, {
+                            "userId": result_uid,
+                            "zaloName": recipient.get("zaloName", "") or recipient.get("phone", ""),
+                            "avatar": recipient.get("avatar", ""),
+                            "status": "failed",
+                            "error": "Không tra được UID từ số điện thoại (số ẩn/không dùng Zalo)",
+                            "sentAt": int(time.time() * 1000),
+                        })
+                        if i < len(batch) - 1:
+                            time.sleep(random.uniform(min_delay, max_delay))
+                        continue
+                    if real_uid == sender_uid:
+                        append_schedule_result(sch_id, {
+                            "userId": result_uid,
+                            "zaloName": recipient.get("zaloName", ""),
+                            "avatar": recipient.get("avatar", ""),
+                            "status": "failed",
+                            "error": "Số trùng chính tài khoản gửi",
+                            "sentAt": int(time.time() * 1000),
+                        })
+                        continue
+                    recipient["resolvedUserId"] = real_uid
+                    uid = real_uid
+                    zalo_name = recipient.get("zaloName", "")
+                    avatar = recipient.get("avatar", "")
 
                 try:
                     if photo_bytes is not None:
@@ -368,7 +439,7 @@ class ScheduleWorker:
                         success_count += 1
                         consecutive_errors = 0
                         result = {
-                            "userId": uid,
+                            "userId": result_uid,
                             "zaloName": zalo_name,
                             "avatar": avatar,
                             "status": "success",
@@ -378,7 +449,7 @@ class ScheduleWorker:
                         failed_count += 1
                         consecutive_errors += 1
                         result = {
-                            "userId": uid,
+                            "userId": result_uid,
                             "zaloName": zalo_name,
                             "avatar": avatar,
                             "status": "failed",
@@ -392,7 +463,7 @@ class ScheduleWorker:
                     failed_count += 1
                     consecutive_errors += 1
                     result = {
-                        "userId": uid,
+                        "userId": result_uid,
                         "zaloName": zalo_name,
                         "avatar": avatar,
                         "status": "failed",

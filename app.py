@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.4.3"
+APP_VERSION = "1.4.4"
 
 # Cổng giao diện Nexus (mở trình duyệt tới đây). Dùng port ÍT DÙNG để tránh đụng
 # 5000 (hay bị app khác chiếm -> báo 404). Đổi được qua env NEXUS_UI_PORT.
@@ -3265,43 +3265,27 @@ def _prepare_group_copy_job_worker(task, payload: dict):
 
     phone_members = []
     if phone_list:
-        from features.profiles.search_info_from_phone import get_profile_by_phone, normalize_vn_phone
-        task.log(f"Đang tìm UID từ {len(phone_list)} số điện thoại bằng tài khoản chính...")
+        from features.profiles.search_info_from_phone import normalize_vn_phone
         seen_phone = set()
-        phone_ok = 0
-        phone_fail = 0
         for raw_phone in phone_list:
             norm_phone = normalize_vn_phone(raw_phone)
             if not norm_phone or norm_phone in seen_phone:
                 continue
             seen_phone.add(norm_phone)
-            try:
-                prof = get_profile_by_phone(raw_phone, zpw_enk, cookies, imei=imei, zpw_ver=zpw_ver)
-            except Exception as exc:
-                prof = None
-                task.log(f"Lỗi tìm UID cho số {raw_phone}: {exc}", "warn")
-            phone_uid = str((prof or {}).get("userId") or "").strip()
-            if not prof or not phone_uid:
-                phone_fail += 1
-                task.log(f"Không tìm được UID cho số {raw_phone} (số ẩn / không dùng Zalo / bị giới hạn).", "warn")
-                continue
-            if phone_uid == account_uid or phone_uid in seen:
-                continue
-            seen.add(phone_uid)
-            fr_text = str(prof.get("isFr")).strip().lower()
-            is_friend = True if fr_text in {"1", "true"} else (False if fr_text in {"0", "false", ""} else None)
-            _phone_avatar = prof.get("avatar") or ""
             phone_members.append({
-                "userId": phone_uid,
-                "zaloName": prof.get("zaloName") or prof.get("displayName") or raw_phone,
-                "avatar": _phone_avatar,
-                "avatarHash": _extract_avatar_hash(_phone_avatar),
-                "isFriend": is_friend,
-                "isFr": 1 if is_friend is True else (0 if is_friend is False else None),
+                "userId": f"phone:{norm_phone}",
+                "zaloName": raw_phone,
+                "avatar": "",
+                "avatarHash": "",
+                "isFriend": None,
+                "isFr": None,
                 "sourcePhone": norm_phone,
+                "phoneResolveAttempts": 0,
             })
-            phone_ok += 1
-        task.log(f"Tìm UID từ số điện thoại xong: thành công {phone_ok}, thất bại {phone_fail}.")
+        task.log(
+            f"Đã thêm {len(phone_members)} số điện thoại — hệ thống sẽ TỰ tra UID dần theo lịch "
+            "rồi gửi kết bạn và thêm vào nhóm (không cần tra trước, tránh bị giới hạn tần suất)."
+        )
 
     if not clean_members and not phone_members:
         raise ValueError("Không tìm thấy thành viên hợp lệ trong nhóm nguồn hoặc danh sách số điện thoại.")
@@ -3987,7 +3971,8 @@ def _lookup_phones_worker(task, account_id: str, phones: list):
             raise ValueError("Account thiếu: " + ", ".join(missing))
 
         max_lookup = 500
-        max_workers = 8
+        max_workers = 6
+        lookup_retries = 2
         normalized_map = {}
 
         for raw_phone in phones:
@@ -4009,40 +3994,42 @@ def _lookup_phones_worker(task, account_id: str, phones: list):
         results = [None] * total
 
         def _lookup_one(idx, normalized_phone, raw_phone):
-            try:
-                profile = get_profile_by_phone(
-                    phone=normalized_phone,
-                    zpw_enk=zpw_enk,
-                    cookies=cookies,
-                    imei=imei,
-                    avatar_size=240,
-                    language="vi",
-                    req_src=85,
-                    zpw_ver=zpw_ver
-                )
+            import time as _t
+            import random as _r
+            last_err = None
+            for attempt in range(lookup_retries + 1):
+                if attempt == 0:
+                    _t.sleep(_r.uniform(0.2, 0.7))
+                else:
+                    _t.sleep(min(6.0, 1.5 * attempt + _r.uniform(0.3, 1.0)))
+                try:
+                    profile = get_profile_by_phone(
+                        phone=normalized_phone,
+                        zpw_enk=zpw_enk,
+                        cookies=cookies,
+                        imei=imei,
+                        avatar_size=240,
+                        language="vi",
+                        req_src=85,
+                        zpw_ver=zpw_ver
+                    )
+                    if profile and profile.get("userId"):
+                        return idx, {
+                            "phone": raw_phone,
+                            "normalizedPhone": normalized_phone,
+                            "success": True,
+                            "profile": profile
+                        }, None
+                    last_err = "Không lấy được profile (số ẩn tìm kiếm/không dùng Zalo, hoặc bị giới hạn tần suất)"
+                except Exception as e:
+                    last_err = str(e)
 
-                if profile and profile.get("userId"):
-                    return idx, {
-                        "phone": raw_phone,
-                        "normalizedPhone": normalized_phone,
-                        "success": True,
-                        "profile": profile
-                    }, None
-
-                return idx, {
-                    "phone": raw_phone,
-                    "normalizedPhone": normalized_phone,
-                    "success": False,
-                    "error": "Không lấy được profile hoặc thiếu userId"
-                }, None
-
-            except Exception as e:
-                return idx, {
-                    "phone": raw_phone,
-                    "normalizedPhone": normalized_phone,
-                    "success": False,
-                    "error": str(e)
-                }, str(e)
+            return idx, {
+                "phone": raw_phone,
+                "normalizedPhone": normalized_phone,
+                "success": False,
+                "error": last_err or "Không tra được số này"
+            }, last_err
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             future_map = {

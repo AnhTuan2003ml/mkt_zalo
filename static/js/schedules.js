@@ -80,6 +80,14 @@ var _schedAccounts = [];
 var _phoneLookupResults = [];
 var _phoneSelectedResults = new Set();
 var _personalGroups = [];
+
+function schedNormalizePhone(p) {
+    p = String(p || '').replace(/[^0-9+]/g, '');
+    if (p.indexOf('+') === 0) p = p.slice(1);
+    if (p.indexOf('0084') === 0) p = '84' + p.slice(4);
+    if (p.indexOf('0') === 0) p = '84' + p.slice(1);
+    return p;
+}
 var _personalGroupsSelected = new Set();
 
 // ─── LOCALSTORAGE ─────────────────────────────────────────────────────
@@ -654,12 +662,25 @@ function schedSaveSchedule() {
         data.title = (document.getElementById('schedPhoneTitle') || {}).value || '';
         data.message = (document.getElementById('schedPhoneMessage') || {}).value || '';
         data.runAt = (document.getElementById('schedPhoneDateTime') || {}).value || '';
-        data.recipients = _phoneLookupResults.map(function(r, idx) { 
-            if (_phoneSelectedResults.has(idx)) {
-                return { userId: r.userId, zaloName: r.zaloName, avatar: r.avatar, phone: r.phone }; 
-            }
-            return null;
+        var _selectedPhone = _phoneLookupResults.map(function(r, idx) {
+            return _phoneSelectedResults.has(idx) ? r : null;
         }).filter(Boolean);
+        if (_selectedPhone.length) {
+            // Đã tra & chọn: dùng kết quả đã có UID.
+            data.recipients = _selectedPhone.map(function(r) {
+                return { userId: r.userId, zaloName: r.zaloName, avatar: r.avatar, phone: r.phone };
+            });
+        } else {
+            // Không cần tra trước: dán số -> lưu lịch, hệ thống tự tra UID khi tới lượt gửi.
+            var _seenPhone = {};
+            var _rawPhones = ((document.getElementById('phoneInput') || {}).value || '').split(/\n|,|;/);
+            data.recipients = _rawPhones.map(function(p) { return String(p || '').trim(); }).filter(Boolean).map(function(raw) {
+                var norm = schedNormalizePhone(raw);
+                if (!norm || _seenPhone[norm]) return null;
+                _seenPhone[norm] = 1;
+                return { userId: 'phone:' + norm, phone: raw, phoneNormalized: norm, zaloName: raw };
+            }).filter(Boolean);
+        }
         data.rateLimit.minDelaySec = parseInt((document.getElementById('schedPhoneMinDelay') || {}).value) || 3;
         data.rateLimit.maxDelaySec = parseInt((document.getElementById('schedPhoneMaxDelay') || {}).value) || 5;
         data.rateLimit.maxConsecutiveErrors = parseInt((document.getElementById('schedPhoneMaxErrors') || {}).value) || 5;
