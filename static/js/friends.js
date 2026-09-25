@@ -157,6 +157,8 @@
         var empty = $('friendsEmpty');
         if (!body) return;
 
+        if (friendsViewMode === 'phone') { friendsRenderPhoneRows(); return; }
+
         var q = String(($('friendsSearch') || {}).value || '').toLowerCase().trim();
         var list = friends.filter(function (f) {
             if (!q) return true;
@@ -384,14 +386,231 @@
     }
 
     function friendsReload() {
+        friendsViewMode = 'list';
+        var wrap = $('friendsPhoneResultsWrap');
+        if (wrap) wrap.style.display = 'none';
         loadFriends();
     }
+
+    // ─── Kết bạn theo số điện thoại ─────────────────────────────────────
+    var MAX_PHONE_FIND = 10;
+    var phoneResults = [];
+    var friendsViewMode = 'list';   // 'list' = danh sách bạn bè, 'phone' = kết quả tìm theo SĐT
+
+    function friendsNormalizePhone(p) {
+        p = String(p || '').replace(/[^0-9+]/g, '');
+        if (p.indexOf('+') === 0) p = p.slice(1);
+        if (p.indexOf('0084') === 0) p = '84' + p.slice(4);
+        if (p.indexOf('0') === 0) p = '84' + p.slice(1);
+        return p;
+    }
+
+    function friendsSetPhoneProgress(pct, show) {
+        var wrap = $('friendsPhoneProgress');
+        if (!wrap) return;
+        wrap.style.display = show ? 'flex' : 'none';
+        var bar = wrap.querySelector('.ptp-track > span');
+        if (bar) bar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+        var lbl = $('friendsPhoneProgressPct');
+        if (lbl) lbl.textContent = Math.round(pct || 0) + '%';
+    }
+
+    function friendsFindByPhone() {
+        var aid = selectedAccountId();
+        if (!aid) { showStatus('Chưa chọn tài khoản.', false); return; }
+        var raw = String(($('friendsPhoneInput') || {}).value || '');
+        var seen = {};
+        var phones = raw.split(/\n|,|;/).map(function (p) { return String(p || '').trim(); })
+            .filter(function (p) {
+                if (!p) return false;
+                var n = friendsNormalizePhone(p);
+                if (!n || seen[n]) return false;
+                seen[n] = 1;
+                return true;
+            });
+        if (!phones.length) { showStatus('Chưa nhập số điện thoại.', false); return; }
+        if (phones.length > MAX_PHONE_FIND) {
+            showStatus('Tối đa ' + MAX_PHONE_FIND + ' số mỗi lần. Hiện có ' + phones.length + ' số.', false);
+            return;
+        }
+
+        phoneResults = [];
+        friendsViewMode = 'phone';
+        var wrap = $('friendsPhoneResultsWrap');
+        if (wrap) wrap.style.display = 'block';
+        friendsRenderTable();
+
+        var btn = $('friendsPhoneFindBtn');
+        var orig = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = 'Đang tìm...'; }
+        friendsSetPhoneProgress(0, true);
+
+        fetch('/api/schedules/lookup-phones', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId: aid, account_id: aid, phones: phones })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (j.error || j.success === false) {
+                friendsSetPhoneProgress(0, false);
+                if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+                showStatus(j.error || 'Không tạo được tác vụ tìm.', false);
+                return;
+            }
+            if (j.taskId) { friendsPollPhoneTask(j.taskId, btn, orig); return; }
+            friendsSetPhoneProgress(100, true);
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+            friendsApplyPhoneResults(j.results || []);
+            setTimeout(function () { friendsSetPhoneProgress(0, false); }, 1200);
+        }).catch(function (err) {
+            friendsSetPhoneProgress(0, false);
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+            showStatus('Lỗi tìm theo số: ' + (err.message || err), false);
+        });
+    }
+
+    function friendsPollPhoneTask(taskId, btn, orig) {
+        var tries = 0;
+        function done() { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+        function poll() {
+            tries += 1;
+            fetch('/api/tasks/' + encodeURIComponent(taskId)).then(function (r) { return r.json(); }).then(function (j) {
+                if (j.error || j.success === false) { friendsSetPhoneProgress(0, false); done(); showStatus(j.error || 'Không đọc được task.', false); return; }
+                var task = j.task || {};
+                var status = task.status || '';
+                var progress = task.progress || 0;
+                friendsSetPhoneProgress(progress, true);
+                if (status === 'failed') { friendsSetPhoneProgress(0, false); done(); showStatus(task.error || 'Tìm theo số thất bại.', false); return; }
+                if (status === 'completed') {
+                    var result = task.result || {};
+                    friendsSetPhoneProgress(100, true); done();
+                    friendsApplyPhoneResults(result.results || []);
+                    var ok = result.success_count || (result.results || []).filter(function (r) { return !!r.success; }).length;
+                    showStatus('Tìm xong: ' + ok + '/' + (result.results || []).length + ' số có thông tin.', true);
+                    setTimeout(function () { friendsSetPhoneProgress(0, false); }, 1500);
+                    return;
+                }
+                if (tries < 600) setTimeout(poll, 1000);
+                else { friendsSetPhoneProgress(0, false); done(); showStatus('Tìm quá lâu, thử lại.', false); }
+            }).catch(function (err) { friendsSetPhoneProgress(0, false); done(); showStatus('Lỗi: ' + (err.message || err), false); });
+        }
+        poll();
+    }
+
+    function friendsApplyPhoneResults(results) {
+        phoneResults = (results || []).map(function (r) {
+            var p = r.profile || {};
+            return {
+                success: !!r.success,
+                phone: r.phone || r.normalizedPhone || '',
+                userId: String(p.userId || p.uid || r.userId || '').trim(),
+                zaloName: p.zaloName || p.displayName || r.zaloName || '',
+                avatar: p.avatar || r.avatar || '',
+                error: r.error || '',
+                added: false
+            };
+        });
+        friendsViewMode = 'phone';
+        var wrap = $('friendsPhoneResultsWrap');
+        if (wrap) wrap.style.display = 'block';
+        friendsRenderTable();
+    }
+
+    // Render kết quả tìm theo SĐT vào CHÍNH bảng bạn bè (1 bảng duy nhất).
+    function friendsRenderPhoneRows() {
+        var body = $('friendsBody');
+        var empty = $('friendsEmpty');
+        if (!body) return;
+        var ok = phoneResults.filter(function (r) { return r.success && r.userId; }).length;
+        if ($('friendsPhoneOkCount')) $('friendsPhoneOkCount').textContent = ok;
+        if ($('friendsPhoneTotal')) $('friendsPhoneTotal').textContent = phoneResults.length;
+        if ($('friendsTotal')) $('friendsTotal').textContent = phoneResults.length;
+        if ($('friendsShown')) $('friendsShown').textContent = '· tìm theo SĐT';
+
+        if (!phoneResults.length) {
+            body.innerHTML = '';
+            if (empty) { setEmptyHint('Chưa có kết quả. Dán số điện thoại và bấm "Tìm".'); empty.style.display = 'flex'; }
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+
+        body.innerHTML = phoneResults.map(function (r, idx) {
+            var name = r.zaloName || '-';
+            var av = normalizeAvatar(r.avatar);
+            var avatarHtml = av
+                ? '<img class="friends-avatar" src="' + esc(av) + '" alt="">'
+                : '<div class="friends-avatar fallback">' + esc((name.charAt(0) || '?').toUpperCase()) + '</div>';
+            var okRow = r.success && r.userId;
+            var statusHtml = okRow
+                ? '<span style="color:var(--green,#2fae6b)">✓ Tìm được</span>'
+                : '<span class="friends-muted" title="' + esc(r.error || '') + '">Không tìm được</span>';
+            var action;
+            if (!okRow) {
+                action = '<span class="friends-muted">-</span>';
+            } else if (r.added) {
+                action = '<button type="button" class="friends-phone-chip done" disabled>✓ Đã gửi</button>';
+            } else {
+                action = '<button type="button" class="friends-phone-chip" data-act="addphone" data-idx="' + idx + '">➕ Kết bạn</button>';
+            }
+            return '<tr style="opacity:' + (okRow ? '1' : '.6') + '">'
+                + '<td class="friends-muted">' + (idx + 1) + '</td>'
+                + '<td>' + avatarHtml + '</td>'
+                + '<td><b>' + esc(name) + '</b></td>'
+                + '<td>' + statusHtml + '</td>'
+                + '<td class="friends-muted">-</td>'
+                + '<td class="friends-muted">-</td>'
+                + '<td class="friends-muted" style="font-family:monospace;font-size:12px">' + esc(r.phone || '-') + '</td>'
+                + '<td style="text-align:right;padding-right:18px">' + action + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    function friendsShowList() {
+        friendsViewMode = 'list';
+        var wrap = $('friendsPhoneResultsWrap');
+        if (wrap) wrap.style.display = 'none';
+        if ($('friendsTotal')) $('friendsTotal').textContent = friends.length;
+        if ($('friendsShown')) $('friendsShown').textContent = '';
+        friendsRenderTable();
+    }
+
+    function friendsAddByPhone(idx, btn) {
+        var r = phoneResults[idx];
+        if (!r || !r.userId) return;
+        var aid = selectedAccountId();
+        if (!aid) { showStatus('Chưa chọn tài khoản.', false); return; }
+        btn.disabled = true;
+        btn.textContent = 'Đang gửi...';
+        fetch('/api/send-friend-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId: aid, toid: r.userId, toId: r.userId, message: '' })
+        }).then(function (res) { return res.json(); }).then(function (data) {
+            if (data && (data.success || data.ok)) {
+                r.added = true;
+                friendsRenderPhoneRows();
+                showStatus('Đã gửi kết bạn tới ' + (r.zaloName || r.phone) + '.', true);
+            } else {
+                throw new Error((data && (data.error || data.message)) || 'Gửi kết bạn thất bại');
+            }
+        }).catch(function (err) {
+            btn.disabled = false;
+            btn.textContent = '➕ Kết bạn';
+            showStatus('Kết bạn lỗi: ' + (err.message || err), false);
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('#friendsBody [data-act="addphone"]');
+        if (b) { e.stopPropagation(); friendsAddByPhone(parseInt(b.dataset.idx, 10), b); }
+    });
 
     window.friendsRenderTable = friendsRenderTable;
     window.friendsReload = friendsReload;
     window.friendsCloseDetail = friendsCloseDetail;
     window.friendsCloseMsg = friendsCloseMsg;
     window.friendsSendMessage = friendsSendMessage;
+    window.friendsFindByPhone = friendsFindByPhone;
+    window.friendsShowList = friendsShowList;
 
     document.addEventListener('DOMContentLoaded', function () {
         loadAccounts();

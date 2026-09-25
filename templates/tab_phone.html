@@ -2,6 +2,14 @@
 <!-- Layout: cột trái = nhập SĐT + bảng kết quả tra cứu (lên trên, dễ thao tác);
      cột phải = cấu hình lịch. -->
 <div class="tab-content" id="tab-phone">
+    <style>
+        .phone-thin-progress { display:flex; align-items:center; gap:10px; margin-top:10px; }
+        .phone-thin-progress .ptp-track { flex:1 1 auto; height:6px; min-width:30px; border-radius:999px;
+            overflow:hidden; background:rgba(120,140,160,.18); }
+        .phone-thin-progress .ptp-track > span { display:block; height:100%; width:0%; border-radius:inherit;
+            background:linear-gradient(90deg,#35b9ff,#65e1a1); transition:width .3s ease; }
+        .phone-thin-progress > b { flex:0 0 auto; font-size:12px; font-weight:700; color:var(--text,#111); min-width:34px; text-align:right; }
+    </style>
     <div class="sched-groups-layout">
         <div class="sched-groups-left-stack sched-groups-left">
         <section class="sched-panel">
@@ -10,7 +18,7 @@
                     <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>Danh sách số điện thoại</h3>
                     <p>Mỗi số 1 dòng. Bấm <b>Lưu lịch</b> ngay — hệ thống tự tra thông tin khi tới lượt gửi. Nút "Tra thông tin" chỉ để xem trước (không bắt buộc).</p>
                 </div>
-                <button id="lookupPhonesBtn" class="btn btn-primary btn-sm" onclick="schedLookupPhones()" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Tra thông tin</button>
+                <button id="lookupPhonesBtn" class="btn btn-primary btn-sm" onclick="schedCheckPhones()" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Kiểm tra</button>
             </div>
 
             <div class="sched-source-grid">
@@ -25,14 +33,18 @@
                     <textarea id="phoneInput" placeholder="Nhập số điện thoại, mỗi số một dòng" style="min-height:58px"></textarea>
                 </div>
             </div>
+            <div id="phoneCheckProgress" class="phone-thin-progress" style="display:none">
+                <div class="ptp-track"><span></span></div>
+                <b id="phoneCheckProgressPct">0%</b>
+            </div>
             <div id="phoneLookupStatus" class="sched-inline-status"></div>
         </section>
 
         <section id="phoneResultsSection" class="sched-panel sched-results-panel" style="display:none">
             <div class="sched-list-toolbar">
                 <div>
-                    <h3>Chọn người nhận từ tra cứu</h3>
-                    <p>Đã chọn <strong id="phoneSelectedCount">0</strong>/<strong id="phoneTotalCount">0</strong> người</p>
+                    <h3>Kết quả kiểm tra số</h3>
+                    <p><strong id="phoneTotalCount">0</strong> số có thông tin · đã chọn để gửi <strong id="phoneSelectedCount">0</strong></p>
                 </div>
                 <div class="sched-toolbar-actions">
                     <label class="sched-check-pill">

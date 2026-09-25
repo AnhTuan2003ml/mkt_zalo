@@ -662,25 +662,16 @@ function schedSaveSchedule() {
         data.title = (document.getElementById('schedPhoneTitle') || {}).value || '';
         data.message = (document.getElementById('schedPhoneMessage') || {}).value || '';
         data.runAt = (document.getElementById('schedPhoneDateTime') || {}).value || '';
-        var _selectedPhone = _phoneLookupResults.map(function(r, idx) {
-            return _phoneSelectedResults.has(idx) ? r : null;
+        // Cơ chế mới: LUÔN lưu TOÀN BỘ số đã dán (không phụ thuộc nút Kiểm tra).
+        // Hệ thống tự tra UID dần khi tới lượt gửi; số không tra được sẽ tự bỏ qua.
+        var _seenPhone = {};
+        var _rawPhones = ((document.getElementById('phoneInput') || {}).value || '').split(/\n|,|;/);
+        data.recipients = _rawPhones.map(function(p) { return String(p || '').trim(); }).filter(Boolean).map(function(raw) {
+            var norm = schedNormalizePhone(raw);
+            if (!norm || _seenPhone[norm]) return null;
+            _seenPhone[norm] = 1;
+            return { userId: 'phone:' + norm, phone: raw, phoneNormalized: norm, zaloName: raw };
         }).filter(Boolean);
-        if (_selectedPhone.length) {
-            // Đã tra & chọn: dùng kết quả đã có UID.
-            data.recipients = _selectedPhone.map(function(r) {
-                return { userId: r.userId, zaloName: r.zaloName, avatar: r.avatar, phone: r.phone };
-            });
-        } else {
-            // Không cần tra trước: dán số -> lưu lịch, hệ thống tự tra UID khi tới lượt gửi.
-            var _seenPhone = {};
-            var _rawPhones = ((document.getElementById('phoneInput') || {}).value || '').split(/\n|,|;/);
-            data.recipients = _rawPhones.map(function(p) { return String(p || '').trim(); }).filter(Boolean).map(function(raw) {
-                var norm = schedNormalizePhone(raw);
-                if (!norm || _seenPhone[norm]) return null;
-                _seenPhone[norm] = 1;
-                return { userId: 'phone:' + norm, phone: raw, phoneNormalized: norm, zaloName: raw };
-            }).filter(Boolean);
-        }
         data.rateLimit.minDelaySec = parseInt((document.getElementById('schedPhoneMinDelay') || {}).value) || 3;
         data.rateLimit.maxDelaySec = parseInt((document.getElementById('schedPhoneMaxDelay') || {}).value) || 5;
         data.rateLimit.maxConsecutiveErrors = parseInt((document.getElementById('schedPhoneMaxErrors') || {}).value) || 5;
@@ -1094,114 +1085,117 @@ function schedFilterMembers() {
     // Hàm filter cho bảng "Từ nhóm" - có thể implement sau nếu cần
 }
 
-// ─── PHONE LOOKUP ──────────────────────────────────────────────────────
-function schedLookupPhones() {
+// ─── KIỂM TRA SỐ ĐIỆN THOẠI (cơ chế mới) ───────────────────────────────
+function _schedSetPhoneProgress(pct, show) {
+    var wrap = document.getElementById('phoneCheckProgress');
+    if (!wrap) return;
+    wrap.style.display = show ? 'flex' : 'none';
+    var bar = wrap.querySelector('span');
+    if (bar) bar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+    var lbl = document.getElementById('phoneCheckProgressPct');
+    if (lbl) lbl.textContent = Math.round(pct || 0) + '%';
+}
+
+function schedCheckPhones() {
     var aid = (document.getElementById('schedPhoneAccountId') || {}).value || '';
     var raw = (document.getElementById('phoneInput') || {}).value || '';
 
-    if (!aid) {
-        schedShowNotif('L?i', 'Ch?n t?i kho?n', 'error');
-        return;
-    }
+    if (!aid) { schedShowNotif('Lỗi', 'Chưa chọn tài khoản', 'error'); return; }
 
-    var phones = raw
-        .split(/\n|,|;/)
-        .map(function(p) { return p.trim(); })
-        .filter(Boolean);
+    var seen = {};
+    var phones = raw.split(/\n|,|;/).map(function(p) { return String(p || '').trim(); })
+        .filter(function(p) {
+            if (!p) return false;
+            var n = schedNormalizePhone(p);
+            if (!n || seen[n]) return false;
+            seen[n] = 1;
+            return true;
+        });
 
-    if (!phones.length) {
-        schedShowNotif('L?i', 'Nh?p s? ?i?n tho?i', 'error');
-        return;
-    }
+    if (!phones.length) { schedShowNotif('Lỗi', 'Chưa nhập số điện thoại', 'error'); return; }
 
-    schedShowNotif('?ang t?i', '?ang t?o t?c v? tra s? ?i?n tho?i...', 'info');
+    // Cơ chế mới: kiểm tra TOÀN BỘ số vừa dán; xóa kết quả cũ trước để không hiện số cũ.
+    _phoneLookupResults = [];
+    _phoneSelectedResults.clear();
+    schedRenderPhoneResultsTable();
+    var section = document.getElementById('phoneResultsSection');
+    if (section) section.style.display = 'block';
+
+    var btn = document.getElementById('lookupPhonesBtn');
+    var orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Đang kiểm tra...'; }
+    _schedSetPhoneProgress(0, true);
+    schedShowNotif('Đang kiểm tra', 'Đang kiểm tra ' + phones.length + ' số...', 'info');
 
     fetch('/api/schedules/lookup-phones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            accountId: aid,
-            account_id: aid,
-            phones: phones
-        })
+        body: JSON.stringify({ accountId: aid, account_id: aid, phones: phones })
     })
-    .then(function(r) {
-        return r.json().then(function(j) {
-            j._httpStatus = r.status;
-            return j;
-        });
-    })
+    .then(function(r) { return r.json(); })
     .then(function(j) {
         if (j.error || j.success === false) {
-            schedShowNotif('L?i', j.error || 'Kh?ng t?o ???c t?c v? tra s?', 'error');
+            _schedSetPhoneProgress(0, false);
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+            schedShowNotif('Lỗi', j.error || 'Không tạo được tác vụ kiểm tra', 'error');
             return;
         }
-
-        if (j.taskId) {
-            schedShowNotif('Đang tải', 'Đang tra cứu... 0%', 'info');
-            schedPollPhoneLookupTask(j.taskId);
-            return;
-        }
-
+        if (j.taskId) { schedPollPhoneLookupTask(j.taskId, btn, orig); return; }
+        _schedSetPhoneProgress(100, true);
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
         schedApplyPhoneLookupResults(j.results || []);
+        setTimeout(function() { _schedSetPhoneProgress(0, false); }, 1200);
     })
     .catch(function(err) {
-        schedShowNotif('L?i', err.message || String(err), 'error');
+        _schedSetPhoneProgress(0, false);
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+        schedShowNotif('Lỗi', err.message || String(err), 'error');
     });
 }
 
-function schedPollPhoneLookupTask(taskId) {
-    var maxTries = 300;
+// Tương thích tên gọi cũ nếu còn chỗ nào gọi.
+function schedLookupPhones() { return schedCheckPhones(); }
+
+function schedPollPhoneLookupTask(taskId, btn, orig) {
+    var maxTries = 600;
     var tries = 0;
+    function done() { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 
     function poll() {
         tries += 1;
-
         fetch('/api/tasks/' + encodeURIComponent(taskId))
             .then(function(r) { return r.json(); })
             .then(function(j) {
                 if (j.error || j.success === false) {
+                    _schedSetPhoneProgress(0, false); done();
                     schedShowNotif('Lỗi', j.error || 'Không đọc được trạng thái task', 'error');
                     return;
                 }
-
                 var task = j.task || {};
                 var status = task.status || '';
                 var progress = task.progress || 0;
+                _schedSetPhoneProgress(progress, true);
 
                 if (status === 'failed') {
-                    schedShowNotif('Lỗi', task.error || 'Tra số điện thoại thất bại', 'error');
+                    _schedSetPhoneProgress(0, false); done();
+                    schedShowNotif('Lỗi', task.error || 'Kiểm tra số điện thoại thất bại', 'error');
                     return;
                 }
-
                 if (status === 'completed') {
                     var result = task.result || {};
                     var results = result.results || [];
+                    _schedSetPhoneProgress(100, true); done();
                     schedApplyPhoneLookupResults(results);
-
-                    var successCount = result.success_count || results.filter(function(r) {
-                        return !!r.success;
-                    }).length;
-
-                    schedShowNotif(
-                        'OK',
-                        'Tra cứu xong: ' + successCount + '/' + results.length + ' số có profile',
-                        'success'
-                    );
+                    var successCount = result.success_count || results.filter(function(r) { return !!r.success; }).length;
+                    schedShowNotif('OK', 'Kiểm tra xong: ' + successCount + '/' + results.length + ' số có thông tin', 'success');
+                    setTimeout(function() { _schedSetPhoneProgress(0, false); }, 1500);
                     return;
                 }
-
-                schedShowNotif('Đang tải', 'Đang tra cứu... ' + progress + '%', 'info');
-
-                if (tries < maxTries) {
-                    setTimeout(poll, 1000);
-                } else {
-                    schedShowNotif('Lỗi', 'Tra cứu quá lâu, hãy kiểm tra lại task trong log', 'error');
-                }
+                schedShowNotif('Đang kiểm tra', 'Đang kiểm tra... ' + progress + '%', 'info');
+                if (tries < maxTries) setTimeout(poll, 1000);
+                else { _schedSetPhoneProgress(0, false); done(); schedShowNotif('Lỗi', 'Kiểm tra quá lâu, xem lại task trong log', 'error'); }
             })
-            .catch(function(err) {
-                schedShowNotif('L?i', err.message || String(err), 'error');
-            });
+            .catch(function(err) { _schedSetPhoneProgress(0, false); done(); schedShowNotif('Lỗi', err.message || String(err), 'error'); });
     }
 
     poll();
@@ -1624,13 +1618,10 @@ document.addEventListener('DOMContentLoaded', function() {
         var inputs = document.querySelectorAll('#tab-group input, #tab-group textarea, #tab-phone input, #tab-phone textarea, #tab-personal-groups input, #tab-personal-groups textarea');
         inputs.forEach(function(el) { el.addEventListener('input', schedScheduleSave); el.addEventListener('change', schedScheduleSave); });
         schedRestoreFormState();
-        // Restore phone lookup results from storage
-        _phoneLookupResults = getPhoneLookupFromStorage();
-        if (_phoneLookupResults.length) {
-            schedRenderPhoneResultsTable();
-            var section = document.getElementById('phoneResultsSection');
-            if (section) section.style.display = 'block';
-        }
+        // Cơ chế mới: KHÔNG khôi phục kết quả kiểm tra cũ (tránh hiển thị số cũ khi vừa
+        // dán danh sách mới). Kết quả chỉ hiện khi bấm "Kiểm tra".
+        try { localStorage.removeItem(STORAGE_PHONE_LOOKUP); } catch (e) {}
+        _phoneLookupResults = [];
     }, 300);
 });
 

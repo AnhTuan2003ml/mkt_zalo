@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.5"
 
 # Cổng giao diện Nexus (mở trình duyệt tới đây). Dùng port ÍT DÙNG để tránh đụng
 # 5000 (hay bị app khác chiếm -> báo 404). Đổi được qua env NEXUS_UI_PORT.

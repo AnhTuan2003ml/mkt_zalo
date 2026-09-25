@@ -171,6 +171,44 @@
         </span>
     </div>
 
+    <div class="friends-phone-card">
+        <style>
+            .friends-phone-card { background:var(--card,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(120,140,160,.18));
+                border-radius:14px; padding:16px 18px; margin-bottom:16px; }
+            .friends-phone-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+            .friends-phone-head b { font-size:14px; }
+            .friends-phone-head small { display:block; color:var(--text-muted,#8a97a6); font-size:11.5px; margin-top:3px; }
+            #friendsPhoneInput { width:100%; min-height:82px; padding:10px 12px; border:1px solid var(--border,rgba(120,140,160,.25));
+                border-radius:11px; background:var(--input-bg,rgba(8,16,27,.04)); color:var(--text); font-size:13.5px; font-family:inherit; resize:vertical; }
+            #friendsPhoneInput:focus { outline:none; border-color:rgba(72,184,255,.5); box-shadow:0 0 0 3px rgba(72,184,255,.1); }
+            .phone-thin-progress { display:flex; align-items:center; gap:10px; margin-top:10px; }
+            .phone-thin-progress .ptp-track { flex:1 1 auto; height:6px; min-width:30px; border-radius:999px; overflow:hidden; background:rgba(120,140,160,.18); }
+            .phone-thin-progress .ptp-track > span { display:block; height:100%; width:0%; border-radius:inherit; background:linear-gradient(90deg,#35b9ff,#65e1a1); transition:width .3s ease; }
+            .phone-thin-progress > b { flex:0 0 auto; font-size:12px; font-weight:700; color:var(--text); min-width:34px; text-align:right; }
+            .friends-phone-stat { font-size:12.5px; color:var(--text-muted,#8a97a6); margin:12px 0 8px; }
+            .friends-phone-chip { display:inline-flex; align-items:center; gap:5px; border:none; border-radius:8px; padding:6px 12px;
+                font-size:12px; font-weight:600; cursor:pointer; background:rgba(53,185,255,.15); color:#2b9fe0; }
+            .friends-phone-chip[disabled] { opacity:.55; cursor:default; }
+            .friends-phone-chip.done { background:rgba(101,225,161,.16); color:#2fae6b; }
+        </style>
+        <div class="friends-phone-head">
+            <div>
+                <b>Kết bạn theo số điện thoại</b>
+                <small>Mỗi số 1 dòng, tối đa 10 số/lần. Tìm xong bấm "Kết bạn" ở từng người tìm được.</small>
+            </div>
+            <button class="btn btn-primary" type="button" id="friendsPhoneFindBtn" onclick="friendsFindByPhone()">🔍 Tìm</button>
+        </div>
+        <textarea id="friendsPhoneInput" placeholder="0912xxxxxx&#10;0987xxxxxx&#10;(mỗi số 1 dòng, tối đa 10 số)"></textarea>
+        <div id="friendsPhoneProgress" class="phone-thin-progress" style="display:none">
+            <div class="ptp-track"><span></span></div>
+            <b id="friendsPhoneProgressPct">0%</b>
+        </div>
+        <div id="friendsPhoneResultsWrap" class="friends-phone-stat" style="display:none">
+            <b id="friendsPhoneOkCount">0</b> tìm được / <span id="friendsPhoneTotal">0</span> số — kết quả hiển thị ở bảng bên dưới.
+            <button type="button" class="friends-phone-chip" style="margin-left:10px" onclick="friendsShowList()">← Về danh sách bạn bè</button>
+        </div>
+    </div>
+
     <div class="friends-table-card">
         <div class="friends-table-scroll">
             <table class="friends-table">
@@ -246,6 +284,6 @@
 
 <div id="friendsStatus"></div>
 
-<script src="{{ url_for('static', filename='js/friends.js') }}?v=friends-v3"></script>
+<script src="{{ url_for('static', filename='js/friends.js') }}?v=friends-v5-single-table"></script>
 </body>
 </html>
