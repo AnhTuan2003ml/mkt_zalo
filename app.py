@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.4.5"
+APP_VERSION = "1.4.6"
 
 # Cổng giao diện Nexus (mở trình duyệt tới đây). Dùng port ÍT DÙNG để tránh đụng
 # 5000 (hay bị app khác chiếm -> báo 404). Đổi được qua env NEXUS_UI_PORT.
@@ -1324,6 +1324,11 @@ def marketing_group_page():
 @app.route("/marketing/phone")
 def marketing_phone_page():
     return render_template("schedules.html", active_page="marketing_phone", initial_tab="phone", page_title="Chiến dịch theo SĐT")
+
+
+@app.route("/marketing/friends")
+def marketing_friends_page():
+    return render_template("schedules.html", active_page="marketing_friends", initial_tab="friends", page_title="Chiến dịch cho bạn bè")
 
 
 @app.route("/marketing/personal-groups")

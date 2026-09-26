@@ -56,6 +56,10 @@ function schedToggleAdvanced(type) {
         box = document.getElementById('phoneAdvancedSettings');
     }
 
+    if (type === 'friends') {
+        box = document.getElementById('friendsAdvancedSettings');
+    }
+
     if (!box) {
         console.warn('Không tìm thấy advanced settings:', type);
         return;
@@ -80,6 +84,8 @@ var _schedAccounts = [];
 var _phoneLookupResults = [];
 var _phoneSelectedResults = new Set();
 var _personalGroups = [];
+var _schedFriends = [];
+var _schedSelectedFriends = new Set();
 
 function schedNormalizePhone(p) {
     p = String(p || '').replace(/[^0-9+]/g, '');
@@ -203,6 +209,7 @@ function schedGetActiveAccountId() {
     var activeMap = [
         { tab: 'tab-group', input: 'schedGroupAccountId' },
         { tab: 'tab-phone', input: 'schedPhoneAccountId' },
+        { tab: 'tab-friends', input: 'schedFriendsAccountId' },
         { tab: 'tab-personal-groups', input: 'schedPersonalGroupAccountId' }
     ];
 
@@ -215,7 +222,7 @@ function schedGetActiveAccountId() {
     }
 
     // Fallback cho popup/modal không nằm trong tab schedule.
-    var ids = ['schedPersonalGroupAccountId', 'schedPhoneAccountId', 'schedGroupAccountId'];
+    var ids = ['schedPersonalGroupAccountId', 'schedPhoneAccountId', 'schedFriendsAccountId', 'schedGroupAccountId'];
     for (var j = 0; j < ids.length; j++) {
         var el = document.getElementById(ids[j]);
         if (el && el.value) return String(el.value).trim();
@@ -304,9 +311,11 @@ function schedLoadAccounts() {
             var c1 = document.getElementById('schedGroupAccountDropdown');
             var c2 = document.getElementById('schedPhoneAccountDropdown');
             var c3 = document.getElementById('schedPersonalGroupAccountDropdown');
+            var c4 = document.getElementById('schedFriendsAccountDropdown');
             if (c1) createAccountDropdownForSched(c1, 'schedGroupAccountId');
             schedRenderExtraAccounts();
             if (c2) createAccountDropdownForSched(c2, 'schedPhoneAccountId');
+            if (c4) createAccountDropdownForSched(c4, 'schedFriendsAccountId');
             if (c3) {
                 createAccountDropdownForSched(c3, 'schedPersonalGroupAccountId');
                 setTimeout(function() {
@@ -518,6 +527,12 @@ function createAccountDropdownForSched(container, hiddenInputId) {
                     _phoneSelectedResults.clear();
                     var psec = document.getElementById('phoneResultsSection');
                     if (psec) psec.style.display = 'none';
+                } else if (hiddenInputId === 'schedFriendsAccountId') {
+                    _schedFriends = [];
+                    _schedSelectedFriends.clear();
+                    schedRenderFriendsTable();
+                    var fsec = document.getElementById('schedFriendsSection');
+                    if (fsec) fsec.style.display = 'none';
                 }
             });
         });
@@ -543,7 +558,7 @@ function createAccountDropdownForSched(container, hiddenInputId) {
 // ─── TABS ────────────────────────────────────────────────────────────────
 function schedSwitchTab(tabName) {
     // Ẩn tất cả tabs
-    ['tab-group', 'tab-phone', 'tab-personal-groups'].forEach(function(id) {
+    ['tab-group', 'tab-phone', 'tab-friends', 'tab-personal-groups'].forEach(function(id) {
         var t = document.getElementById(id);
         var b = document.querySelector('[data-tab="' + id + '"]');
         if (t) t.classList.remove('active');
@@ -553,8 +568,10 @@ function schedSwitchTab(tabName) {
     // Ẩn tất cả bảng kết quả
     var schedSection = document.getElementById('schedMembersSection');
     var phoneSection = document.getElementById('phoneResultsSection');
+    var friendsSection = document.getElementById('schedFriendsSection');
     if (schedSection) schedSection.style.display = 'none';
     if (phoneSection) phoneSection.style.display = 'none';
+    if (friendsSection) friendsSection.style.display = 'none';
     
     // Ẩn tất cả headers
     ['personalGroupsHeader', 'personalGroupsLoadingMsg'].forEach(function(id) {
@@ -575,6 +592,9 @@ function schedSwitchTab(tabName) {
     if (tabName === 'phone' && _phoneLookupResults.length > 0 && phoneSection) {
         phoneSection.style.display = 'block';
     }
+    if (tabName === 'friends' && _schedFriends.length > 0 && friendsSection) {
+        friendsSection.style.display = 'block';
+    }
     
     if (tabName === 'personal-groups') schedLoadPersonalGroupsForAccount();
     schedSaveFormState();
@@ -582,7 +602,7 @@ function schedSwitchTab(tabName) {
 
 // ─── PHOTO ATTACH (ảnh đính kèm chiến dịch) ─────────────────────────────
 
-var _schedPhotoFiles = { 'group': null, 'phone': null, 'personal-groups': null };
+var _schedPhotoFiles = { 'group': null, 'phone': null, 'friends': null, 'personal-groups': null };
 
 function schedInitPhotoAttach(tabKey, prefix) {
     var input = document.getElementById(prefix + 'PhotoInput');
@@ -625,6 +645,7 @@ function schedInitPhotoAttach(tabKey, prefix) {
 
 schedInitPhotoAttach('group', 'schedGroup');
 schedInitPhotoAttach('phone', 'schedPhone');
+schedInitPhotoAttach('friends', 'schedFriends');
 schedInitPhotoAttach('personal-groups', 'schedPersonalGroup');
 
 // ─── SAVE SCHEDULE ──────────────────────────────────────────────────────
@@ -632,8 +653,11 @@ schedInitPhotoAttach('personal-groups', 'schedPersonalGroup');
 function schedSaveSchedule() {
     var gt = document.getElementById('tab-group');
     var pt = document.getElementById('tab-phone');
+    var ft = document.getElementById('tab-friends');
     var pg = document.getElementById('tab-personal-groups');
-    var tab = gt && gt.classList.contains('active') ? 'group' : (pt && pt.classList.contains('active') ? 'phone' : 'personal-groups');
+    var tab = gt && gt.classList.contains('active') ? 'group'
+        : (pt && pt.classList.contains('active') ? 'phone'
+        : (ft && ft.classList.contains('active') ? 'friends' : 'personal-groups'));
 
     var data = { recipients: [], source: tab, rateLimit: { minDelaySec: 3, maxDelaySec: 5, maxConsecutiveErrors: 5 }, batchConfig: { batchSize: 10, batchDelaySec: 30 } };
 
@@ -677,6 +701,22 @@ function schedSaveSchedule() {
         data.rateLimit.maxConsecutiveErrors = parseInt((document.getElementById('schedPhoneMaxErrors') || {}).value) || 5;
         data.batchConfig.batchSize = parseInt((document.getElementById('schedPhoneBatchSize') || {}).value) || 10;
         data.batchConfig.batchDelaySec = parseInt((document.getElementById('schedPhoneBatchDelay') || {}).value) || 30;
+    } else if (tab === 'friends') {
+        data.accountId = (document.getElementById('schedFriendsAccountId') || {}).value || '';
+        data.title = (document.getElementById('schedFriendsTitle') || {}).value || '';
+        data.message = (document.getElementById('schedFriendsMessage') || {}).value || '';
+        data.runAt = (document.getElementById('schedFriendsDateTime') || {}).value || '';
+        // Người nhận = bạn bè được tích chọn (gửi trực tiếp theo userId).
+        data.recipients = _schedFriends.filter(function(f) {
+            return f.userId && _schedSelectedFriends.has(String(f.userId).trim());
+        }).map(function(f) {
+            return { userId: f.userId, zaloName: f.zaloName || f.displayName, avatar: f.avatar };
+        });
+        data.rateLimit.minDelaySec = parseInt((document.getElementById('schedFriendsMinDelay') || {}).value) || 3;
+        data.rateLimit.maxDelaySec = parseInt((document.getElementById('schedFriendsMaxDelay') || {}).value) || 5;
+        data.rateLimit.maxConsecutiveErrors = parseInt((document.getElementById('schedFriendsMaxErrors') || {}).value) || 5;
+        data.batchConfig.batchSize = parseInt((document.getElementById('schedFriendsBatchSize') || {}).value) || 10;
+        data.batchConfig.batchDelaySec = parseInt((document.getElementById('schedFriendsBatchDelay') || {}).value) || 30;
     } else {
         data.accountId = (document.getElementById('schedPersonalGroupAccountId') || {}).value || '';
         data.title = (document.getElementById('schedPersonalGroupTitle') || {}).value || '';
@@ -699,7 +739,9 @@ function schedSaveSchedule() {
     if (!data.runAt) { schedShowNotif('Lỗi', 'Chưa chọn thời gian', 'error'); return; }
     if (!data.recipients.length) { schedShowNotif('Lỗi', 'Chưa chọn người nhận', 'error'); return; }
 
-    var bid = tab === 'group' ? 'btnSaveScheduleGroup' : (tab === 'phone' ? 'btnSaveSchedulePhone' : 'btnSaveSchedulePersonalGroup');
+    var bid = tab === 'group' ? 'btnSaveScheduleGroup'
+        : (tab === 'phone' ? 'btnSaveSchedulePhone'
+        : (tab === 'friends' ? 'btnSaveScheduleFriends' : 'btnSaveSchedulePersonalGroup'));
     var btn = document.getElementById(bid);
     var orig = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Đang lưu...'; }
@@ -1321,6 +1363,197 @@ function schedTogglePhoneSelectAll(cb) {
     schedRenderPhoneResultsTable();
 }
 
+// ─── FRIENDS (Bạn bè) ────────────────────────────────────────────────────
+function schedGetFriends() {
+    var aid = (document.getElementById('schedFriendsAccountId') || {}).value || '';
+    if (!aid) { schedShowNotif('Lỗi', 'Chưa chọn tài khoản gửi', 'error'); return; }
+
+    var btn = document.getElementById('btnGetFriends');
+    var orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Đang tải...'; }
+
+    _schedFriends = [];
+    _schedSelectedFriends.clear();
+    schedRenderFriendsTable();
+
+    var section = document.getElementById('schedFriendsSection');
+    if (section) section.style.display = 'block';
+    var loadingEl = document.getElementById('friendsLoadingMsg');
+    if (loadingEl) loadingEl.style.display = 'block';
+    var emptyEl = document.getElementById('friendsEmpty');
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    schedShowNotif('Đang tải', 'Đang lấy danh sách bạn bè...', 'info');
+
+    fetch('/api/friends?accountId=' + encodeURIComponent(aid))
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+            if (!j.success) throw new Error(j.error || 'Không lấy được danh sách bạn bè');
+            _schedFriends = j.friends || [];
+            schedRenderFriendsTable();
+            schedShowNotif('OK', 'Đã tải ' + _schedFriends.length + ' bạn bè.', 'success');
+        })
+        .catch(function(err) {
+            _schedFriends = [];
+            schedRenderFriendsTable();
+            schedShowNotif('Lỗi', err.message || String(err), 'error');
+        })
+        .finally(function() {
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+            schedRenderFriendsTable();
+        });
+}
+
+function schedFriendVisibleList() {
+    var q = String((document.getElementById('schedSearchFriends') || {}).value || '').toLowerCase().trim();
+    if (!q) return _schedFriends.slice();
+    return _schedFriends.filter(function(f) {
+        return String(f.zaloName || '').toLowerCase().indexOf(q) >= 0
+            || String(f.displayName || '').toLowerCase().indexOf(q) >= 0
+            || String(f.username || '').toLowerCase().indexOf(q) >= 0
+            || String(f.phoneNumber || '').toLowerCase().indexOf(q) >= 0
+            || String(f.userId || '').indexOf(q) >= 0;
+    });
+}
+
+function schedFindFriend(uid) {
+    uid = String(uid || '').trim();
+    return (_schedFriends || []).find(function(f) { return String(f.userId || '').trim() === uid; }) || null;
+}
+
+function schedRenderFriendsTable() {
+    var body = document.getElementById('schedFriendsBody');
+    if (!body) return;
+
+    var empty = document.getElementById('friendsEmpty');
+    var loadingEl = document.getElementById('friendsLoadingMsg');
+    var isLoading = !!(loadingEl && loadingEl.style.display === 'block');
+    var list = schedFriendVisibleList();
+
+    if (!list.length) {
+        body.innerHTML = '';
+        if (empty && !isLoading) {
+            empty.style.display = 'block';
+            var p = empty.querySelector('p');
+            if (p) p.textContent = _schedFriends.length ? 'Không có bạn bè nào khớp từ khóa' : 'Chưa có bạn bè nào';
+        }
+        var c0 = document.getElementById('schedFriendsSelectedCount');
+        if (c0) c0.textContent = String(_schedSelectedFriends.size);
+        var t0 = document.getElementById('schedFriendsTotalCount');
+        if (t0) t0.textContent = String(_schedFriends.length);
+        var s0 = document.getElementById('schedFriendsSelectAll');
+        if (s0) { s0.checked = false; s0.indeterminate = false; }
+        var h0 = document.getElementById('schedFriendsHeaderCheckbox');
+        if (h0) { h0.checked = false; h0.indeterminate = false; }
+        return;
+    }
+
+    if (empty) empty.style.display = 'none';
+
+    body.innerHTML = list.map(function(f) {
+        var uid = String(f.userId || '').trim();
+        var safeUid = escapeHtmlSchedules(uid);
+        var chk = _schedSelectedFriends.has(uid) ? 'checked ' : '';
+        var name = f.zaloName || f.displayName || 'Không tên';
+        var avatar = normalizeAvatarUrlSchedules(f.avatar || '');
+        var avatarHtml = avatar
+            ? '<img src="' + escapeHtmlSchedules(avatar) + '" class="recipient-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="schedOpenFriendAvatar(\'' + safeUid + '\'); event.stopPropagation();" onerror="this.style.display=\'none\'">'
+            : '<div class="recipient-avatar" style="width:40px;height:40px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="schedOpenFriendAvatar(\'' + safeUid + '\'); event.stopPropagation();">' + escapeHtmlSchedules((name.charAt(0) || '?').toUpperCase()) + '</div>';
+        var statusText = f.status || '-';
+
+        return '<tr class="sched-friend-row" data-friend-id="' + safeUid + '" style="cursor:pointer" onclick="schedToggleFriend(this.getAttribute(\'data-friend-id\'))">'
+            + '<td style="text-align:center"><input type="checkbox" class="sched-friend-checkbox" data-uid="' + safeUid + '" ' + chk + 'onchange="schedToggleFriend(this.getAttribute(\'data-uid\')); event.stopPropagation();" onclick="event.stopPropagation();"></td>'
+            + '<td>' + avatarHtml + '</td>'
+            + '<td style="font-weight:500">' + escapeHtmlSchedules(name) + '</td>'
+            + '<td>' + escapeHtmlSchedules(formatScheduleGender(f.gender)) + '</td>'
+            + '<td><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlSchedules(f.sdob || '-') + '</span></td>'
+            + '<td><span style="font-size:12px;color:var(--text-secondary)">' + escapeHtmlSchedules(f.phoneNumber || '-') + '</span></td>'
+            + '<td><span class="member-status-text" title="' + escapeHtmlSchedules(statusText) + '">' + escapeHtmlSchedules(statusText) + '</span></td>'
+            + '<td style="text-align:center"><button class="btn btn-sm btn-primary view-btn" onclick="event.stopPropagation(); showFriendDetail(\'' + safeUid + '\');" style="cursor:pointer">Xem</button></td>'
+            + '</tr>';
+    }).join('');
+
+    var sc = document.getElementById('schedFriendsSelectedCount');
+    if (sc) sc.textContent = String(_schedSelectedFriends.size);
+    var tc = document.getElementById('schedFriendsTotalCount');
+    if (tc) tc.textContent = String(_schedFriends.length);
+
+    var visibleSelected = list.filter(function(f) { return _schedSelectedFriends.has(String(f.userId || '').trim()); }).length;
+    var checkedAll = list.length > 0 && visibleSelected === list.length;
+    var partial = visibleSelected > 0 && visibleSelected < list.length;
+
+    var hcb = document.getElementById('schedFriendsHeaderCheckbox');
+    if (hcb) { hcb.checked = checkedAll; hcb.indeterminate = partial; }
+    var selectAll = document.getElementById('schedFriendsSelectAll');
+    if (selectAll) { selectAll.checked = checkedAll; selectAll.indeterminate = partial; }
+}
+
+function schedToggleFriend(uid) {
+    uid = String(uid || '').trim();
+    if (!uid) return;
+    if (_schedSelectedFriends.has(uid)) _schedSelectedFriends.delete(uid); else _schedSelectedFriends.add(uid);
+    schedRenderFriendsTable();
+}
+
+function schedToggleFriendSelectAll(cb) {
+    var list = schedFriendVisibleList();
+    if (cb.checked) {
+        list.forEach(function(f) { var uid = String(f.userId || '').trim(); if (uid) _schedSelectedFriends.add(uid); });
+    } else {
+        list.forEach(function(f) { _schedSelectedFriends.delete(String(f.userId || '').trim()); });
+    }
+    schedRenderFriendsTable();
+}
+
+function schedFilterFriends() {
+    schedRenderFriendsTable();
+}
+
+function schedOpenFriendAvatar(uid) {
+    var f = schedFindFriend(uid);
+    if (!f) return;
+    var aid = (document.getElementById('schedFriendsAccountId') || {}).value || '';
+    schedOpenUserAvatar(
+        f.userId || '',
+        f.zaloName || f.displayName || f.userId || 'Avatar',
+        f.avatar || '',
+        aid
+    );
+}
+
+function showFriendDetail(uid) {
+    var f = schedFindFriend(uid);
+    if (!f) return;
+    var html = '';
+    html += '<div class="detail-item"><div class="detail-label">Tên Zalo:</div><div class="detail-value">' + escapeHtmlSchedules(f.zaloName || f.displayName || '-') + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">User ID:</div><div class="detail-value" style="font-family:monospace; word-break:break-all;">' + escapeHtmlSchedules(f.userId || '-') + '</div></div>';
+    if (f.username) html += '<div class="detail-item"><div class="detail-label">Username:</div><div class="detail-value" style="font-family:monospace;">' + escapeHtmlSchedules(f.username) + '</div></div>';
+    if (f.phoneNumber) html += '<div class="detail-item"><div class="detail-label">Số ĐT:</div><div class="detail-value" style="font-family:monospace;">' + escapeHtmlSchedules(f.phoneNumber) + '</div></div>';
+    html += '<div class="detail-item"><div class="detail-label">Giới tính:</div><div class="detail-value">' + escapeHtmlSchedules(formatScheduleGender(f.gender)) + '</div></div>';
+    if (f.sdob) html += '<div class="detail-item"><div class="detail-label">Ngày sinh:</div><div class="detail-value">' + escapeHtmlSchedules(f.sdob) + '</div></div>';
+    if (f.status) html += '<div class="detail-item"><div class="detail-label">Trạng thái:</div><div class="detail-value">' + escapeHtmlSchedules(f.status) + '</div></div>';
+
+    document.getElementById('detailTitle').textContent = 'Chi tiết thông tin - ' + (f.zaloName || f.displayName || f.userId || 'Bạn bè');
+    document.getElementById('detailContent').innerHTML = html;
+
+    var da = document.getElementById('detailAvatar');
+    if (f.avatar) {
+        da.src = normalizeAvatarUrlSchedules(f.avatar);
+        da.style.display = 'block';
+        da.style.cursor = 'zoom-in';
+        da.title = 'Click để xem ảnh full size';
+        da.onclick = function(e) {
+            e.stopPropagation();
+            schedOpenFriendAvatar(f.userId);
+        };
+    } else {
+        da.style.display = 'none';
+        da.onclick = null;
+    }
+    document.getElementById('detailModal').classList.add('show');
+}
+
 // Render phone lookup results (old view - for backward compatibility, can be removed)
 function schedRenderPhoneResults() {
     var container = document.getElementById('phoneLookupStatus');
@@ -1577,6 +1810,9 @@ var SCHED_FORM_FIELD_MAP = {
     schedPhoneMessage: 'phoneMessage',
     schedPhoneDateTime: 'phoneRunAt',
     phoneInput: 'phoneInput',
+    schedFriendsTitle: 'friendsTitle',
+    schedFriendsMessage: 'friendsMessage',
+    schedFriendsDateTime: 'friendsRunAt',
     schedPersonalGroupTitle: 'pgTitle',
     schedPersonalGroupMessage: 'pgMessage',
     schedPersonalGroupRunAt: 'pgRunAt'
@@ -1603,7 +1839,7 @@ function schedRestoreFormState() {
             var el = document.getElementById(id);
             if (el && st[key]) el.value = st[key];
         });
-        var tabMap = { 'tab-group': 'group', 'tab-phone': 'phone', 'tab-personal-groups': 'personal-groups' };
+        var tabMap = { 'tab-group': 'group', 'tab-phone': 'phone', 'tab-friends': 'friends', 'tab-personal-groups': 'personal-groups' };
         schedSwitchTab(tabMap[st.activeTab] || 'group');
     } catch (e) {}
 }
@@ -1615,7 +1851,7 @@ window.addEventListener('beforeunload', schedSaveFormState);
 
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
-        var inputs = document.querySelectorAll('#tab-group input, #tab-group textarea, #tab-phone input, #tab-phone textarea, #tab-personal-groups input, #tab-personal-groups textarea');
+        var inputs = document.querySelectorAll('#tab-group input, #tab-group textarea, #tab-phone input, #tab-phone textarea, #tab-friends input, #tab-friends textarea, #tab-personal-groups input, #tab-personal-groups textarea');
         inputs.forEach(function(el) { el.addEventListener('input', schedScheduleSave); el.addEventListener('change', schedScheduleSave); });
         schedRestoreFormState();
         // Cơ chế mới: KHÔNG khôi phục kết quả kiểm tra cũ (tránh hiển thị số cũ khi vừa
@@ -1893,6 +2129,7 @@ function closeAvatarModal() {
         var ids = [
             'schedGroupDateTime',
             'schedPhoneDateTime',
+            'schedFriendsDateTime',
             'schedPersonalGroupRunAt'
         ];
 

@@ -167,6 +167,7 @@
         <div class="tab-nav">
             <button class="tab-btn active" data-tab="tab-group" onclick="schedSwitchTab('group')">Gửi riêng cho thành viên trong nhóm</button>
             <button class="tab-btn" data-tab="tab-phone" onclick="schedSwitchTab('phone')">Từ số điện thoại</button>
+            <button class="tab-btn" data-tab="tab-friends" onclick="schedSwitchTab('friends')">Bạn bè</button>
             <button class="tab-btn" data-tab="tab-personal-groups" onclick="schedSwitchTab('personal-groups')">Gửi vào nhóm</button>
         </div>
 
@@ -175,6 +176,9 @@
 
         <!-- Tab: Từ số điện thoại -->
         {% include 'tab_phone.html' %}
+
+        <!-- Tab: Bạn bè -->
+        {% include 'tab_friends.html' %}
 
         <!-- Tab: Nhóm cá nhân -->
         {% include 'tab_personal_groups.html' %}

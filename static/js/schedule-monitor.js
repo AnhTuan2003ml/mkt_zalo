@@ -130,6 +130,7 @@
         if (src === 'personal-groups') return { label: 'Gửi vào nhóm', cls: 'kind-ingroup' };
         if (src === 'group') return { label: 'Gửi riêng cho thành viên nhóm', cls: 'kind-permember' };
         if (src === 'phone') return { label: 'Gửi theo số điện thoại', cls: 'kind-phone' };
+        if (src === 'friends') return { label: 'Gửi cho bạn bè', cls: 'kind-permember' };
         return { label: 'Tin nhắn', cls: '' };
     }
 

@@ -1,0 +1,150 @@
+<!-- Tab: Bạn bè -->
+<!-- Layout: cột trái = tài khoản + danh sách bạn bè (tải/tìm/chọn); cột phải = cấu hình lịch. -->
+<div class="tab-content" id="tab-friends">
+    <style>
+        #tab-friends .search-box.sched-search-wide {
+            flex: 1 1 100% !important;
+            max-width: none !important;
+            width: 100% !important;
+        }
+    </style>
+    <div class="sched-groups-layout">
+        <div class="sched-groups-left-stack sched-groups-left">
+        <section class="sched-panel">
+            <div class="sched-panel-head">
+                <div>
+                    <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M19 8v6M22 11h-6"/></svg>Nguồn bạn bè</h3>
+                    <p>Chọn tài khoản để tải danh sách bạn bè, tích chọn người nhận rồi lưu lịch gửi.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" id="btnGetFriends" onclick="schedGetFriends()" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16"/></svg>Tải bạn bè</button>
+            </div>
+
+            <div class="sched-source-grid">
+                <div class="form-group">
+                    <label>Chọn tài khoản gửi</label>
+                    <div id="schedFriendsAccountDropdown" class="account-dropdown"></div>
+                    <input type="hidden" id="schedFriendsAccountId">
+                </div>
+            </div>
+        </section>
+
+        <section id="schedFriendsSection" class="sched-panel sched-results-panel" style="display:none">
+            <div class="sched-list-toolbar">
+                <div>
+                    <h3>Chọn bạn bè nhận tin</h3>
+                    <p>Đã chọn <strong id="schedFriendsSelectedCount">0</strong>/<strong id="schedFriendsTotalCount">0</strong> bạn bè</p>
+                </div>
+                <div class="sched-toolbar-actions">
+                    <label class="sched-check-pill">
+                        <input type="checkbox" id="schedFriendsSelectAll" onchange="schedToggleFriendSelectAll(this)">
+                        Chọn tất cả
+                    </label>
+                    <button id="btnSaveScheduleFriends" class="btn btn-success" onclick="schedSaveSchedule()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Lưu lịch</button>
+                </div>
+            </div>
+
+            <div class="search-box sched-search-wide">
+                <input type="text" id="schedSearchFriends" placeholder="Tìm bạn bè theo tên, username, số điện thoại..." oninput="schedFilterFriends()">
+            </div>
+
+            <div id="friendsLoadingMsg" class="sched-loading" style="display:none">
+                <div class="spinner"></div><p>Đang tải danh sách bạn bè...</p>
+            </div>
+
+            <div id="friendsEmpty" class="sched-empty" style="display:none">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M19 8v6M22 11h-6"/>
+                </svg>
+                <p>Chưa có bạn bè nào</p>
+                <span>Chọn tài khoản và bấm “Tải bạn bè”</span>
+            </div>
+
+            <div class="table-scroll sched-table-wrap">
+                <table class="recipient-table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="schedFriendsHeaderCheckbox" onchange="schedToggleFriendSelectAll(this)"></th>
+                            <th>Avatar</th>
+                            <th>Tên</th>
+                            <th>Giới tính</th>
+                            <th>Ngày sinh</th>
+                            <th>Số điện thoại</th>
+                            <th>Trạng thái</th>
+                            <th style="text-align:center;">Xem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="schedFriendsBody"></tbody>
+                </table>
+            </div>
+        </section>
+        </div>
+
+        <section class="sched-panel sched-groups-right">
+            <div class="sched-panel-head">
+                <div>
+                    <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Cấu hình lịch</h3>
+                    <p>Nội dung, thời gian và tốc độ gửi.</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="schedToggleAdvanced('friends')">Cài đặt nâng cao</button>
+            </div>
+
+            <div class="form-group">
+                <label>Tiêu đề *</label>
+                <input type="text" id="schedFriendsTitle" placeholder="VD: Khuyến mãi tháng 5">
+            </div>
+
+            <div class="form-group">
+                <label>Nội dung * <span style="font-weight:400;color:var(--text-muted);font-size:11px">(mỗi tin cách nhau 1 DÒNG TRỐNG; gửi ngẫu nhiên — không lặp liên tiếp)</span></label>
+                <textarea id="schedFriendsMessage" placeholder="Mỗi tin nhắn là 1 KHỐI, các tin cách nhau bằng 1 DÒNG TRỐNG. Tin nhiều dòng giữ nguyên xuống dòng. Hệ thống chọn ngẫu nhiên mỗi người một mẫu để tránh trùng."></textarea>
+                <div style="margin-top:6px">
+                    <input type="file" id="schedFriendsMsgFile" accept=".txt" style="display:none" onchange="schedLoadMsgFile(this,'schedFriendsMessage')">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('schedFriendsMsgFile').click()">📎 Tải file .txt (mỗi tin cách 1 dòng trống)</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Ảnh đính kèm (tùy chọn)</label>
+                <input type="file" id="schedFriendsPhotoInput" accept="image/*" style="display:none">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <button type="button" class="btn btn-secondary btn-sm" id="schedFriendsPhotoBtn">📷 Chọn ảnh</button>
+                    <div id="schedFriendsPhotoWrap" style="display:none;align-items:center;gap:8px">
+                        <img id="schedFriendsPhotoPreview" src="" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border,#ddd)">
+                        <span id="schedFriendsPhotoName" style="font-size:12px;color:var(--text-secondary);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                        <button type="button" id="schedFriendsPhotoRemove" title="Bỏ ảnh" style="border:none;background:rgba(239,68,68,0.12);color:#ef4444;border-radius:6px;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1">&times;</button>
+                    </div>
+                </div>
+                <small style="color:var(--text-secondary)">Có ảnh: hệ thống gửi ảnh trước, nội dung gửi thành tin nhắn ngay sau.</small>
+            </div>
+
+            <div class="form-group">
+                <label>Thời gian gửi *</label>
+                <input type="datetime-local" id="schedFriendsDateTime">
+            </div>
+
+            <div id="friendsAdvancedSettings" class="sched-advanced" style="display:none">
+                <div class="sched-mini-grid">
+                    <div class="form-group">
+                        <label>Min Delay (s)</label>
+                        <input type="number" id="schedFriendsMinDelay" value="3" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Delay (s)</label>
+                        <input type="number" id="schedFriendsMaxDelay" value="5" min="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Errors</label>
+                        <input type="number" id="schedFriendsMaxErrors" value="5" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="schedFriendsBatchSize" value="10" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Delay (s)</label>
+                        <input type="number" id="schedFriendsBatchDelay" value="30" min="1">
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>

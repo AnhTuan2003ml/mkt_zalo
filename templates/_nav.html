@@ -79,9 +79,9 @@
         </a>
 
         <div class="nav-section-label">Chiến dịch</div>
-        <a data-nexus-workspace-nav href="{{ url_for('marketing_group_page') }}" data-nav-color="cyan" class="{% if active_page in ['marketing_group', 'marketing_phone'] %}active{% endif %}" {% if active_page in ['marketing_group', 'marketing_phone'] %}aria-current="page"{% endif %}>
+        <a data-nexus-workspace-nav href="{{ url_for('marketing_group_page') }}" data-nav-color="cyan" class="{% if active_page in ['marketing_group', 'marketing_phone', 'marketing_friends'] %}active{% endif %}" {% if active_page in ['marketing_group', 'marketing_phone', 'marketing_friends'] %}aria-current="page"{% endif %}>
             <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 13.5V10a2 2 0 0 1 2-2h2l9-4v15l-9-4H6a2 2 0 0 1-2-1.5Z"/><path d="M8 15v4a2 2 0 0 0 2 2h1"/></svg></span>
-            <span class="nav-copy"><strong>Chiến dịch</strong><small>Gửi theo nhóm hoặc số điện thoại</small></span>
+            <span class="nav-copy"><strong>Chiến dịch</strong><small>Gửi theo nhóm, số điện thoại hoặc bạn bè</small></span>
         </a>
         <a data-nexus-workspace-nav href="{{ url_for('marketing_group_copy_page') }}" data-nav-color="teal" class="{% if active_page == 'group_copy' %}active{% endif %}" {% if active_page == 'group_copy' %}aria-current="page"{% endif %}>
             <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></span>
