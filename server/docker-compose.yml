@@ -1,0 +1,18 @@
+# Máy chủ cấp phép Nexus chạy bằng Docker, tự khởi động lại khi hệ thống bật.
+# Cổng host 5555 -> container 8080 (giữ nguyên để ngrok tunnel 5555 như cũ).
+services:
+  license-server:
+    build: .
+    image: nexus-license-server
+    container_name: nexus-license-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      LICENSE_DB_PATH: /data/licenses.db
+    ports:
+      - "5555:8080"
+    volumes:
+      # Dùng đúng DB hiện có ở server/data/licenses.db (sửa trực tiếp được).
+      - ./data:/data
