@@ -25,7 +25,7 @@ from typing import Optional
 from core.zalo.zalo_config import get_zpw_ver
 from features.accounts.account_manager import get_account
 from features.groups.add_group import create_group
-from features.groups.group_copy_manager import claim_due_job, save_job, get_job, recover_running_jobs, redistribute_campaign_members
+from features.groups.group_copy_manager import claim_due_job, save_job, get_job, list_jobs, recover_running_jobs, redistribute_campaign_members
 from features.groups.group_link import create_group_link, get_group_link_detail
 from features.groups.invite_group import invite_members_to_group
 from features.groups.group_join_leave import join_group_by_link, leave_group
@@ -34,6 +34,13 @@ from features.members.get_members import get_members_by_group_id
 from features.profiles.profile_service import fetch_profiles_with_single_fallback
 from features.messaging.add_friend import send_friend_request
 from features.messaging.remove_friend import remove_friend
+
+
+# ─── Thu hồi lời mời kết bạn cũ ──────────────────────────────────────────────
+# Lời mời kết bạn gửi đi quá bao nhiêu NGÀY mà chưa được chấp nhận thì thu hồi.
+FRIEND_REQUEST_UNDO_AFTER_DAYS = 3
+# Tần suất quét danh sách lời mời đã gửi để thu hồi (phút).
+FRIEND_REQUEST_UNDO_SCAN_INTERVAL_MINUTES = 360
 
 
 def _license_active() -> bool:
@@ -1131,6 +1138,83 @@ def _resolve_phone_members(job: dict, zpw_enk: str, cookies: str, imei: str,
     return {"resolved": resolved, "failed": failed, "skipped": skipped, "remaining": remaining}
 
 
+def _scan_and_undo_stale_friend_requests() -> dict:
+    """Quét lời mời kết bạn ĐÃ GỬI của mọi tài khoản trong các chiến dịch sao chép
+    nhóm; thu hồi những lời mời đã gửi quá ``FRIEND_REQUEST_UNDO_AFTER_DAYS`` ngày
+    mà người nhận vẫn chưa chấp nhận (vẫn còn trong danh sách requested/list).
+
+    Trả về thống kê: số tài khoản đã quét, số lời mời quá hạn, số thu hồi thành
+    công, số thất bại.
+    """
+    from features.messaging.friend_request_undo import (
+        get_sent_friend_requests,
+        undo_friend_request,
+    )
+
+    jobs = list_jobs(include_members=False)
+    account_ids: list[str] = []
+    for job in jobs:
+        aid = str((job or {}).get("accountId") or "").strip()
+        if aid and aid not in account_ids:
+            account_ids.append(aid)
+
+    threshold = int(time.time()) - FRIEND_REQUEST_UNDO_AFTER_DAYS * 86400
+    summary = {"accounts": 0, "stale": 0, "revoked": 0, "failed": 0}
+
+    for aid in account_ids:
+        account = get_account(aid)
+        if not account:
+            continue
+        try:
+            account = _refresh_campaign_session(aid, account)
+        except Exception:
+            pass
+        cookies = str(account.get("cookies") or "").strip()
+        zpw_enk = str(account.get("zpwEnk") or "").strip()
+        imei = str(account.get("imei") or "").strip()
+        if not all([cookies, zpw_enk, imei]):
+            continue
+
+        summary["accounts"] += 1
+        try:
+            sent = get_sent_friend_requests(imei, zpw_enk, cookies, zpw_ver=get_zpw_ver())
+        except Exception as exc:
+            print(f"[friend_undo] {aid}: khong lay duoc danh sach loi moi da gui: {exc}", flush=True)
+            continue
+
+        for uid, info in (sent or {}).items():
+            sent_at = int((info or {}).get("sentAt") or 0)
+            if not sent_at or sent_at > threshold:
+                continue
+            summary["stale"] += 1
+            try:
+                response_json, decoded = undo_friend_request(
+                    uid, zpw_enk, cookies, zpw_ver=get_zpw_ver()
+                )
+                code = _error_code(response_json, decoded)
+                if code in (0, None):
+                    summary["revoked"] += 1
+                    print(
+                        f"[friend_undo] {aid}: da thu hoi loi moi toi "
+                        f"{(info or {}).get('zaloName') or uid} (gui luc {sent_at})",
+                        flush=True,
+                    )
+                else:
+                    summary["failed"] += 1
+                    print(
+                        f"[friend_undo] {aid}: thu hoi {uid} loi code={code} "
+                        f"{_error_message(response_json, decoded)}",
+                        flush=True,
+                    )
+            except Exception as exc:
+                summary["failed"] += 1
+                print(f"[friend_undo] {aid}: thu hoi {uid} ngoai le: {exc}", flush=True)
+            # Giãn cách giữa các lần thu hồi để tránh bị Zalo giới hạn tần suất.
+            time.sleep(random.uniform(2.0, 5.0))
+
+    return summary
+
+
 class GroupCopyWorker:
     def __init__(self) -> None:
         self.running = False
@@ -1139,6 +1223,9 @@ class GroupCopyWorker:
         # các tài khoản (chính + phụ) của chiến dịch chạy SONG SONG.
         self._active = set()
         self._active_lock = threading.Lock()
+        # Quét thu hồi lời mời kết bạn cũ: chỉ chạy 1 lần mỗi khoảng thời gian.
+        self._undo_scan_at: Optional[datetime] = None
+        self._undo_scan_running = False
 
     def start(self) -> None:
         if self.running:
@@ -1155,6 +1242,9 @@ class GroupCopyWorker:
         while self.running:
             try:
                 if _license_active():
+                    # Quét định kỳ & thu hồi lời mời kết bạn đã gửi quá 3 ngày mà
+                    # người nhận chưa chấp nhận (chạy nền, không chặn việc giao tác vụ).
+                    self._maybe_scan_stale_friend_requests()
                     # Giao mỗi tác vụ đến hạn cho 1 thread riêng -> các tài khoản
                     # (chính + phụ) của chiến dịch chạy SONG SONG, không chờ nhau.
                     dispatched = False
@@ -1176,6 +1266,35 @@ class GroupCopyWorker:
             except Exception as exc:
                 print(f"[group_copy_worker] Loop error: {exc}", flush=True)
             time.sleep(5)
+
+    def _maybe_scan_stale_friend_requests(self) -> None:
+        """Chạy nền việc thu hồi lời mời kết bạn cũ, tối đa 1 lần mỗi khoảng cấu hình."""
+        if self._undo_scan_running:
+            return
+        now = datetime.now()
+        if self._undo_scan_at is not None and (
+            now - self._undo_scan_at
+        ) < timedelta(minutes=FRIEND_REQUEST_UNDO_SCAN_INTERVAL_MINUTES):
+            return
+        self._undo_scan_at = now
+        self._undo_scan_running = True
+
+        def _run() -> None:
+            try:
+                summary = _scan_and_undo_stale_friend_requests()
+                if summary.get("stale") or summary.get("revoked") or summary.get("failed"):
+                    print(
+                        "[group_copy_worker] Quet thu hoi loi moi: "
+                        f"tai khoan={summary.get('accounts')} qua_han={summary.get('stale')} "
+                        f"da_thu_hoi={summary.get('revoked')} loi={summary.get('failed')}",
+                        flush=True,
+                    )
+            except Exception as exc:
+                print(f"[group_copy_worker] Loi quet thu hoi loi moi: {exc}", flush=True)
+            finally:
+                self._undo_scan_running = False
+
+        threading.Thread(target=_run, daemon=True, name="friend-undo-scan").start()
 
     def _run_and_release(self, job: dict) -> None:
         """Chạy 1 tác vụ trong thread riêng rồi giải phóng khỏi danh sách active."""

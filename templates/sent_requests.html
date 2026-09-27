@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lời mời kết bạn đã gửi - Nexus</title>
+    <link id="favico" rel="icon" type="image/x-icon" href="{{ url_for('static', filename='ico/app.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=sentreq-v1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overlay.css') }}?v=sentreq-v1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus-data-light.css') }}?v=sentreq-v1">
+    <style>
+        .sentreq-page { display: flex; flex-direction: column; gap: 14px; }
+        .sentreq-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+        .sentreq-header h2 { margin: 0 0 4px; }
+        .sentreq-header p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+
+        .sentreq-toolbar {
+            display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 14px 16px;
+        }
+        .sentreq-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .sentreq-field > label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+        .sentreq-field.grow { flex: 1 1 260px; }
+        #sentReqAccountDropdown { min-width: 260px; }
+        #sentReqSearch {
+            width: 100%; height: 38px; padding: 0 12px;
+            border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface2); color: var(--text); font-size: 13.5px;
+        }
+        .sentreq-count-pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            height: 38px; padding: 0 14px; border-radius: 999px;
+            background: rgba(59, 130, 246, .1); border: 1px solid rgba(59, 130, 246, .25);
+            color: #2563eb; font-weight: 700; font-size: 13.5px; white-space: nowrap;
+        }
+        .sentreq-count-pill small { font-weight: 600; color: var(--text-secondary); }
+
+        .sentreq-table-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden;
+        }
+        .sentreq-table-scroll { max-height: calc(100vh - 300px); overflow: auto; }
+        .sentreq-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .sentreq-table th {
+            position: sticky; top: 0; z-index: 1;
+            background: var(--surface2); color: var(--text-muted);
+            font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+            padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .sentreq-table td {
+            padding: 8px 12px; border-bottom: 1px solid var(--border);
+            font-size: 13.5px; vertical-align: middle;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sentreq-table tbody tr { cursor: pointer; }
+        .sentreq-table tbody tr:hover td { background: rgba(88, 166, 255, .06); }
+        .sentreq-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: block; }
+        .sentreq-avatar.fallback {
+            display: flex; align-items: center; justify-content: center;
+            background: var(--surface2); color: var(--text-muted); font-weight: 700;
+        }
+        .sentreq-muted { color: var(--text-secondary); font-size: 12.5px; }
+        .sentreq-empty {
+            display: none; flex-direction: column; align-items: center; gap: 8px;
+            padding: 56px 20px; color: var(--text-secondary); text-align: center;
+        }
+        .sentreq-empty b { color: var(--text); }
+        #sentReqLoading { display: none; padding: 40px 20px; text-align: center; color: var(--text-secondary); }
+        @media (max-width: 900px) {
+            .sentreq-toolbar { align-items: stretch; }
+            .sentreq-field.grow { flex-basis: 100%; }
+        }
+
+        #sentReqStatus {
+            position: fixed; right: 18px; bottom: 18px; z-index: 10090;
+            max-width: 380px; padding: 10px 14px; border-radius: 10px;
+            font-size: 13px; font-weight: 600; display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,.18);
+        }
+        #sentReqStatus.ok { display: block; background: #ecfdf5; color: #047857; border: 1px solid rgba(16,185,129,.35); }
+        #sentReqStatus.err { display: block; background: #fef2f2; color: #b91c1c; border: 1px solid rgba(239,68,68,.35); }
+    </style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+<div class="page sentreq-page">
+    <div class="sentreq-header">
+        <div>
+            <h2>Lời mời kết bạn đã gửi</h2>
+            <p>Danh sách lời mời kết bạn đang chờ chấp nhận. Tích chọn để thu hồi lời mời.</p>
+        </div>
+        <button class="btn btn-primary" type="button" onclick="sentReqReload()">↻ Tải lại</button>
+    </div>
+
+    <div class="sentreq-toolbar">
+        <div class="sentreq-field">
+            <label>Tài khoản thực hiện</label>
+            <div id="sentReqAccountDropdown" class="account-dropdown"></div>
+            <input type="hidden" id="sentReqAccountId">
+        </div>
+        <div class="sentreq-field grow">
+            <label>Tìm kiếm</label>
+            <input id="sentReqSearch" type="text" placeholder="Tìm theo tên hoặc User ID..." oninput="sentReqRenderTable()">
+        </div>
+        <span class="sentreq-count-pill">
+            <span id="sentReqTotal">0</span> lời mời
+            <small id="sentReqShown"></small>
+        </span>
+    </div>
+
+    <div class="sentreq-toolbar" style="align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <label style="display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600; cursor:pointer;">
+                <input type="checkbox" id="sentReqSelectAll" onchange="sentReqToggleSelectAll(this)"> Chọn tất cả
+            </label>
+            <label style="display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600; cursor:pointer;">
+                <input type="checkbox" id="sentReqDeselectAll" onchange="sentReqToggleDeselectAll(this)"> Bỏ chọn tất cả
+            </label>
+            <span class="sentreq-muted">Đã chọn <b id="sentReqSelectedCount">0</b></span>
+        </div>
+        <button class="btn btn-danger" type="button" id="sentReqUndoBtn" onclick="sentReqUndo()" disabled>↺ Thu hồi lời mời</button>
+    </div>
+
+    <div class="sentreq-table-card">
+        <div class="sentreq-table-scroll">
+            <table class="sentreq-table">
+                <colgroup>
+                    <col style="width:46px"><col style="width:54px"><col style="width:220px">
+                    <col><col style="width:150px"><col style="width:150px">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="sentReqHeaderCheckbox" onchange="sentReqToggleSelectAll(this)"></th>
+                        <th>Ảnh</th>
+                        <th>Tên</th>
+                        <th>Nội dung lời mời</th>
+                        <th>Thời gian gửi</th>
+                        <th>ID</th>
+                    </tr>
+                </thead>
+                <tbody id="sentReqBody"></tbody>
+            </table>
+            <div id="sentReqLoading">Đang tải danh sách lời mời đã gửi...</div>
+            <div class="sentreq-empty" id="sentReqEmpty">
+                <b>Chưa có lời mời kết bạn nào đang chờ</b>
+                <span id="sentReqEmptyHint">Chọn tài khoản ở trên rồi bấm "Tải lại".</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="sentReqStatus"></div>
+
+<script src="{{ url_for('static', filename='js/sent-requests.js') }}?v=sentreq-v1"></script>
+</body>
+</html>

@@ -275,7 +275,7 @@ INVITE_GROUP_PLANS_FILE = os.path.join(app_root, "data", "group_invite_plans.jso
 USER_POLICY_FILE = os.path.join(app_root, "data", "user_policy_acceptance.json")
 USER_POLICY_VERSION = "2026-07-28-nexus-masterise-v8-compact-session"
 VERSION_FILE = os.path.join(app_root, "VERSION")
-APP_VERSION = "1.4.6"
+APP_VERSION = "1.4.7"
 
 # Cổng giao diện Nexus (mở trình duyệt tới đây). Dùng port ÍT DÙNG để tránh đụng
 # 5000 (hay bị app khác chiếm -> báo 404). Đổi được qua env NEXUS_UI_PORT.
@@ -1249,6 +1249,11 @@ def friends_page():
     return render_template("friends.html", active_page="friends")
 
 
+@app.route("/sent-requests")
+def sent_requests_page():
+    return render_template("sent_requests.html", active_page="sent_requests")
+
+
 @app.route("/api/friends", methods=["GET"])
 def api_friends_list():
     """Danh sách bạn bè của tài khoản được chọn (API getfriends của Zalo Web)."""
@@ -1309,6 +1314,102 @@ def api_friends_remove():
             message = str(response_json.get("error_message") or "")
         return jsonify({"success": False, "error": message or f"Zalo trả lỗi (code {outer_code}/{inner_code})."}), 502
     return jsonify({"success": True, "message": "Đã xóa kết bạn."})
+
+
+@app.route("/api/friend-requests/sent", methods=["GET"])
+def api_sent_friend_requests():
+    """Danh sách lời mời kết bạn ĐÃ GỬI đang chờ người nhận chấp nhận."""
+    account_id = str(request.args.get("accountId") or request.args.get("account_id") or "").strip()
+    if not account_id:
+        return jsonify({"success": False, "error": "Thiếu accountId."}), 400
+    account = get_account(account_id)
+    if not account:
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    cookies = str(account.get("cookies") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or "").strip()
+    imei = str(account.get("imei") or "").strip()
+    if not cookies or not zpw_enk:
+        return jsonify({"success": False, "error": "Tài khoản chưa đủ cookies/zpwEnk. Hãy mở lại tài khoản ở trang Tài khoản."}), 400
+    try:
+        from features.messaging.friend_request_undo import get_sent_friend_requests
+        sent = get_sent_friend_requests(imei, zpw_enk, cookies, zpw_ver=get_zpw_ver())
+    except Exception as exc:
+        message = str(exc)
+        if "429" in message:
+            message = "Zalo đang giới hạn request (429). Hãy chờ 1-2 phút rồi thử lại."
+        elif len(message) > 220:
+            message = message[:220] + "..."
+        return jsonify({"success": False, "error": f"Không lấy được danh sách lời mời đã gửi: {message}"}), 502
+
+    items = [item for item in (sent or {}).values() if isinstance(item, dict)]
+    items.sort(key=lambda item: int((item or {}).get("sentAt") or 0), reverse=True)
+    return jsonify({"success": True, "requests": items, "total": len(items)})
+
+
+@app.route("/api/friend-requests/undo", methods=["POST"])
+def api_undo_friend_requests():
+    """Thu hồi (undo) nhiều lời mời kết bạn đã gửi theo danh sách UID."""
+    data = request.get_json(silent=True) or {}
+    account_id = str(data.get("accountId") or data.get("account_id") or "").strip()
+    raw_ids = data.get("userIds") or data.get("fids") or []
+    if isinstance(raw_ids, str):
+        raw_ids = [x.strip() for x in raw_ids.split(",") if x.strip()]
+
+    user_ids = []
+    for uid in raw_ids:
+        uid = str(uid or "").strip()
+        if uid and uid not in user_ids:
+            user_ids.append(uid)
+
+    if not account_id:
+        return jsonify({"success": False, "error": "Thiếu accountId."}), 400
+    if not user_ids:
+        return jsonify({"success": False, "error": "Chưa chọn lời mời nào để thu hồi."}), 400
+    account = get_account(account_id)
+    if not account:
+        return jsonify({"success": False, "error": "Không tìm thấy tài khoản."}), 404
+    cookies = str(account.get("cookies") or "").strip()
+    zpw_enk = str(account.get("zpwEnk") or "").strip()
+    if not cookies or not zpw_enk:
+        return jsonify({"success": False, "error": "Tài khoản chưa đủ cookies/zpwEnk."}), 400
+
+    import random as _rand
+    from features.messaging.friend_request_undo import undo_friend_request
+
+    results = []
+    revoked = 0
+    failed = 0
+    for index, fid in enumerate(user_ids):
+        try:
+            response_json, decoded = undo_friend_request(fid, zpw_enk, cookies, zpw_ver=get_zpw_ver())
+            response_json = response_json if isinstance(response_json, dict) else {}
+            decoded = decoded if isinstance(decoded, dict) else {}
+            raw_code = decoded.get("error_code", response_json.get("error_code", -1))
+            try:
+                code = int(raw_code if raw_code is not None else 0)
+            except (TypeError, ValueError):
+                code = -1
+            message = str(
+                decoded.get("error_message")
+                or decoded.get("message")
+                or response_json.get("error_message")
+                or response_json.get("message")
+                or ""
+            ).strip()
+            ok = code == 0
+            if ok:
+                revoked += 1
+            else:
+                failed += 1
+            results.append({"userId": fid, "success": ok, "code": code, "message": message})
+        except Exception as exc:
+            failed += 1
+            results.append({"userId": fid, "success": False, "code": -1, "message": str(exc)})
+        # Giãn cách nhẹ giữa các lần thu hồi để tránh Zalo giới hạn tần suất.
+        if index < len(user_ids) - 1:
+            time.sleep(_rand.uniform(1.0, 2.0))
+
+    return jsonify({"success": True, "revoked": revoked, "failed": failed, "results": results})
 
 
 @app.route("/schedules")
