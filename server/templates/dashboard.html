@@ -282,6 +282,7 @@
             <button class="tab active" data-tab="overview" onclick="switchTab('overview')">📊 Tổng quan</button>
             <button class="tab" data-tab="machines" onclick="switchTab('machines')">💻 Máy &amp; Kích hoạt</button>
             <button class="tab" data-tab="biz" onclick="switchTab('biz')">🏢 Key doanh nghiệp</button>
+            <button class="tab" data-tab="expired" onclick="switchTab('expired')">⌛ Key hết hạn</button>
             <button class="tab" data-tab="email" onclick="switchTab('email')">📧 Cấu hình email</button>
         </div>
 
@@ -317,7 +318,7 @@
             </div>
             <div class="card">
                 <div class="toolbar">
-                    <input type="text" id="fltQ" placeholder="Lọc theo địa chỉ MAC...">
+                    <input type="text" id="fltQ" placeholder="Tìm theo MAC hoặc KEY...">
                     <select id="fltStatus">
                         <option value="">Mọi trạng thái</option>
                         <option value="active">Đang kích hoạt</option>
@@ -391,6 +392,35 @@
                             </tr>
                         </thead>
                         <tbody id="bizRows"><tr><td colspan="7" class="empty">Đang tải...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Key hết hạn -->
+        <section class="panel" id="panel-expired">
+            <div class="panel-head">
+                <h2>Key hết hạn</h2>
+                <p>Danh sách các key đã hết hạn (hoặc bị đánh dấu hết hạn). Tìm theo MAC hoặc KEY.</p>
+            </div>
+            <div class="card">
+                <div class="toolbar">
+                    <input type="text" id="expQ" placeholder="Tìm theo MAC hoặc KEY..." onkeydown="if(event.key==='Enter')loadExpiredKeys()">
+                    <button class="btn btn-primary" onclick="loadExpiredKeys()">Tìm</button>
+                    <button class="btn btn-ghost" onclick="document.getElementById('expQ').value='';loadExpiredKeys()">Xóa lọc</button>
+                    <span class="count" id="expCount"></span>
+                </div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="c-id">#</th><th class="c-name">Tên máy</th><th class="c-mac">MAC</th>
+                                <th class="c-plan">Gói</th><th class="c-key">Key</th>
+                                <th class="c-exp">Hết hạn</th><th class="c-act-at">Kích hoạt lúc</th>
+                                <th class="c-actions">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expRows"><tr><td colspan="8" class="empty">Đang tải...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -481,6 +511,7 @@
         function switchTab(name) {
             document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === name); });
             document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.id === 'panel-' + name); });
+            if (name === 'expired') loadExpiredKeys();
         }
 
         /* ── Máy ────────────────────────────────────────────── */
@@ -547,6 +578,64 @@
             }).join('');
         }
         function statusLabel(s){ return {active:'Đang kích hoạt',pending:'Chờ nhập key',disabled:'Đã hủy',expired:'Hết hạn'}[s]||s; }
+
+        /* ── Key hết hạn ────────────────────────────────────── */
+        async function loadExpiredKeys() {
+            var p = new URLSearchParams();
+            var q = (document.getElementById('expQ').value || '').trim();
+            if (q) p.set('q', q);
+            document.getElementById('expCount').textContent = 'Đang tải...';
+            try {
+                var res = await fetch('/api/admin/expired-keys?' + p.toString());
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Lỗi');
+                renderExpiredRows(data.machines);
+                document.getElementById('expCount').textContent = data.machines.length + ' key hết hạn';
+            } catch (e) {
+                document.getElementById('expCount').textContent = 'Lỗi: ' + e.message;
+            }
+        }
+        function renderExpiredRows(machines) {
+            var tb = document.getElementById('expRows');
+            if (!machines.length) { tb.innerHTML = '<tr><td colspan="8" class="empty">Không có key hết hạn nào.</td></tr>'; return; }
+            tb.innerHTML = machines.map(function (m, idx) {
+                var acts = '<button class="a-regen" onclick="expAct(' + m.id + ',\'regen\')">Cấp key mới</button>' +
+                           '<button class="a-del" onclick="expDel(' + m.id + ')">Xóa</button>';
+                return '<tr>' +
+                    '<td data-label="#">' + (idx + 1) + '</td>' +
+                    '<td data-label="Tên máy">' + esc(m.machine_name || '-') + '</td>' +
+                    '<td class="mac" data-label="MAC">' + esc(m.mac) + '</td>' +
+                    '<td data-label="Gói">' + esc(m.plan_label || m.plan_key || '-') + '</td>' +
+                    '<td data-label="Key">' + (m.license_key
+                        ? '<span class="key-chip" title="Bấm để copy key" data-key="' + esc(m.license_key) + '" onclick="copyKey(this)"><span class="key-text">' + esc(m.license_key) + '</span><span class="key-ico">📋</span></span>'
+                        : '-') + '</td>' +
+                    '<td data-label="Hết hạn">' + (m.is_permanent ? 'Vĩnh viễn' : fmt(m.expiry)) + '</td>' +
+                    '<td data-label="Kích hoạt lúc">' + fmt(m.activated_at) + '</td>' +
+                    '<td class="cell-actions" data-label="Thao tác"><div class="act">' + acts + '</div></td>' +
+                '</tr>';
+            }).join('');
+        }
+        async function expAct(id, action) {
+            try {
+                var res = await fetch('/api/admin/machines/' + id + '/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                if (guard(res)) return;
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Lỗi');
+                toast(action === 'regen' ? (data.sent ? 'Đã cấp key mới và gửi email.' : 'Đã cấp key mới (gửi email thất bại).') : 'Cập nhật thành công.', data.sent === false ? 'err' : 'ok');
+                loadExpiredKeys();
+            } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+        }
+        function expDel(id) {
+            askConfirm('Xóa máy', 'Xóa máy/key này khỏi hệ thống? Hành động không thể hoàn tác.', async function() {
+                try {
+                    var res = await fetch('/api/admin/machines/' + id, { method: 'DELETE' });
+                    if (guard(res)) return;
+                    toast('Đã xóa.', 'ok');
+                    loadExpiredKeys();
+                } catch (e) { toast('Lỗi: ' + e.message, 'err'); }
+            });
+        }
 
         async function act(id, action) {
             try {

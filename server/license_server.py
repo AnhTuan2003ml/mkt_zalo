@@ -883,7 +883,7 @@ def api_machines():
         return jsonify({"success": False, "error": "unauthorized"}), 401
     _purge_stale_pending()  # dọn key chưa kích hoạt quá 24h mỗi lần mở dashboard
     status = (request.args.get("status") or "").strip()
-    q = (request.args.get("q") or "").strip().lower()       # CHỈ lọc theo MAC
+    q = (request.args.get("q") or "").strip().lower()       # lọc theo MAC hoặc KEY (hoặc tên máy)
     date_from = (request.args.get("from") or "").strip()    # lọc theo created_at
     date_to = (request.args.get("to") or "").strip()
 
@@ -894,8 +894,14 @@ def api_machines():
         m = _row_to_dict(r)
         if status and m["status"] != status:
             continue
-        if q and q not in str(m.get("mac", "")).lower():   # lọc theo MAC
-            continue
+        if q:
+            haystack = " ".join([
+                str(m.get("mac", "")),
+                str(m.get("license_key", "")),
+                str(m.get("machine_name", "")),
+            ]).lower()
+            if q not in haystack:
+                continue
         created = str(m.get("created_at") or "")[:10]
         if date_from and created and created < date_from:
             continue
@@ -935,6 +941,40 @@ def api_machines():
         "expiringThisMonth": expiring_this_month,
     }
     return jsonify({"success": True, "machines": items, "stats": stats})
+
+
+@app.route("/api/admin/expired-keys", methods=["GET"])
+def api_expired_keys():
+    if not _require_admin():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    q = (request.args.get("q") or "").strip().lower()   # lọc theo MAC hoặc KEY
+    now_iso = datetime.now().isoformat(timespec="seconds")
+
+    with closing(_conn()) as conn:
+        rows = conn.execute("SELECT * FROM machines ORDER BY expiry DESC").fetchall()
+
+    items = []
+    for r in rows:
+        m = _row_to_dict(r)
+        expiry = str(m.get("expiry") or "").strip()
+        is_perm = bool(m.get("is_permanent"))
+        # Hết hạn = đã đánh dấu expired, HOẶC có hạn (không vĩnh viễn) và hạn đã qua.
+        is_expired = (m.get("status") == "expired") or (
+            not is_perm and expiry and expiry < now_iso
+        )
+        if not is_expired:
+            continue
+        if q:
+            haystack = " ".join([
+                str(m.get("mac", "")),
+                str(m.get("license_key", "")),
+                str(m.get("machine_name", "")),
+            ]).lower()
+            if q not in haystack:
+                continue
+        items.append(m)
+
+    return jsonify({"success": True, "machines": items, "count": len(items)})
 
 
 @app.route("/api/admin/business-keys", methods=["GET"])
